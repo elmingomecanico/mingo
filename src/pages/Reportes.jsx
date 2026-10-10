@@ -110,10 +110,10 @@ export default function Reportes() {
           <table className="w-full text-left text-sm whitespace-nowrap">
             <thead className="bg-gray-50 text-gray-600 font-medium border-b border-gray-100">
               <tr>
-                <th className="p-4">ID Factura</th>
+                <th className="p-4">Factura</th>
                 <th className="p-4">Fecha y Hora</th>
                 <th className="p-4">Sucursal</th>
-                <th className="p-4 text-center">Artículos</th>
+                <th className="p-4">Productos Vendidos</th>
                 <th className="p-4 text-right">Total</th>
                 <th className="p-4 text-center">Estado</th>
               </tr>
@@ -130,16 +130,22 @@ export default function Reportes() {
               ) : (
                 filteredVentas.map(venta => {
                   const date = new Date(venta.fecha);
-                  const itemsCount = venta.items ? venta.items.length : 0;
+                  const itemsSummary = venta.items 
+                    ? venta.items.map(i => `${i.cantidad}x ${i.name || 'Prod'}`).join(', ')
+                    : 'Sin detalles';
                   
                   return (
                     <tr key={venta.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="p-4 font-mono text-gray-500 text-xs">{venta.id}</td>
+                      <td className="p-4 font-mono font-bold text-gray-700">
+                        {venta.numero_factura || venta.id.substring(venta.id.length - 6).toUpperCase()}
+                      </td>
                       <td className="p-4 text-gray-700">{date.toLocaleDateString()} {date.toLocaleTimeString()}</td>
                       <td className="p-4 text-gray-600">
                         <span className="bg-gray-100 px-2 py-1 rounded text-xs">{venta.sucursal}</span>
                       </td>
-                      <td className="p-4 text-center font-medium text-gray-600">{itemsCount}</td>
+                      <td className="p-4 text-gray-600 truncate max-w-xs" title={itemsSummary}>
+                        {itemsSummary}
+                      </td>
                       <td className="p-4 text-right font-bold text-blue-700">C$ {venta.total?.toFixed(2)}</td>
                       <td className="p-4 text-center">
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full font-bold text-xs bg-green-100 text-green-700">

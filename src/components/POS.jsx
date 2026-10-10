@@ -79,11 +79,20 @@ export default function POS() {
     setLoading(true);
 
     try {
+      // Obtener un número de factura secuencial (FAC-0001)
+      const counterRef = ref(rtdb, 'counters/ventas');
+      const counterResult = await runTransaction(counterRef, (currentData) => {
+        return (currentData || 0) + 1;
+      });
+      const numFactura = counterResult.snapshot.val();
+      const humanId = `FAC-${numFactura.toString().padStart(4, '0')}`;
+
       const saleRef = push(ref(rtdb, 'ventas'));
       const saleId = saleRef.key;
       
       const newSale = {
         id: saleId,
+        numero_factura: humanId,
         fecha: new Date().toISOString(),
         sucursal,
         total,
@@ -110,13 +119,14 @@ export default function POS() {
           fecha: new Date().toISOString(),
           id_sucursal: sucursal,
           id_producto: item.id,
-          tipo_movimiento: 'Salida',
+          nombre_producto: item.name,
+          tipo_movimiento: 'Salida por Venta',
           cantidad: item.qty,
-          id_referencia: saleId
+          id_referencia: humanId
         });
       }
 
-      toast.success(`Factura procesada con éxito`);
+      toast.success(`Factura ${humanId} procesada con éxito`);
       setCart([]);
       setCompletedSale(newSale); // Mostrar modal de impresión
     } catch (error) {

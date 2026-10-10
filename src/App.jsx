@@ -5,6 +5,7 @@ import POS from './components/POS'
 import Home from './pages/Home'
 import Inventario from './pages/Inventario'
 import Reportes from './pages/Reportes'
+import Kardex from './pages/Kardex'
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -45,6 +46,7 @@ function App() {
             <Route path="/pos" element={<POS />} />
             <Route path="/inventario" element={<Inventario />} />
             <Route path="/reportes" element={<Reportes />} />
+            <Route path="/kardex" element={<Kardex />} />
           </Routes>
         </Layout>
       </BrowserRouter>
