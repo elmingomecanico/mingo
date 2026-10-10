@@ -298,8 +298,8 @@ export default function POS() {
             subtotal: (s.price * s.qty) - s.discount
           })),
           total_servicios: totalServicios,
-          comision_mecanico_porcentaje: 50, // 50% por defecto (configurable a futuro)
-          comision_mecanico_monto: totalServicios * 0.50
+          comision_mecanico_porcentaje: selectedMecanico.comision || 50,
+          comision_mecanico_monto: totalServicios * ((selectedMecanico.comision || 50) / 100)
         });
       }
 
@@ -481,7 +481,11 @@ export default function POS() {
                 <div className="col-span-1 md:col-span-2">
                   <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Mecánico Asignado</label>
                   <Select
-                    options={mecanicos.map(m => ({ value: m.id, label: m.nombre_completo }))}
+                    options={mecanicos.map(m => ({ 
+                      value: m.id, 
+                      label: m.nombre_completo,
+                      comision: m.porcentaje_comision || 50 // Por defecto 50 si no tiene configurado
+                    }))}
                     value={selectedMecanico}
                     onChange={setSelectedMecanico}
                     placeholder="Seleccionar mecánico que realizó el servicio..."

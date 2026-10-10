@@ -89,12 +89,25 @@ export default function Usuarios() {
         funcion: item.funcion ? { value: item.funcion, label: item.funcion } : null,
         permisos: item.permisos || [],
         estado: item.estado || 'Activo',
-        id_sucursal: item.id_sucursal || 'SUC-01'
+        id_sucursal: item.id_sucursal || 'SUC-01',
+        tipo_salario: item.tipo_salario || 'Comisión',
+        salario_base: item.salario_base || 0,
+        porcentaje_comision: item.porcentaje_comision || 50
       });
     } else {
       setEditingId(null);
       setFormData({ 
-        nombre_completo: '', usuario: '', password: '', rol: 'Usuario', funcion: null, permisos: [], estado: 'Activo', id_sucursal: 'SUC-01' 
+        nombre_completo: '', 
+        usuario: '', 
+        password: '', 
+        rol: 'Usuario', 
+        funcion: null, 
+        permisos: [], 
+        estado: 'Activo', 
+        id_sucursal: 'SUC-01',
+        tipo_salario: 'Comisión',
+        salario_base: 0,
+        porcentaje_comision: 50
       });
     }
     setIsModalOpen(true);
@@ -121,7 +134,10 @@ export default function Usuarios() {
         funcion: formData.funcion ? formData.funcion.value : '',
         permisos: formData.permisos,
         estado: formData.estado,
-        id_sucursal: formData.id_sucursal
+        id_sucursal: formData.id_sucursal,
+        tipo_salario: formData.tipo_salario,
+        salario_base: Number(formData.salario_base) || 0,
+        porcentaje_comision: Number(formData.porcentaje_comision) || 0
       };
 
       await set(itemRef, payload);
@@ -280,6 +296,44 @@ export default function Usuarios() {
                     className="react-select-container"
                     classNamePrefix="react-select"
                   />
+                </div>
+              </div>
+
+              <div className="bg-green-50 p-4 rounded-xl border border-green-100 space-y-4">
+                <h3 className="font-bold text-green-800 text-sm flex items-center gap-2">
+                  Estructura Salarial (RRHH)
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-green-800 mb-1">Tipo de Salario</label>
+                    <select value={formData.tipo_salario} onChange={e => setFormData({...formData, tipo_salario: e.target.value})} className="w-full border border-green-200 bg-white p-2.5 rounded-lg outline-none focus:border-green-500">
+                      <option value="Comisión">100% Comisión</option>
+                      <option value="Fijo">Sueldo Fijo</option>
+                      <option value="Mixto">Fijo + Comisión</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-green-800 mb-1">Sueldo Base (C$)</label>
+                    <input 
+                      type="number" 
+                      disabled={formData.tipo_salario === 'Comisión'}
+                      value={formData.salario_base} 
+                      onChange={e => setFormData({...formData, salario_base: e.target.value})} 
+                      className="w-full border border-green-200 disabled:bg-gray-100 disabled:text-gray-400 bg-white p-2.5 rounded-lg outline-none focus:border-green-500" 
+                      placeholder="0.00" 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-green-800 mb-1">Comisión (%)</label>
+                    <input 
+                      type="number" 
+                      disabled={formData.tipo_salario === 'Fijo'}
+                      value={formData.porcentaje_comision} 
+                      onChange={e => setFormData({...formData, porcentaje_comision: e.target.value})} 
+                      className="w-full border border-green-200 disabled:bg-gray-100 disabled:text-gray-400 bg-white p-2.5 rounded-lg outline-none focus:border-green-500" 
+                      placeholder="50" 
+                    />
+                  </div>
                 </div>
               </div>
 
