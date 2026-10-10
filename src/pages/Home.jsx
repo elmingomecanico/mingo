@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShoppingBag, TrendingUp, AlertTriangle, Users } from 'lucide-react';
+import { ShoppingBag, TrendingUp, AlertTriangle, Users, ShoppingCart, Package, BarChart2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export default function Home() {
