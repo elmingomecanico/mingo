@@ -3,6 +3,7 @@ import { ref, onValue, set, push, runTransaction } from 'firebase/database';
 import { rtdb } from '../firebase';
 import { CreditCard, Search, DollarSign, CheckCircle2, AlertCircle, Plus } from 'lucide-react';
 import toast from 'react-hot-toast';
+import Select from 'react-select';
 
 export default function CxP() {
   const [cxpList, setCxpList] = useState([]);
@@ -253,10 +254,15 @@ export default function CxP() {
             <form onSubmit={handleSaveBill} className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Proveedor *</label>
-                <select required value={formData.id_proveedor} onChange={e => setFormData({...formData, id_proveedor: e.target.value})} className="w-full border p-2.5 rounded-lg outline-none focus:border-indigo-500 bg-gray-50">
-                  <option value="">Seleccione un proveedor</option>
-                  {proveedoresList.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                </select>
+                <Select
+                  options={proveedoresList.map(p => ({ value: p.id, label: p.nombre }))}
+                  value={formData.id_proveedor ? { value: formData.id_proveedor, label: proveedoresMap[formData.id_proveedor] } : null}
+                  onChange={selected => setFormData({...formData, id_proveedor: selected ? selected.value : ''})}
+                  placeholder="Seleccione un proveedor..."
+                  isClearable
+                  className="react-select-container"
+                  classNamePrefix="react-select"
+                />
               </div>
 
               <div>

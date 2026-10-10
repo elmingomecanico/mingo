@@ -1,42 +1,41 @@
 import React, { useState, useEffect } from 'react';
 import { ref, onValue, set, push, remove } from 'firebase/database';
 import { rtdb } from '../firebase';
-import { Settings, Plus, Edit2, Trash2, Layers, MapPin, Wrench, Users, Tag } from 'lucide-react';
+import { Settings, Layers, Tag, MapPin, Plus, Trash2, Edit2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import ConfirmModal from '../components/ConfirmModal';
 
 export default function Catalogos() {
   const [activeTab, setActiveTab] = useState('categorias');
-  const [data, setData] = useState({});
+  const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Modal State
+  // Modales
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [formData, setFormData] = useState({ nombre: '', descripcion: '', precio: 0 });
 
+  const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null, isDanger: true });
+
   const tabs = [
     { id: 'categorias', name: 'Categorías', icon: <Layers size={18} /> },
     { id: 'marcas', name: 'Marcas/Modelos', icon: <Tag size={18} /> },
-    { id: 'ubicaciones', name: 'Ubicaciones', icon: <MapPin size={18} /> },
-    { id: 'mecanicos', name: 'Mecánicos', icon: <Users size={18} /> },
+    { id: 'ubicaciones', name: 'Ubicaciones', icon: <MapPin size={18} /> }
   ];
 
   useEffect(() => {
-    const listRef = ref(rtdb, `catalogos/${activeTab}`);
-    const unsub = onValue(listRef, (snapshot) => {
+    setLoading(true);
+    const dbRef = ref(rtdb, `catalogos/${activeTab}`);
+    const unsub = onValue(dbRef, (snapshot) => {
       if (snapshot.exists()) {
         const val = snapshot.val();
-        const parsed = Object.keys(val).map(key => ({
-          id: key,
-          ...val[key]
-        }));
+        const parsed = Object.keys(val).map(key => ({ id: key, ...val[key] }));
         setData(parsed);
       } else {
         setData([]);
       }
       setLoading(false);
     });
-
     return () => unsub();
   }, [activeTab]);
 
@@ -69,66 +68,70 @@ export default function Catalogos() {
         itemRef = ref(rtdb, `catalogos/${activeTab}/${itemId}`);
       }
 
-      const savePayload = { nombre: formData.nombre.trim() };
-      if (activeTab === 'servicios') {
-        savePayload.descripcion = formData.descripcion;
-        savePayload.precio = Number(formData.precio);
-      } else if (activeTab === 'categorias') {
-        savePayload.descripcion = formData.descripcion;
-      }
+      await set(itemRef, {
+        nombre: formData.nombre.trim(),
+        descripcion: formData.descripcion.trim(),
+        precio: Number(formData.precio) || 0
+      });
 
-      await set(itemRef, savePayload);
-      toast.success(editingId ? 'Actualizado correctamente' : 'Creado correctamente');
+      toast.success(editingId ? 'Actualizado correctamente' : 'Agregado correctamente');
       setIsModalOpen(false);
     } catch (error) {
       toast.error('Error al guardar: ' + error.message);
     }
   };
 
-  const handleDelete = async (id, nombre) => {
-    if (!window.confirm(`¿Estás seguro de eliminar "${nombre}"?`)) return;
+  const requestDelete = (id, nombre) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Eliminar Registro',
+      message: `¿Estás seguro de que deseas eliminar "${nombre}" del catálogo de ${activeTab}?`,
+      isDanger: true,
+      onConfirm: () => handleDelete(id)
+    });
+  };
+
+  const handleDelete = async (id) => {
     try {
       await remove(ref(rtdb, `catalogos/${activeTab}/${id}`));
       toast.success("Eliminado correctamente");
     } catch (error) {
       toast.error("Error al eliminar: " + error.message);
+    } finally {
+      setConfirmModal({ ...confirmModal, isOpen: false });
     }
   };
 
-  const seedCatalogos = async () => {
-    if (!window.confirm("¿Deseas agregar datos de prueba a los catálogos?")) return;
-    
-    try {
-      await set(ref(rtdb, 'catalogos'), {
-        categorias: {
-          "c1": { nombre: "Lubricantes" },
-          "c2": { nombre: "Llantas" },
-          "c3": { nombre: "Frenos" },
-          "c4": { nombre: "Eléctrico" }
-        },
-        marcas: {
-          "m1": { nombre: "Yamaha" },
-          "m2": { nombre: "Honda" },
-          "m3": { nombre: "Suzuki" },
-          "m4": { nombre: "Castrol" }
-        },
-        ubicaciones: {
-          "u1": { nombre: "Bodega Principal" },
-          "u2": { nombre: "Estante A1" },
-          "u3": { nombre: "Estante B2" }
-        },
-        mecanicos: {
-          "mec1": { nombre: "Juan Pérez", telefono: "8888-1111" },
-          "mec2": { nombre: "Carlos Mejía", telefono: "8888-2222" }
-        }
-      });
+  const requestSeed = () => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Cargar Datos de Prueba',
+      message: 'Esto inyectará categorías, marcas y ubicaciones de prueba en tu base de datos. Útil para empezar a probar el sistema. ¿Proceder?',
+      isDanger: false,
+      onConfirm: seedCatalogos
+    });
+  };
 
-      await set(ref(rtdb, 'servicios'), {
-        "s1": { nombre: "Cambio de Aceite", precio: 150, descripcion: "Mano de obra por cambio de aceite" },
-        "s2": { nombre: "Alineación y Balanceo", precio: 500, descripcion: "Ajuste completo" },
-        "s3": { nombre: "Revisión Eléctrica", precio: 300, descripcion: "Diagnóstico de sistema eléctrico" }
+  const seedCatalogos = async () => {
+    setConfirmModal({ ...confirmModal, isOpen: false });
+    try {
+      await set(ref(rtdb, 'catalogos/categorias'), {
+        "c1": { nombre: "Lubricantes" },
+        "c2": { nombre: "Llantas" },
+        "c3": { nombre: "Frenos" },
+        "c4": { nombre: "Eléctrico" }
       });
-      
+      await set(ref(rtdb, 'catalogos/marcas'), {
+        "m1": { nombre: "Yamaha" },
+        "m2": { nombre: "Honda" },
+        "m3": { nombre: "Suzuki" },
+        "m4": { nombre: "Castrol" }
+      });
+      await set(ref(rtdb, 'catalogos/ubicaciones'), {
+        "u1": { nombre: "Bodega Principal" },
+        "u2": { nombre: "Estante A1" },
+        "u3": { nombre: "Estante B2" }
+      });
       toast.success("Datos de prueba generados correctamente");
     } catch (e) {
       toast.error("Error: " + e.message);
@@ -145,9 +148,9 @@ export default function Catalogos() {
             <Settings className="text-gray-600" /> 
             Catálogos del Sistema
           </h1>
-          <p className="text-gray-500 text-sm">Administra las listas desplegables del taller.</p>
+          <p className="text-gray-500 text-sm">Administra las listas desplegables menores del taller.</p>
         </div>
-        <button onClick={seedCatalogos} className="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-lg font-bold text-sm shadow-sm transition-colors">
+        <button onClick={requestSeed} className="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-lg font-bold text-sm shadow-sm transition-colors">
           Cargar Datos de Prueba
         </button>
       </div>
@@ -156,14 +159,14 @@ export default function Catalogos() {
         
         {/* Sidebar de Tabs */}
         <div className="w-full md:w-64 bg-gray-50/50 border-r border-gray-100 p-4 space-y-1">
-          {tabs.map(tab => (
+          {tabs.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => { setActiveTab(tab.id); setLoading(true); }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 font-bold ${
+              onClick={() => setActiveTab(tab.id)}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 font-bold text-sm ${
                 activeTab === tab.id 
-                ? 'bg-blue-600 text-white shadow-md shadow-blue-200' 
-                : 'text-gray-600 hover:bg-gray-200 hover:text-gray-900'
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-200' 
+                  : 'text-gray-600 hover:bg-gray-100'
               }`}
             >
               {tab.icon}
@@ -180,48 +183,35 @@ export default function Catalogos() {
             </h2>
             <button 
               onClick={() => handleOpenModal()}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 shadow-sm transition-colors text-sm"
+              className="bg-blue-100 hover:bg-blue-200 text-blue-700 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors"
             >
-              <Plus size={18} />
-              Nuevo
+              <Plus size={16} /> Nuevo
             </button>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm whitespace-nowrap">
-              <thead className="bg-gray-50 text-gray-600 font-medium border-b border-gray-100">
+          <div className="bg-gray-50 rounded-xl overflow-hidden border border-gray-100">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-gray-100 text-gray-600">
                 <tr>
-                  <th className="p-4">Nombre</th>
-                  {['categorias', 'servicios'].includes(activeTab) && <th className="p-4">Descripción</th>}
-                  {activeTab === 'servicios' && <th className="p-4">Precio Est.</th>}
-                  <th className="p-4 text-center w-24">Acciones</th>
+                  <th className="p-4 font-bold">Nombre</th>
+                  <th className="p-4 font-bold text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {loading ? (
-                  <tr>
-                    <td colSpan="4" className="p-8 text-center text-gray-400">Cargando datos...</td>
-                  </tr>
+                  <tr><td colSpan="2" className="p-8 text-center text-gray-400">Cargando...</td></tr>
                 ) : data.length === 0 ? (
-                  <tr>
-                    <td colSpan="4" className="p-8 text-center text-gray-400">No hay registros aún.</td>
-                  </tr>
+                  <tr><td colSpan="2" className="p-8 text-center text-gray-400">No hay registros aún.</td></tr>
                 ) : (
-                  data.map(item => (
-                    <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+                  data.map((item) => (
+                    <tr key={item.id} className="bg-white hover:bg-gray-50 transition-colors">
                       <td className="p-4 font-bold text-gray-800">{item.nombre}</td>
-                      {['categorias', 'servicios'].includes(activeTab) && (
-                        <td className="p-4 text-gray-600 truncate max-w-xs">{item.descripcion || '-'}</td>
-                      )}
-                      {activeTab === 'servicios' && (
-                        <td className="p-4 font-medium text-emerald-600">C$ {item.precio?.toFixed(2) || '0.00'}</td>
-                      )}
-                      <td className="p-4 text-center flex justify-center gap-2">
-                        <button onClick={() => handleOpenModal(item)} className="text-blue-500 hover:bg-blue-50 p-1.5 rounded transition-colors">
-                          <Edit2 size={18} />
+                      <td className="p-4 flex justify-end gap-2">
+                        <button onClick={() => handleOpenModal(item)} className="text-blue-500 hover:bg-blue-50 p-2 rounded-lg transition-colors">
+                          <Edit2 size={16} />
                         </button>
-                        <button onClick={() => handleDelete(item.id, item.nombre)} className="text-red-500 hover:bg-red-50 p-1.5 rounded transition-colors">
-                          <Trash2 size={18} />
+                        <button onClick={() => requestDelete(item.id, item.nombre)} className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors">
+                          <Trash2 size={16} />
                         </button>
                       </td>
                     </tr>
@@ -233,10 +223,10 @@ export default function Catalogos() {
         </div>
       </div>
 
-      {/* Modal Formulario */}
+      {/* Modal Agregar/Editar */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-2xl w-full max-w-md shadow-xl overflow-hidden flex flex-col">
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl overflow-hidden flex flex-col scale-in-center">
             <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
               <h2 className="text-lg font-bold text-gray-800">
                 {editingId ? 'Editar Registro' : 'Nuevo Registro'}
@@ -247,32 +237,35 @@ export default function Catalogos() {
             <form onSubmit={handleSave} className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Nombre *</label>
-                <input required type="text" value={formData.nombre} onChange={e => setFormData({...formData, nombre: e.target.value})} className="w-full border p-2.5 rounded-lg outline-none focus:border-blue-500" />
+                <input 
+                  required 
+                  type="text" 
+                  value={formData.nombre} 
+                  onChange={e => setFormData({...formData, nombre: e.target.value})} 
+                  className="w-full border-2 border-gray-200 p-3 rounded-xl outline-none focus:border-blue-500" 
+                  placeholder="Ej: Llaves, Frenos..." 
+                  autoFocus
+                />
               </div>
-              
-              {['categorias', 'servicios'].includes(activeTab) && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Descripción</label>
-                  <input type="text" value={formData.descripcion} onChange={e => setFormData({...formData, descripcion: e.target.value})} className="w-full border p-2.5 rounded-lg outline-none focus:border-blue-500" />
-                </div>
-              )}
-              
-              {activeTab === 'servicios' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Precio Estándar (C$)</label>
-                  <input type="number" step="0.01" min="0" value={formData.precio} onChange={e => setFormData({...formData, precio: e.target.value})} className="w-full border p-2.5 rounded-lg outline-none focus:border-blue-500" />
-                </div>
-              )}
 
-              <div className="pt-4 flex justify-end gap-3 border-t border-gray-100">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 rounded-lg text-gray-600 font-medium hover:bg-gray-100">Cancelar</button>
-                <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg font-bold">Guardar</button>
+              <div className="pt-2 flex justify-end gap-3">
+                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 rounded-xl text-gray-600 font-medium hover:bg-gray-100">Cancelar</button>
+                <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-xl font-bold shadow-md active:scale-95 transition-all">Guardar</button>
               </div>
             </form>
           </div>
         </div>
       )}
 
+      {/* Modal de Confirmación Genérico */}
+      <ConfirmModal 
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        isDanger={confirmModal.isDanger}
+        onConfirm={confirmModal.onConfirm}
+        onCancel={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+      />
     </div>
   );
 }

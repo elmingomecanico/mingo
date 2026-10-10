@@ -16,6 +16,7 @@
     "react-dom": "^19.2.8",
     "react-hot-toast": "^2.6.1",
     "react-router-dom": "^7.18.4",
+    "react-select": "^5.10.2",
     "react-to-print": "^3.3.0"
   },
   "devDependencies": {

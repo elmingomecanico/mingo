@@ -3,6 +3,7 @@ import { ref, onValue, set, push } from 'firebase/database';
 import { rtdb } from '../firebase';
 import { Search, Plus, Edit2, Package, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import toast from 'react-hot-toast';
+import Select from 'react-select';
 
 export default function Inventario() {
   const [products, setProducts] = useState([]);
@@ -252,10 +253,15 @@ export default function Inventario() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Categoría</label>
-                    <select value={formData.cat} onChange={e => setFormData({...formData, cat: e.target.value})} className="w-full border p-2.5 rounded-lg outline-none focus:border-blue-500 bg-white">
-                      <option value="">Seleccione una categoría</option>
-                      {categorias.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
+                    <Select
+                      options={categorias.map(c => ({ value: c, label: c }))}
+                      value={formData.cat ? { value: formData.cat, label: formData.cat } : null}
+                      onChange={(selected) => setFormData({ ...formData, cat: selected ? selected.value : '' })}
+                      placeholder="Buscar categoría..."
+                      isClearable
+                      className="react-select-container"
+                      classNamePrefix="react-select"
+                    />
                   </div>
                   <div className="hidden md:block"></div>
                   <div>
@@ -284,10 +290,15 @@ export default function Inventario() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Ubicación / Estante</label>
-                    <select value={formData.ubicacion} onChange={e => setFormData({...formData, ubicacion: e.target.value})} className="w-full border p-2.5 rounded-lg outline-none focus:border-blue-500 bg-white">
-                      <option value="">Sin ubicación</option>
-                      {ubicaciones.map(u => <option key={u} value={u}>{u}</option>)}
-                    </select>
+                    <Select
+                      options={ubicaciones.map(u => ({ value: u, label: u }))}
+                      value={formData.ubicacion ? { value: formData.ubicacion, label: formData.ubicacion } : null}
+                      onChange={(selected) => setFormData({ ...formData, ubicacion: selected ? selected.value : '' })}
+                      placeholder="Buscar ubicación..."
+                      isClearable
+                      className="react-select-container"
+                      classNamePrefix="react-select"
+                    />
                   </div>
                 </div>
               </div>

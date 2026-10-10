@@ -4,6 +4,7 @@ import { ref, onValue, push, set, runTransaction } from 'firebase/database';
 import { rtdb } from '../firebase';
 import toast from 'react-hot-toast';
 import { useReactToPrint } from 'react-to-print';
+import Select from 'react-select';
 import TicketPrinter from './TicketPrinter';
 
 export default function POS() {
@@ -16,12 +17,12 @@ export default function POS() {
   const [loading, setLoading] = useState(true);
   
   const [clientes, setClientes] = useState([]);
-  const [selectedCliente, setSelectedCliente] = useState('MOSTRADOR');
+  const [selectedCliente, setSelectedCliente] = useState({ value: 'MOSTRADOR', label: 'CLIENTE DE MOSTRADOR' });
   const [metodoPago, setMetodoPago] = useState('Efectivo');
 
   useEffect(() => {
     const prodRef = ref(rtdb, 'productos');
-    const servRef = ref(rtdb, 'catalogos/servicios');
+    const servRef = ref(rtdb, 'servicios');
     const invRef = ref(rtdb, `inventario/${sucursal}`);
 
     const unsubProd = onValue(prodRef, (snapshot) => {
@@ -114,10 +115,11 @@ export default function POS() {
 
   const processSale = async () => {
     if (cart.length === 0) return toast.error('El carrito está vacío');
+    if (!selectedCliente) return toast.error('Seleccione un cliente');
     
     // Si es crédito, verificar si hay límite disponible
-    if (metodoPago === 'Crédito' && selectedCliente !== 'MOSTRADOR') {
-      const clienteData = clientes.find(c => c.id === selectedCliente);
+    if (metodoPago === 'Crédito' && selectedCliente.value !== 'MOSTRADOR') {
+      const clienteData = clientes.find(c => c.id === selectedCliente.value);
       if (!clienteData) return toast.error('Cliente no encontrado');
       
       // Consultar el saldo pendiente del cliente
@@ -150,7 +152,7 @@ export default function POS() {
         numero_factura: humanId,
         fecha: new Date().toISOString(),
         sucursal,
-        id_cliente: selectedCliente,
+        id_cliente: selectedCliente.value,
         metodo_pago: metodoPago,
         total,
         estado: 'Completado',
@@ -167,13 +169,13 @@ export default function POS() {
       await set(saleRef, newSale);
 
       // Si es crédito, generar cuenta por cobrar
-      if (metodoPago === 'Crédito' && selectedCliente !== 'MOSTRADOR') {
+      if (metodoPago === 'Crédito' && selectedCliente.value !== 'MOSTRADOR') {
         const cxcRecord = push(ref(rtdb, 'cxc'));
         const fechaVence = new Date();
         fechaVence.setDate(fechaVence.getDate() + 30); // 30 días de crédito por defecto
         
         await set(cxcRecord, {
-          id_cliente: selectedCliente,
+          id_cliente: selectedCliente.value,
           id_factura: saleId,
           numero_factura: humanId,
           fecha_emision: newSale.fecha,
@@ -289,26 +291,29 @@ export default function POS() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
               <div>
                 <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Cliente</label>
-                <select 
-                  value={selectedCliente} 
-                  onChange={e => setSelectedCliente(e.target.value)}
-                  className="w-full border p-2.5 rounded-lg bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none"
-                >
-                  <option value="MOSTRADOR">Cliente Mostrador (Contado)</option>
-                  {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-                </select>
+                <Select
+                  options={[
+                    { value: 'MOSTRADOR', label: 'Cliente Mostrador (Contado)' },
+                    ...clientes.map(c => ({ value: c.id, label: c.nombre }))
+                  ]}
+                  value={selectedCliente}
+                  onChange={setSelectedCliente}
+                  placeholder="Buscar cliente..."
+                  className="react-select-container text-sm"
+                  classNamePrefix="react-select"
+                />
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Método de Pago</label>
                 <select 
                   value={metodoPago} 
                   onChange={e => setMetodoPago(e.target.value)}
-                  className="w-full border p-2.5 rounded-lg bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none"
+                  className="w-full border p-2 rounded-lg bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none text-sm h-[38px]"
                 >
                   <option value="Efectivo">Efectivo</option>
                   <option value="Tarjeta">Tarjeta / POS</option>
                   <option value="Transferencia">Transferencia</option>
-                  {selectedCliente !== 'MOSTRADOR' && <option value="Crédito">Crédito (Cuentas por Cobrar)</option>}
+                  {selectedCliente?.value !== 'MOSTRADOR' && <option value="Crédito">Crédito (CxC)</option>}
                 </select>
               </div>
             </div>

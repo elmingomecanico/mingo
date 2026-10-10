@@ -3,16 +3,48 @@ import { ref, onValue, set, push, remove } from 'firebase/database';
 import { rtdb } from '../firebase';
 import { ShieldCheck, Plus, Edit2, Trash2, KeyRound } from 'lucide-react';
 import toast from 'react-hot-toast';
+import Select from 'react-select';
+import ConfirmModal from '../components/ConfirmModal';
+
+const FUNCIONES_OPTIONS = [
+  { value: 'Mecánico', label: 'Mecánico' },
+  { value: 'Cajero', label: 'Cajero' },
+  { value: 'Vendedor', label: 'Vendedor' },
+  { value: 'Gerente', label: 'Gerente' },
+  { value: 'Auxiliar', label: 'Auxiliar' },
+];
+
+const PERMISOS_OPTIONS = [
+  { value: 'VER_POS', label: 'Caja POS (Cobrar)' },
+  { value: 'VER_INVENTARIO', label: 'Ver Inventario' },
+  { value: 'VER_CXC', label: 'Ver Cuentas por Cobrar' },
+  { value: 'VER_CXP', label: 'Ver Cuentas por Pagar' },
+  { value: 'VER_CLIENTES', label: 'Ver Clientes' },
+  { value: 'VER_PROVEEDORES', label: 'Ver Proveedores' },
+  { value: 'VER_REPORTES', label: 'Ver Reportes y Finanzas' },
+  { value: 'CREAR', label: 'Crear Registros' },
+  { value: 'EDITAR', label: 'Editar Registros' },
+  { value: 'ELIMINAR', label: 'Eliminar Registros' },
+];
 
 export default function Usuarios() {
   const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null });
+
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [formData, setFormData] = useState({
-    nombre_completo: '', usuario: '', password: '', rol: 'Cajero', estado: 'Activo', id_sucursal: 'SUC-01'
+    nombre_completo: '', 
+    usuario: '', 
+    password: '', 
+    rol: 'Usuario', 
+    funcion: null, 
+    permisos: [],
+    estado: 'Activo', 
+    id_sucursal: 'SUC-01'
   });
 
   useEffect(() => {
@@ -37,14 +69,16 @@ export default function Usuarios() {
         nombre_completo: item.nombre_completo || '', 
         usuario: item.usuario || '', 
         password: item.password || '',
-        rol: item.rol || 'Cajero',
+        rol: item.rol || 'Usuario',
+        funcion: item.funcion ? { value: item.funcion, label: item.funcion } : null,
+        permisos: item.permisos ? PERMISOS_OPTIONS.filter(p => item.permisos.includes(p.value)) : [],
         estado: item.estado || 'Activo',
         id_sucursal: item.id_sucursal || 'SUC-01'
       });
     } else {
       setEditingId(null);
       setFormData({ 
-        nombre_completo: '', usuario: '', password: '', rol: 'Cajero', estado: 'Activo', id_sucursal: 'SUC-01' 
+        nombre_completo: '', usuario: '', password: '', rol: 'Usuario', funcion: null, permisos: [], estado: 'Activo', id_sucursal: 'SUC-01' 
       });
     }
     setIsModalOpen(true);
@@ -56,7 +90,6 @@ export default function Usuarios() {
       return toast.error("Usuario y contraseña son requeridos");
     }
 
-    // Verificar si el usuario ya existe (para nuevos registros)
     if (!editingId && usuarios.some(u => u.usuario.toLowerCase() === formData.usuario.toLowerCase())) {
       return toast.error("El nombre de usuario ya está en uso");
     }
@@ -69,6 +102,8 @@ export default function Usuarios() {
         usuario: formData.usuario.trim(),
         password: formData.password.trim(),
         rol: formData.rol,
+        funcion: formData.funcion ? formData.funcion.value : '',
+        permisos: formData.permisos.map(p => p.value),
         estado: formData.estado,
         id_sucursal: formData.id_sucursal
       };
@@ -81,14 +116,24 @@ export default function Usuarios() {
     }
   };
 
-  const handleDelete = async (id, nombre) => {
+  const requestDelete = (id, nombre) => {
     if (usuarios.length === 1) return toast.error("No puedes eliminar el único usuario del sistema");
-    if (!window.confirm(`¿Estás seguro de eliminar el acceso de "${nombre}"?`)) return;
+    setConfirmModal({
+      isOpen: true,
+      title: 'Eliminar Usuario',
+      message: `¿Estás seguro de eliminar el acceso de "${nombre}" al sistema? No se podrá recuperar.`,
+      onConfirm: () => handleDelete(id)
+    });
+  };
+
+  const handleDelete = async (id) => {
     try {
       await remove(ref(rtdb, `usuarios/${id}`));
       toast.success("Usuario eliminado");
     } catch (error) {
       toast.error("Error al eliminar: " + error.message);
+    } finally {
+      setConfirmModal({ ...confirmModal, isOpen: false });
     }
   };
 
@@ -100,7 +145,7 @@ export default function Usuarios() {
             <ShieldCheck className="text-blue-600" /> 
             Control de Usuarios
           </h1>
-          <p className="text-gray-500 text-sm">Gestiona los accesos, roles y sucursales del personal.</p>
+          <p className="text-gray-500 text-sm">Gestiona los roles, funciones y permisos del personal.</p>
         </div>
         <button 
           onClick={() => handleOpenModal()}
@@ -118,7 +163,8 @@ export default function Usuarios() {
               <tr>
                 <th className="p-4">Personal</th>
                 <th className="p-4">Credenciales</th>
-                <th className="p-4">Rol / Nivel</th>
+                <th className="p-4">Rol en Sistema</th>
+                <th className="p-4">Función (Puesto)</th>
                 <th className="p-4">Sucursal</th>
                 <th className="p-4 text-center">Estado</th>
                 <th className="p-4 text-center">Acciones</th>
@@ -126,9 +172,9 @@ export default function Usuarios() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {loading ? (
-                <tr><td colSpan="6" className="p-8 text-center text-gray-400">Cargando usuarios...</td></tr>
+                <tr><td colSpan="7" className="p-8 text-center text-gray-400">Cargando usuarios...</td></tr>
               ) : usuarios.length === 0 ? (
-                <tr><td colSpan="6" className="p-8 text-center text-gray-400">No hay usuarios.</td></tr>
+                <tr><td colSpan="7" className="p-8 text-center text-gray-400">No hay usuarios.</td></tr>
               ) : (
                 usuarios.map(user => (
                   <tr key={user.id} className="hover:bg-gray-50 transition-colors">
@@ -140,13 +186,14 @@ export default function Usuarios() {
                     </td>
                     <td className="p-4">
                       <span className={`px-2.5 py-1 rounded-md text-xs font-bold ${
-                        user.rol === 'Administrador' ? 'bg-purple-100 text-purple-700' :
-                        user.rol === 'Mecánico' ? 'bg-orange-100 text-orange-700' :
+                        user.rol === 'SuperAdmin' ? 'bg-purple-100 text-purple-700' :
+                        user.rol === 'Administrador' ? 'bg-indigo-100 text-indigo-700' :
                         'bg-blue-100 text-blue-700'
                       }`}>
                         {user.rol}
                       </span>
                     </td>
+                    <td className="p-4 font-medium text-gray-700">{user.funcion || 'N/A'}</td>
                     <td className="p-4 text-gray-600">{user.id_sucursal}</td>
                     <td className="p-4 text-center">
                       <span className={`px-2 py-1 rounded-full text-xs font-bold ${
@@ -159,7 +206,7 @@ export default function Usuarios() {
                       <button onClick={() => handleOpenModal(user)} className="text-blue-500 hover:bg-blue-50 p-2 rounded-lg transition-colors">
                         <Edit2 size={18} />
                       </button>
-                      <button onClick={() => handleDelete(user.id, user.nombre_completo)} className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors">
+                      <button onClick={() => requestDelete(user.id, user.nombre_completo)} className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors">
                         <Trash2 size={18} />
                       </button>
                     </td>
@@ -172,13 +219,13 @@ export default function Usuarios() {
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-2xl w-full max-w-md shadow-xl overflow-hidden flex flex-col">
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in overflow-y-auto">
+          <div className="bg-white rounded-2xl w-full max-w-2xl shadow-xl overflow-hidden flex flex-col my-8">
             <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
               <h2 className="text-lg font-bold text-gray-800">
                 {editingId ? 'Editar Usuario' : 'Nuevo Usuario'}
               </h2>
-              <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600 font-bold text-xl">&times;</button>
+              <button type="button" onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600 font-bold text-xl">&times;</button>
             </div>
             
             <form onSubmit={handleSave} className="p-6 space-y-4">
@@ -200,11 +247,45 @@ export default function Usuarios() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Rol en Sistema</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Nivel de Acceso (Rol)</label>
                   <select value={formData.rol} onChange={e => setFormData({...formData, rol: e.target.value})} className="w-full border p-2.5 rounded-lg outline-none focus:border-blue-500">
+                    <option value="SuperAdmin">Super Administrador</option>
                     <option value="Administrador">Administrador</option>
-                    <option value="Cajero">Cajero</option>
-                    <option value="Mecánico">Mecánico</option>
+                    <option value="Usuario">Usuario Regular</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Función (Puesto)</label>
+                  <Select
+                    options={FUNCIONES_OPTIONS}
+                    value={formData.funcion}
+                    onChange={(selected) => setFormData({ ...formData, funcion: selected })}
+                    placeholder="Buscar función..."
+                    className="react-select-container"
+                    classNamePrefix="react-select"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Permisos Especiales</label>
+                <Select
+                  isMulti
+                  options={PERMISOS_OPTIONS}
+                  value={formData.permisos}
+                  onChange={(selected) => setFormData({ ...formData, permisos: selected })}
+                  placeholder="Seleccionar permisos permitidos..."
+                  className="react-select-container"
+                  classNamePrefix="react-select"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Sucursal Asignada</label>
+                  <select value={formData.id_sucursal} onChange={e => setFormData({...formData, id_sucursal: e.target.value})} className="w-full border p-2.5 rounded-lg outline-none focus:border-blue-500">
+                    <option value="SUC-01">Sucursal Principal (SUC-01)</option>
+                    <option value="SUC-02">Sucursal Norte (SUC-02)</option>
                   </select>
                 </div>
                 <div>
@@ -216,14 +297,6 @@ export default function Usuarios() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Sucursal Asignada</label>
-                <select value={formData.id_sucursal} onChange={e => setFormData({...formData, id_sucursal: e.target.value})} className="w-full border p-2.5 rounded-lg outline-none focus:border-blue-500">
-                  <option value="SUC-01">Sucursal Principal (SUC-01)</option>
-                  <option value="SUC-02">Sucursal Norte (SUC-02)</option>
-                </select>
-              </div>
-
               <div className="pt-4 flex justify-end gap-3 border-t border-gray-100 mt-6">
                 <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2.5 rounded-lg text-gray-600 font-medium hover:bg-gray-100 transition-colors">Cancelar</button>
                 <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-bold shadow-md shadow-blue-200 transition-all active:scale-95">Guardar Usuario</button>
@@ -232,6 +305,14 @@ export default function Usuarios() {
           </div>
         </div>
       )}
+
+      <ConfirmModal 
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onConfirm={confirmModal.onConfirm}
+        onCancel={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+      />
     </div>
   );
 }
