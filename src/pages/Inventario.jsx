@@ -11,6 +11,10 @@ export default function Inventario() {
   const [sucursal, setSucursal] = useState('SUC-01');
   const [loading, setLoading] = useState(true);
   
+  // State para catálogos
+  const [categorias, setCategorias] = useState([]);
+  const [ubicaciones, setUbicaciones] = useState([]);
+  
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -21,32 +25,37 @@ export default function Inventario() {
   useEffect(() => {
     const prodsRef = ref(rtdb, 'productos');
     const invRef = ref(rtdb, `inventario/${sucursal}`);
+    const catRef = ref(rtdb, 'catalogos/categorias');
+    const ubiRef = ref(rtdb, 'catalogos/ubicaciones');
 
     const unsubProds = onValue(prodsRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
-        const parsed = Object.keys(data).map(key => ({
-          id: key,
-          ...data[key]
-        }));
-        setProducts(parsed);
+        setProducts(Object.keys(data).map(key => ({ id: key, ...data[key] })));
       } else {
         setProducts([]);
       }
     });
 
     const unsubInv = onValue(invRef, (snapshot) => {
-      if (snapshot.exists()) {
-        setInventory(snapshot.val());
-      } else {
-        setInventory({});
-      }
+      if (snapshot.exists()) setInventory(snapshot.val());
+      else setInventory({});
       setLoading(false);
+    });
+
+    const unsubCat = onValue(catRef, (snapshot) => {
+      if (snapshot.exists()) setCategorias(Object.values(snapshot.val()).map(c => c.nombre));
+    });
+
+    const unsubUbi = onValue(ubiRef, (snapshot) => {
+      if (snapshot.exists()) setUbicaciones(Object.values(snapshot.val()).map(u => u.nombre));
     });
 
     return () => {
       unsubProds();
       unsubInv();
+      unsubCat();
+      unsubUbi();
     };
   }, [sucursal]);
 
@@ -243,7 +252,10 @@ export default function Inventario() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Categoría</label>
-                    <input type="text" value={formData.cat} onChange={e => setFormData({...formData, cat: e.target.value})} className="w-full border p-2.5 rounded-lg outline-none focus:border-blue-500" />
+                    <select value={formData.cat} onChange={e => setFormData({...formData, cat: e.target.value})} className="w-full border p-2.5 rounded-lg outline-none focus:border-blue-500 bg-white">
+                      <option value="">Seleccione una categoría</option>
+                      {categorias.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
                   </div>
                   <div className="hidden md:block"></div>
                   <div>
@@ -272,7 +284,10 @@ export default function Inventario() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Ubicación / Estante</label>
-                    <input type="text" value={formData.ubicacion} onChange={e => setFormData({...formData, ubicacion: e.target.value})} className="w-full border p-2.5 rounded-lg outline-none focus:border-blue-500" placeholder="Ej: Bodega 2" />
+                    <select value={formData.ubicacion} onChange={e => setFormData({...formData, ubicacion: e.target.value})} className="w-full border p-2.5 rounded-lg outline-none focus:border-blue-500 bg-white">
+                      <option value="">Sin ubicación</option>
+                      {ubicaciones.map(u => <option key={u} value={u}>{u}</option>)}
+                    </select>
                   </div>
                 </div>
               </div>

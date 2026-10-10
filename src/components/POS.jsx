@@ -11,12 +11,13 @@ export default function POS() {
   const [cart, setCart] = useState([]);
   const [searchCode, setSearchCode] = useState('');
   const [products, setProducts] = useState([]);
+  const [servicios, setServicios] = useState([]);
   const [inventory, setInventory] = useState({});
   const [loading, setLoading] = useState(true);
 
-  // Cargar productos e inventario desde Firebase Realtime Database
   useEffect(() => {
     const prodRef = ref(rtdb, 'productos');
+    const servRef = ref(rtdb, 'catalogos/servicios');
     const invRef = ref(rtdb, `inventario/${sucursal}`);
 
     const unsubProd = onValue(prodRef, (snapshot) => {
@@ -24,9 +25,28 @@ export default function POS() {
       if (data) {
         const prodList = Object.keys(data).map(key => ({
           id: key,
+          type: 'producto',
           ...data[key]
         }));
         setProducts(prodList);
+      } else {
+        setProducts([]);
+      }
+    });
+
+    const unsubServ = onValue(servRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        const servList = Object.keys(data).map(key => ({
+          id: key,
+          type: 'servicio',
+          name: data[key].nombre,
+          price: data[key].precio || 0,
+          cat: 'Servicio'
+        }));
+        setServicios(servList);
+      } else {
+        setServicios([]);
       }
     });
 
@@ -41,6 +61,7 @@ export default function POS() {
 
     return () => {
       unsubProd();
+      unsubServ();
       unsubInv();
     };
   }, [sucursal]);
@@ -51,7 +72,7 @@ export default function POS() {
     const existing = cart.find(item => item.id === product.id);
     const requestedQty = existing ? existing.qty + 1 : 1;
 
-    if (requestedQty > stockActual) {
+    if (product.type !== 'servicio' && requestedQty > stockActual) {
       toast.error(`Stock insuficiente. Solo quedan ${stockActual} unidades disponibles.`);
       return;
     }
@@ -99,6 +120,7 @@ export default function POS() {
         estado: 'Completado',
         items: cart.map(item => ({
           id_producto: item.id,
+          type: item.type || 'producto',
           name: item.name,
           cantidad: item.qty,
           precio_unitario: item.price,
@@ -109,10 +131,12 @@ export default function POS() {
       await set(saleRef, newSale);
 
       for (const item of cart) {
-        const itemInvRef = ref(rtdb, `inventario/${sucursal}/${item.id}/stock_actual`);
-        await runTransaction(itemInvRef, (currentStock) => {
-          return (currentStock || 0) - item.qty;
-        });
+        if (item.type !== 'servicio') {
+          const itemInvRef = ref(rtdb, `inventario/${sucursal}/${item.id}/stock_actual`);
+          await runTransaction(itemInvRef, (currentStock) => {
+            return (currentStock || 0) - item.qty;
+          });
+        }
         
         const kardexRef = push(ref(rtdb, 'kardex'));
         await set(kardexRef, {
@@ -120,7 +144,7 @@ export default function POS() {
           id_sucursal: sucursal,
           id_producto: item.id,
           nombre_producto: item.name,
-          tipo_movimiento: 'Salida por Venta',
+          tipo_movimiento: item.type === 'servicio' ? 'Prestación de Servicio' : 'Salida por Venta',
           cantidad: item.qty,
           id_referencia: humanId
         });
@@ -136,7 +160,8 @@ export default function POS() {
     setLoading(false);
   };
 
-  const filteredProducts = products.filter(p => 
+  const allItems = [...products, ...servicios];
+  const filteredProducts = allItems.filter(p => 
     p.name.toLowerCase().includes(searchCode.toLowerCase()) || 
     p.id.toLowerCase().includes(searchCode.toLowerCase())
   );
@@ -221,14 +246,19 @@ export default function POS() {
             <div className="mt-4 grid grid-cols-2 md:grid-cols-3 gap-3 max-h-64 overflow-y-auto">
               {loading && <p className="text-gray-500">Cargando base de datos...</p>}
               {!loading && filteredProducts.map(p => {
-                const stock = inventory[p.id]?.stock_actual || 0;
+                const isService = p.type === 'servicio';
+                const stock = isService ? '∞' : (inventory[p.id]?.stock_actual || 0);
+                const hasStock = isService || stock > 0;
+                
                 return (
-                  <div key={p.id} onClick={() => addToCart(p)} className="border p-3 rounded-lg cursor-pointer hover:bg-blue-50 transition border-blue-100 flex flex-col justify-between h-24">
-                    <p className="font-bold text-gray-800 text-xs line-clamp-2">{p.name}</p>
+                  <div key={p.id} onClick={() => addToCart(p)} className={`border p-3 rounded-lg cursor-pointer hover:bg-blue-50 transition ${hasStock ? 'border-blue-100' : 'border-red-200 opacity-60'} flex flex-col justify-between h-24`}>
+                    <p className="font-bold text-gray-800 text-xs line-clamp-2">
+                      {isService ? '🔧 ' : ''}{p.name}
+                    </p>
                     <div className="flex justify-between items-center mt-1">
                       <span className="text-green-600 font-bold text-sm">C${p.price}</span>
-                      <span className={`text-xs px-2 py-1 rounded-full text-white ${stock > 0 ? 'bg-blue-500' : 'bg-red-500'}`}>
-                        {stock} disp.
+                      <span className={`text-[10px] font-bold px-2 py-1 rounded-full text-white ${isService ? 'bg-purple-500' : (stock > 0 ? 'bg-blue-500' : 'bg-red-500')}`}>
+                        {isService ? 'Servicio' : `${stock} disp.`}
                       </span>
                     </div>
                   </div>

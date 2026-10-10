@@ -13,6 +13,7 @@ export default function Layout({ children }) {
     { name: 'Inventario', path: '/inventario', icon: <Package size={20} /> },
     { name: 'Kardex', path: '/kardex', icon: <Activity size={20} /> },
     { name: 'Reportes', path: '/reportes', icon: <BarChart2 size={20} /> },
+    { name: 'Ajustes', path: '/catalogos', icon: <Settings size={20} /> },
   ];
 
   return (
