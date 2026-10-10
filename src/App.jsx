@@ -16,6 +16,7 @@ import Compras from './pages/Compras'
 import Servicios from './pages/Servicios'
 import Login from './pages/Login'
 import Usuarios from './pages/Usuarios'
+import OrdenesTrabajo from './pages/OrdenesTrabajo'
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -60,6 +61,7 @@ function AppRouter() {
   // Función para validar permiso
   const hasPermission = (perm) => {
     if (user.rol === 'SuperAdmin') return true;
+    if (perm === 'VER_TALLER' && user.funcion === 'Mecánico') return true;
     return user.permisos && user.permisos.includes(perm);
   };
 
@@ -77,6 +79,7 @@ function AppRouter() {
           {/* Home no requiere permiso específico, todos los logueados entran */}
           <Route path="/" element={<Home />} />
           <Route path="/pos" element={<ProtectedRoute perm="VER_POS"><POS /></ProtectedRoute>} />
+          <Route path="/taller" element={<ProtectedRoute perm="VER_TALLER"><OrdenesTrabajo /></ProtectedRoute>} />
           <Route path="/inventario" element={<ProtectedRoute perm="VER_INVENTARIO"><Inventario /></ProtectedRoute>} />
           <Route path="/clientes" element={<ProtectedRoute perm="VER_CLIENTES"><Clientes /></ProtectedRoute>} />
           <Route path="/cxc" element={<ProtectedRoute perm="VER_CXC"><CxC /></ProtectedRoute>} />

@@ -19,6 +19,9 @@ const PERMISOS_CATEGORIAS = {
     { id: 'VER_POS', label: 'Acceso a Caja POS' },
     { id: 'ANULAR_FACTURA', label: 'Anular Facturas' }
   ],
+  'Órdenes y Taller': [
+    { id: 'VER_TALLER', label: 'Ver Órdenes de Trabajo' }
+  ],
   'Inventario y Compras': [
     { id: 'VER_INVENTARIO', label: 'Ver Inventario' },
     { id: 'VER_COMPRAS', label: 'Ver Compras' },

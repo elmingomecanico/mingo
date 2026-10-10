@@ -13,6 +13,7 @@ export default function Layout({ children }) {
   const menu = [
     { name: 'Dashboard', path: '/', icon: <Home size={20} />, perm: 'VER_REPORTES' },
     { name: 'Caja POS', path: '/pos', icon: <ShoppingCart size={20} />, perm: 'VER_POS' },
+    { name: 'Órdenes (Taller)', path: '/taller', icon: <Wrench size={20} />, perm: 'VER_TALLER' },
     { name: 'Inventario', path: '/inventario', icon: <Package size={20} />, perm: 'VER_INVENTARIO' },
     { name: 'Servicios', path: '/servicios', icon: <Wrench size={20} />, perm: 'VER_INVENTARIO' },
     { name: 'Compras', path: '/compras', icon: <ShoppingBag size={20} />, perm: 'VER_COMPRAS' },
@@ -30,6 +31,7 @@ export default function Layout({ children }) {
   const hasPermission = (perm) => {
     if (!user) return false;
     if (user.rol === 'SuperAdmin') return true;
+    if (perm === 'VER_TALLER' && user.funcion === 'Mecánico') return true;
     // Si no es SuperAdmin, debe tener el permiso explícito en su array
     return user.permisos && user.permisos.includes(perm);
   };

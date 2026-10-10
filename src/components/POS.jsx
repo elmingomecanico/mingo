@@ -211,6 +211,33 @@ export default function POS() {
         });
       }
 
+      // Si hay servicios, generar Orden de Trabajo
+      const serviciosEnCarrito = cart.filter(item => item.type === 'servicio');
+      if (serviciosEnCarrito.length > 0 && selectedMecanico) {
+        const otRef = push(ref(rtdb, 'ordenes_trabajo'));
+        
+        const totalServicios = serviciosEnCarrito.reduce((sum, item) => sum + ((item.price * item.qty) - item.discount), 0);
+        
+        await set(otRef, {
+          id_factura: saleId,
+          numero_factura: humanId,
+          fecha_creacion: newSale.fecha,
+          id_cliente: selectedCliente.value,
+          id_mecanico: selectedMecanico.value,
+          nombre_mecanico: selectedMecanico.label,
+          estado: 'Pendiente', // Pendiente, En Proceso, Listo
+          servicios: serviciosEnCarrito.map(s => ({
+            id_servicio: s.id,
+            nombre: s.name,
+            cantidad: s.qty,
+            subtotal: (s.price * s.qty) - s.discount
+          })),
+          total_servicios: totalServicios,
+          comision_mecanico_porcentaje: 50, // 50% por defecto (configurable a futuro)
+          comision_mecanico_monto: totalServicios * 0.50
+        });
+      }
+
       for (const item of cart) {
         if (item.type !== 'servicio') {
           const itemInvRef = ref(rtdb, `inventario/${sucursal}/${item.id}/stock_actual`);
