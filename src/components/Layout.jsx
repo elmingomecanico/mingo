@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, ShoppingCart, Package, BarChart2, Settings, LogOut, Activity, Users, Wallet, Menu, X, ShieldCheck, Truck, Wrench } from 'lucide-react';
+import { Home, ShoppingCart, Package, BarChart2, Settings, LogOut, Activity, Users, Wallet, Menu, X, ShieldCheck, Truck, Wrench, ShoppingBag } from 'lucide-react';
 import { Toaster } from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import logoIcon from '../assets/logo-icon.jpg';
@@ -15,6 +15,7 @@ export default function Layout({ children }) {
     { name: 'Caja POS', path: '/pos', icon: <ShoppingCart size={20} />, roles: ['Administrador', 'Cajero'] },
     { name: 'Inventario', path: '/inventario', icon: <Package size={20} />, roles: ['Administrador', 'Cajero'] },
     { name: 'Servicios', path: '/servicios', icon: <Wrench size={20} />, roles: ['Administrador', 'Cajero', 'Mecánico'] },
+    { name: 'Compras', path: '/compras', icon: <ShoppingBag size={20} />, roles: ['Administrador'] },
     { name: 'Clientes', path: '/clientes', icon: <Users size={20} />, roles: ['Administrador', 'Cajero'] },
     { name: 'CxC', path: '/cxc', icon: <Wallet size={20} />, roles: ['Administrador', 'Cajero'] },
     { name: 'Proveedores', path: '/proveedores', icon: <Truck size={20} />, roles: ['Administrador'] },

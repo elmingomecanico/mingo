@@ -12,6 +12,7 @@ import Clientes from './pages/Clientes'
 import CxC from './pages/CxC'
 import Proveedores from './pages/Proveedores'
 import CxP from './pages/CxP'
+import Compras from './pages/Compras'
 import Servicios from './pages/Servicios'
 import Login from './pages/Login'
 import Usuarios from './pages/Usuarios'
@@ -67,6 +68,7 @@ function AppRouter() {
           <Route path="/cxc" element={<CxC />} />
           <Route path="/proveedores" element={<Proveedores />} />
           <Route path="/cxp" element={<CxP />} />
+          <Route path="/compras" element={<Compras />} />
           <Route path="/servicios" element={<Servicios />} />
           <Route path="/reportes" element={<Reportes />} />
           <Route path="/kardex" element={<Kardex />} />
