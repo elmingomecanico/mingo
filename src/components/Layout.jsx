@@ -11,23 +11,35 @@ export default function Layout({ children }) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
   
   const menu = [
-    { name: 'Dashboard', path: '/', icon: <Home size={20} />, roles: ['Administrador', 'Cajero', 'Mecánico'] },
-    { name: 'Caja POS', path: '/pos', icon: <ShoppingCart size={20} />, roles: ['Administrador', 'Cajero'] },
-    { name: 'Inventario', path: '/inventario', icon: <Package size={20} />, roles: ['Administrador', 'Cajero'] },
-    { name: 'Servicios', path: '/servicios', icon: <Wrench size={20} />, roles: ['Administrador', 'Cajero', 'Mecánico'] },
-    { name: 'Compras', path: '/compras', icon: <ShoppingBag size={20} />, roles: ['Administrador'] },
-    { name: 'Clientes', path: '/clientes', icon: <Users size={20} />, roles: ['Administrador', 'Cajero'] },
-    { name: 'CxC', path: '/cxc', icon: <Wallet size={20} />, roles: ['Administrador', 'Cajero'] },
-    { name: 'Proveedores', path: '/proveedores', icon: <Truck size={20} />, roles: ['Administrador'] },
-    { name: 'CxP', path: '/cxp', icon: <Wallet size={20} />, roles: ['Administrador'] },
-    { name: 'Kardex', path: '/kardex', icon: <Activity size={20} />, roles: ['Administrador'] },
-    { name: 'Reportes', path: '/reportes', icon: <BarChart2 size={20} />, roles: ['Administrador'] },
-    { name: 'Ajustes', path: '/catalogos', icon: <Settings size={20} />, roles: ['Administrador'] },
-    { name: 'Usuarios', path: '/usuarios', icon: <ShieldCheck size={20} />, roles: ['Administrador'] },
+    { name: 'Dashboard', path: '/', icon: <Home size={20} />, perm: 'VER_REPORTES' },
+    { name: 'Caja POS', path: '/pos', icon: <ShoppingCart size={20} />, perm: 'VER_POS' },
+    { name: 'Inventario', path: '/inventario', icon: <Package size={20} />, perm: 'VER_INVENTARIO' },
+    { name: 'Servicios', path: '/servicios', icon: <Wrench size={20} />, perm: 'VER_INVENTARIO' },
+    { name: 'Compras', path: '/compras', icon: <ShoppingBag size={20} />, perm: 'VER_COMPRAS' },
+    { name: 'Clientes', path: '/clientes', icon: <Users size={20} />, perm: 'VER_CLIENTES' },
+    { name: 'CxC', path: '/cxc', icon: <Wallet size={20} />, perm: 'VER_CXC' },
+    { name: 'Proveedores', path: '/proveedores', icon: <Truck size={20} />, perm: 'VER_PROVEEDORES' },
+    { name: 'CxP', path: '/cxp', icon: <Wallet size={20} />, perm: 'VER_CXP' },
+    { name: 'Kardex', path: '/kardex', icon: <Activity size={20} />, perm: 'VER_REPORTES' },
+    { name: 'Reportes', path: '/reportes', icon: <BarChart2 size={20} />, perm: 'VER_REPORTES' },
+    { name: 'Ajustes', path: '/catalogos', icon: <Settings size={20} />, perm: 'VER_CATALOGOS' },
+    { name: 'Usuarios', path: '/usuarios', icon: <ShieldCheck size={20} />, perm: 'VER_USUARIOS' },
   ];
 
-  // Filtrar menú por rol
-  const filteredMenu = menu.filter(item => item.roles.includes(user?.rol));
+  // Función para verificar permiso
+  const hasPermission = (perm) => {
+    if (!user) return false;
+    if (user.rol === 'SuperAdmin') return true;
+    // Si no es SuperAdmin, debe tener el permiso explícito en su array
+    return user.permisos && user.permisos.includes(perm);
+  };
+
+  // Filtrar menú por permisos
+  const filteredMenu = menu.filter(item => {
+    // Si es Dashboard, dejarlo pasar si tiene VER_REPORTES o VER_POS o es SuperAdmin (o darle uno por defecto)
+    if (item.name === 'Dashboard') return true; 
+    return hasPermission(item.perm);
+  });
 
   return (
     <div className="flex h-screen bg-gray-100 font-sans text-gray-800 overflow-hidden">

@@ -57,23 +57,37 @@ function AppRouter() {
     return <Login />;
   }
 
+  // Función para validar permiso
+  const hasPermission = (perm) => {
+    if (user.rol === 'SuperAdmin') return true;
+    return user.permisos && user.permisos.includes(perm);
+  };
+
+  const ProtectedRoute = ({ children, perm }) => {
+    if (!hasPermission(perm)) {
+      return <Navigate to="/" replace />;
+    }
+    return children;
+  };
+
   return (
     <BrowserRouter>
       <Layout>
         <Routes>
+          {/* Home no requiere permiso específico, todos los logueados entran */}
           <Route path="/" element={<Home />} />
-          <Route path="/pos" element={<POS />} />
-          <Route path="/inventario" element={<Inventario />} />
-          <Route path="/clientes" element={<Clientes />} />
-          <Route path="/cxc" element={<CxC />} />
-          <Route path="/proveedores" element={<Proveedores />} />
-          <Route path="/cxp" element={<CxP />} />
-          <Route path="/compras" element={<Compras />} />
-          <Route path="/servicios" element={<Servicios />} />
-          <Route path="/reportes" element={<Reportes />} />
-          <Route path="/kardex" element={<Kardex />} />
-          <Route path="/catalogos" element={<Catalogos />} />
-          <Route path="/usuarios" element={<Usuarios />} />
+          <Route path="/pos" element={<ProtectedRoute perm="VER_POS"><POS /></ProtectedRoute>} />
+          <Route path="/inventario" element={<ProtectedRoute perm="VER_INVENTARIO"><Inventario /></ProtectedRoute>} />
+          <Route path="/clientes" element={<ProtectedRoute perm="VER_CLIENTES"><Clientes /></ProtectedRoute>} />
+          <Route path="/cxc" element={<ProtectedRoute perm="VER_CXC"><CxC /></ProtectedRoute>} />
+          <Route path="/proveedores" element={<ProtectedRoute perm="VER_PROVEEDORES"><Proveedores /></ProtectedRoute>} />
+          <Route path="/cxp" element={<ProtectedRoute perm="VER_CXP"><CxP /></ProtectedRoute>} />
+          <Route path="/compras" element={<ProtectedRoute perm="VER_COMPRAS"><Compras /></ProtectedRoute>} />
+          <Route path="/servicios" element={<ProtectedRoute perm="VER_INVENTARIO"><Servicios /></ProtectedRoute>} />
+          <Route path="/reportes" element={<ProtectedRoute perm="VER_REPORTES"><Reportes /></ProtectedRoute>} />
+          <Route path="/kardex" element={<ProtectedRoute perm="VER_REPORTES"><Kardex /></ProtectedRoute>} />
+          <Route path="/catalogos" element={<ProtectedRoute perm="VER_CATALOGOS"><Catalogos /></ProtectedRoute>} />
+          <Route path="/usuarios" element={<ProtectedRoute perm="VER_USUARIOS"><Usuarios /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Layout>

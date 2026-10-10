@@ -14,18 +14,31 @@ const FUNCIONES_OPTIONS = [
   { value: 'Auxiliar', label: 'Auxiliar' },
 ];
 
-const PERMISOS_OPTIONS = [
-  { value: 'VER_POS', label: 'Caja POS (Cobrar)' },
-  { value: 'VER_INVENTARIO', label: 'Ver Inventario' },
-  { value: 'VER_CXC', label: 'Ver Cuentas por Cobrar' },
-  { value: 'VER_CXP', label: 'Ver Cuentas por Pagar' },
-  { value: 'VER_CLIENTES', label: 'Ver Clientes' },
-  { value: 'VER_PROVEEDORES', label: 'Ver Proveedores' },
-  { value: 'VER_REPORTES', label: 'Ver Reportes y Finanzas' },
-  { value: 'CREAR', label: 'Crear Registros' },
-  { value: 'EDITAR', label: 'Editar Registros' },
-  { value: 'ELIMINAR', label: 'Eliminar Registros' },
-];
+const PERMISOS_CATEGORIAS = {
+  'Ventas y Facturación': [
+    { id: 'VER_POS', label: 'Acceso a Caja POS' },
+    { id: 'ANULAR_FACTURA', label: 'Anular Facturas' }
+  ],
+  'Inventario y Compras': [
+    { id: 'VER_INVENTARIO', label: 'Ver Inventario' },
+    { id: 'VER_COMPRAS', label: 'Ver Compras' },
+    { id: 'CREAR_PRODUCTO', label: 'Crear/Editar Productos' },
+    { id: 'AJUSTE_INVENTARIO', label: 'Ajustar Stock Manualmente' }
+  ],
+  'Finanzas y Cuentas': [
+    { id: 'VER_CXC', label: 'Ver Cuentas por Cobrar (CxC)' },
+    { id: 'VER_CXP', label: 'Ver Cuentas por Pagar (CxP)' },
+    { id: 'VER_REPORTES', label: 'Ver Reportes y Estadísticas' }
+  ],
+  'Catálogos y Usuarios': [
+    { id: 'VER_CLIENTES', label: 'Ver Clientes' },
+    { id: 'VER_PROVEEDORES', label: 'Ver Proveedores' },
+    { id: 'VER_CATALOGOS', label: 'Acceder a Ajustes / Catálogos' },
+    { id: 'VER_USUARIOS', label: 'Gestionar Usuarios' }
+  ]
+};
+
+const TODAS_LOS_PERMISOS = Object.values(PERMISOS_CATEGORIAS).flat().map(p => p.id);
 
 export default function Usuarios() {
   const [usuarios, setUsuarios] = useState([]);
@@ -71,7 +84,7 @@ export default function Usuarios() {
         password: item.password || '',
         rol: item.rol || 'Usuario',
         funcion: item.funcion ? { value: item.funcion, label: item.funcion } : null,
-        permisos: item.permisos ? PERMISOS_OPTIONS.filter(p => item.permisos.includes(p.value)) : [],
+        permisos: item.permisos || [],
         estado: item.estado || 'Activo',
         id_sucursal: item.id_sucursal || 'SUC-01'
       });
@@ -103,7 +116,7 @@ export default function Usuarios() {
         password: formData.password.trim(),
         rol: formData.rol,
         funcion: formData.funcion ? formData.funcion.value : '',
-        permisos: formData.permisos.map(p => p.value),
+        permisos: formData.permisos,
         estado: formData.estado,
         id_sucursal: formData.id_sucursal
       };
@@ -268,16 +281,60 @@ export default function Usuarios() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Permisos Especiales</label>
-                <Select
-                  isMulti
-                  options={PERMISOS_OPTIONS}
-                  value={formData.permisos}
-                  onChange={(selected) => setFormData({ ...formData, permisos: selected })}
-                  placeholder="Seleccionar permisos permitidos..."
-                  className="react-select-container"
-                  classNamePrefix="react-select"
-                />
+                <label className="block text-sm font-medium text-gray-700 mb-2">Permisos Especiales</label>
+                {formData.rol === 'SuperAdmin' ? (
+                  <div className="bg-purple-50 text-purple-700 p-4 rounded-xl text-sm font-medium border border-purple-100 flex items-center gap-2">
+                    <ShieldCheck size={18} />
+                    Los Super Administradores tienen acceso total e irrestricto al sistema.
+                  </div>
+                ) : (
+                  <div className="border border-gray-200 rounded-xl overflow-hidden bg-gray-50/30">
+                    <div className="grid grid-cols-1 md:grid-cols-2">
+                      {Object.entries(PERMISOS_CATEGORIAS).map(([cat, perms]) => (
+                        <div key={cat} className="p-4 border-b border-gray-200 last:border-0 odd:border-r">
+                          <div className="flex justify-between items-center mb-2">
+                            <h4 className="font-bold text-gray-800 text-sm">{cat}</h4>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const allCatPerms = perms.map(p => p.id);
+                                const hasAll = allCatPerms.every(p => formData.permisos.includes(p));
+                                if (hasAll) {
+                                  setFormData({ ...formData, permisos: formData.permisos.filter(p => !allCatPerms.includes(p)) });
+                                } else {
+                                  const newPerms = new Set([...formData.permisos, ...allCatPerms]);
+                                  setFormData({ ...formData, permisos: Array.from(newPerms) });
+                                }
+                              }}
+                              className="text-xs font-bold text-blue-600 hover:text-blue-800"
+                            >
+                              Marcar Todo
+                            </button>
+                          </div>
+                          <div className="space-y-2">
+                            {perms.map(p => (
+                              <label key={p.id} className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer hover:text-gray-900">
+                                <input
+                                  type="checkbox"
+                                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-4 h-4"
+                                  checked={formData.permisos.includes(p.id)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setFormData({ ...formData, permisos: [...formData.permisos, p.id] });
+                                    } else {
+                                      setFormData({ ...formData, permisos: formData.permisos.filter(x => x !== p.id) });
+                                    }
+                                  }}
+                                />
+                                {p.label}
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
