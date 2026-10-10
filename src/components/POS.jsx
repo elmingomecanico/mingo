@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ShoppingCart, Trash2, Search, Save, Loader } from 'lucide-react';
 import { ref, onValue, push, set, runTransaction } from 'firebase/database';
 import { rtdb } from '../firebase';
-import logoIcon from '../assets/logo-icon.jpg';
+import toast from 'react-hot-toast';
 
 export default function POS() {
   const [sucursal, setSucursal] = useState('SUC-01');
@@ -50,7 +50,7 @@ export default function POS() {
     const requestedQty = existing ? existing.qty + 1 : 1;
 
     if (requestedQty > stockActual) {
-      alert(`Stock insuficiente. Solo quedan ${stockActual} unidades disponibles.`);
+      toast.error(`Stock insuficiente. Solo quedan ${stockActual} unidades disponibles.`);
       return;
     }
 
@@ -64,7 +64,7 @@ export default function POS() {
   const total = cart.reduce((sum, item) => sum + (item.price * item.qty) - item.discount, 0);
 
   const processSale = async () => {
-    if (cart.length === 0) return alert('El carrito está vacío');
+    if (cart.length === 0) return toast.error('El carrito está vacío');
     setLoading(true);
 
     try {
@@ -106,11 +106,11 @@ export default function POS() {
         });
       }
 
-      alert(`Factura procesada con éxito: ${saleId}`);
+      toast.success(`Factura procesada con éxito`);
       setCart([]);
     } catch (error) {
       console.error(error);
-      alert('Error procesando la venta: ' + error.message);
+      toast.error('Error procesando la venta: ' + error.message);
     }
     setLoading(false);
   };
@@ -150,9 +150,9 @@ export default function POS() {
       await set(prodRef, dummyProducts);
       await set(invSuc01Ref, dummyInv01);
       await set(invSuc02Ref, dummyInv02);
-      alert("¡Base de datos inicializada!");
+      toast.success("¡Base de datos inicializada!");
     } catch (e) {
-      alert("Error: " + e.message);
+      toast.error("Error: " + e.message);
     }
     setLoading(false);
   };
