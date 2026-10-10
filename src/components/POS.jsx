@@ -166,8 +166,7 @@ export default function POS() {
         <div className="md:col-span-2 space-y-4">
           <div className="bg-white p-4 rounded-lg shadow-sm flex items-center justify-between">
             <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-3">
-              <img src={logoIcon} alt="Logo" className="w-10 h-10 object-contain rounded" />
-              Taller El Mingo
+              Caja POS
             </h1>
             <div className="flex gap-2">
               {products.length === 0 && (
