@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingCart, Trash2, Search, Save, Loader } from 'lucide-react';
+import { ShoppingCart, Trash2, Search, Save, Loader, Printer } from 'lucide-react';
 import { ref, onValue, push, set, runTransaction } from 'firebase/database';
 import { rtdb } from '../firebase';
 import toast from 'react-hot-toast';
+import { useReactToPrint } from 'react-to-print';
+import TicketPrinter from './TicketPrinter';
 
 export default function POS() {
   const [sucursal, setSucursal] = useState('SUC-01');
@@ -62,23 +64,33 @@ export default function POS() {
   };
 
   const total = cart.reduce((sum, item) => sum + (item.price * item.qty) - item.discount, 0);
+  
+  // Variables para la impresión
+  const [completedSale, setCompletedSale] = useState(null);
+  const printRef = React.useRef();
+  const handlePrint = useReactToPrint({
+    contentRef: printRef,
+    documentTitle: `Factura_${completedSale?.id || 'POS'}`,
+    onAfterPrint: () => setCompletedSale(null),
+  });
 
   const processSale = async () => {
     if (cart.length === 0) return toast.error('El carrito está vacío');
     setLoading(true);
 
     try {
-      // 1. Crear documento de Venta
       const saleRef = push(ref(rtdb, 'ventas'));
       const saleId = saleRef.key;
       
       const newSale = {
+        id: saleId,
         fecha: new Date().toISOString(),
         sucursal,
         total,
         estado: 'Completado',
         items: cart.map(item => ({
           id_producto: item.id,
+          name: item.name,
           cantidad: item.qty,
           precio_unitario: item.price,
           subtotal: (item.price * item.qty) - item.discount
@@ -87,14 +99,12 @@ export default function POS() {
 
       await set(saleRef, newSale);
 
-      // 2. Descontar Inventario (Transacción Atómica)
       for (const item of cart) {
         const itemInvRef = ref(rtdb, `inventario/${sucursal}/${item.id}/stock_actual`);
         await runTransaction(itemInvRef, (currentStock) => {
           return (currentStock || 0) - item.qty;
         });
         
-        // 3. Registrar en Kardex
         const kardexRef = push(ref(rtdb, 'kardex'));
         await set(kardexRef, {
           fecha: new Date().toISOString(),
@@ -108,6 +118,7 @@ export default function POS() {
 
       toast.success(`Factura procesada con éxito`);
       setCart([]);
+      setCompletedSale(newSale); // Mostrar modal de impresión
     } catch (error) {
       console.error(error);
       toast.error('Error procesando la venta: ' + error.message);
@@ -281,6 +292,40 @@ export default function POS() {
         </div>
 
       </div>
+
+      {/* Modal de Impresión */}
+      {completedSale && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl overflow-hidden flex flex-col">
+            <div className="p-6 text-center border-b border-gray-100 bg-gray-50/50">
+              <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-3">
+                <Printer size={32} />
+              </div>
+              <h2 className="text-xl font-bold text-gray-800">¡Venta Completada!</h2>
+              <p className="text-gray-500 text-sm mt-1">¿Deseas imprimir el ticket?</p>
+            </div>
+            
+            <div className="p-6 flex flex-col gap-3">
+              <button 
+                onClick={handlePrint}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-bold shadow-sm transition-colors flex justify-center items-center gap-2"
+              >
+                <Printer size={20} />
+                Imprimir Ticket
+              </button>
+              <button 
+                onClick={() => setCompletedSale(null)}
+                className="w-full text-gray-500 font-bold hover:bg-gray-100 px-6 py-3 rounded-lg transition-colors"
+              >
+                Cerrar (Sin imprimir)
+              </button>
+            </div>
+            
+            <TicketPrinter ref={printRef} sale={completedSale} />
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
