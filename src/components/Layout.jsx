@@ -29,7 +29,7 @@ export default function Layout({ children }) {
   // Función para verificar permiso
   const hasPermission = (perm) => {
     if (!user) return false;
-    if (user.rol === 'SuperAdmin') return true;
+    if (user.rol === 'SuperAdmin' || user.usuario === 'admin') return true;
     // Si no es SuperAdmin, debe tener el permiso explícito en su array
     return user.permisos && user.permisos.includes(perm);
   };

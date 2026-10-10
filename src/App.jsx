@@ -59,7 +59,7 @@ function AppRouter() {
 
   // Función para validar permiso
   const hasPermission = (perm) => {
-    if (user.rol === 'SuperAdmin') return true;
+    if (user.rol === 'SuperAdmin' || user.usuario === 'admin') return true;
     return user.permisos && user.permisos.includes(perm);
   };
 
