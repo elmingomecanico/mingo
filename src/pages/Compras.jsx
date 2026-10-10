@@ -199,10 +199,11 @@ export default function Compras() {
     }
   };
 
-  const filteredSearch = productos.filter(p => 
-    p.name.toLowerCase().includes(searchProd.toLowerCase()) || 
-    p.id.toLowerCase().includes(searchProd.toLowerCase())
-  );
+  const searchTerms = searchProd.toLowerCase().split(' ').filter(t => t.trim() !== '');
+  const filteredSearch = productos.filter(p => {
+    const textToSearch = `${p.name} ${p.id}`.toLowerCase();
+    return searchTerms.every(term => textToSearch.includes(term));
+  });
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">

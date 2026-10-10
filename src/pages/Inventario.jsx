@@ -60,11 +60,11 @@ export default function Inventario() {
     };
   }, [sucursal]);
 
-  const filtered = products.filter(p => 
-    p.name.toLowerCase().includes(search.toLowerCase()) || 
-    p.id.toLowerCase().includes(search.toLowerCase()) ||
-    (p.cat && p.cat.toLowerCase().includes(search.toLowerCase()))
-  );
+  const searchTerms = search.toLowerCase().split(' ').filter(t => t.trim() !== '');
+  const filtered = products.filter(p => {
+    const textToSearch = `${p.name} ${p.id} ${p.cat || ''}`.toLowerCase();
+    return searchTerms.every(term => textToSearch.includes(term));
+  });
 
   const handleOpenModal = (prod = null) => {
     if (prod) {

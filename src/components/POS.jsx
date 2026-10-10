@@ -20,6 +20,9 @@ export default function POS() {
   const [selectedCliente, setSelectedCliente] = useState({ value: 'MOSTRADOR', label: 'CLIENTE DE MOSTRADOR' });
   const [metodoPago, setMetodoPago] = useState('Efectivo');
 
+  const [mecanicos, setMecanicos] = useState([]);
+  const [selectedMecanico, setSelectedMecanico] = useState(null);
+
   useEffect(() => {
     const prodRef = ref(rtdb, 'productos');
     const servRef = ref(rtdb, 'servicios');
@@ -76,11 +79,28 @@ export default function POS() {
       }
     });
 
+    const usrRef = ref(rtdb, 'usuarios');
+    const unsubUsr = onValue(usrRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const list = [];
+        Object.keys(snapshot.val()).forEach(key => {
+          const u = snapshot.val()[key];
+          if (u.funcion === 'Mecánico') {
+            list.push({ id: key, ...u });
+          }
+        });
+        setMecanicos(list);
+      } else {
+        setMecanicos([]);
+      }
+    });
+
     return () => {
       unsubProd();
       unsubServ();
       unsubInv();
       unsubCli();
+      unsubUsr();
     };
   }, [sucursal]);
 
@@ -116,6 +136,9 @@ export default function POS() {
   const processSale = async () => {
     if (cart.length === 0) return toast.error('El carrito está vacío');
     if (!selectedCliente) return toast.error('Seleccione un cliente');
+    if (cart.some(item => item.type === 'servicio') && !selectedMecanico) {
+      return toast.error('Debe asignar un mecánico para la mano de obra');
+    }
     
     // Si es crédito, verificar si hay límite disponible
     if (metodoPago === 'Crédito' && selectedCliente.value !== 'MOSTRADOR') {
@@ -154,6 +177,8 @@ export default function POS() {
         sucursal,
         id_cliente: selectedCliente.value,
         metodo_pago: metodoPago,
+        id_mecanico: selectedMecanico ? selectedMecanico.value : null,
+        nombre_mecanico: selectedMecanico ? selectedMecanico.label : null,
         total,
         estado: 'Completado',
         items: cart.map(item => ({
@@ -208,6 +233,7 @@ export default function POS() {
 
       toast.success(`Factura ${humanId} procesada con éxito`);
       setCart([]);
+      setSelectedMecanico(null);
       setCompletedSale(newSale); // Mostrar modal de impresión
     } catch (error) {
       console.error(error);
@@ -217,10 +243,11 @@ export default function POS() {
   };
 
   const allItems = [...products, ...servicios];
-  const filteredProducts = allItems.filter(p => 
-    p.name.toLowerCase().includes(searchCode.toLowerCase()) || 
-    p.id.toLowerCase().includes(searchCode.toLowerCase())
-  );
+  const searchTerms = searchCode.toLowerCase().split(' ').filter(t => t.trim() !== '');
+  const filteredProducts = allItems.filter(p => {
+    const textToSearch = `${p.name} ${p.id}`.toLowerCase();
+    return searchTerms.every(term => textToSearch.includes(term));
+  });
 
   // ================== SEED DATABASE ==================
   const seedDatabase = async () => {
@@ -316,6 +343,20 @@ export default function POS() {
                   {selectedCliente?.value !== 'MOSTRADOR' && <option value="Crédito">Crédito (CxC)</option>}
                 </select>
               </div>
+              {cart.some(item => item.type === 'servicio') && (
+                <div className="col-span-1 md:col-span-2">
+                  <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Mecánico Asignado</label>
+                  <Select
+                    options={mecanicos.map(m => ({ value: m.id, label: m.nombre_completo }))}
+                    value={selectedMecanico}
+                    onChange={setSelectedMecanico}
+                    placeholder="Seleccionar mecánico que realizó el servicio..."
+                    isClearable
+                    className="react-select-container text-sm"
+                    classNamePrefix="react-select"
+                  />
+                </div>
+              )}
             </div>
             
             <div className="relative">
