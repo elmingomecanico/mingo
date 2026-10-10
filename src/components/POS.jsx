@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingCart, Trash2, Search, Save, Loader, Printer } from 'lucide-react';
+import { ShoppingCart, Trash2, Search, Save, Loader, Printer, Plus, X } from 'lucide-react';
 import { ref, onValue, push, set, runTransaction } from 'firebase/database';
 import { rtdb } from '../firebase';
 import toast from 'react-hot-toast';
@@ -9,19 +9,84 @@ import TicketPrinter from './TicketPrinter';
 
 export default function POS() {
   const [sucursal, setSucursal] = useState('SUC-01');
-  const [cart, setCart] = useState([]);
+  
+  // ================= TAB SYSTEM =================
+  const getDefaultTab = () => ({
+    id: Date.now().toString(),
+    name: 'Borrador',
+    cart: [],
+    selectedCliente: { value: 'MOSTRADOR', label: 'CLIENTE DE MOSTRADOR' },
+    metodoPago: 'Efectivo',
+    selectedMecanico: null
+  });
+
+  const [tabs, setTabsState] = useState(() => {
+    const saved = localStorage.getItem('pos_tabs');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        return [getDefaultTab()];
+      }
+    }
+    return [getDefaultTab()];
+  });
+
+  const [activeTabId, setActiveTabId] = useState(() => tabs[0]?.id || Date.now().toString());
+
+  const setTabs = (newTabs) => {
+    setTabsState(newTabs);
+    localStorage.setItem('pos_tabs', JSON.stringify(newTabs));
+  };
+
+  const activeTab = tabs.find(t => t.id === activeTabId) || tabs[0] || getDefaultTab();
+  
+  const updateActiveTab = (updates) => {
+    const updatedTabs = tabs.map(t => t.id === activeTabId ? { ...t, ...updates } : t);
+    setTabs(updatedTabs);
+  };
+
+  // State proxies para que el resto del código no se entere del cambio
+  const cart = activeTab.cart;
+  const setCart = (newCartVal) => updateActiveTab({ cart: typeof newCartVal === 'function' ? newCartVal(cart) : newCartVal });
+
+  const selectedCliente = activeTab.selectedCliente;
+  const setSelectedCliente = (val) => updateActiveTab({ selectedCliente: val });
+
+  const metodoPago = activeTab.metodoPago;
+  const setMetodoPago = (val) => updateActiveTab({ metodoPago: val });
+
+  const selectedMecanico = activeTab.selectedMecanico;
+  const setSelectedMecanico = (val) => updateActiveTab({ selectedMecanico: val });
+
+  const addNewTab = () => {
+    const newTab = getDefaultTab();
+    newTab.name = `Borrador ${tabs.length + 1}`;
+    setTabs([...tabs, newTab]);
+    setActiveTabId(newTab.id);
+  };
+
+  const closeTab = (idToClose, e) => {
+    e.stopPropagation();
+    if (tabs.length === 1) {
+      setTabs([getDefaultTab()]);
+    } else {
+      const newTabs = tabs.filter(t => t.id !== idToClose);
+      setTabs(newTabs);
+      if (activeTabId === idToClose) {
+        setActiveTabId(newTabs[0].id);
+      }
+    }
+  };
+  // ================= END TAB SYSTEM =================
+
   const [searchCode, setSearchCode] = useState('');
   const [products, setProducts] = useState([]);
   const [servicios, setServicios] = useState([]);
   const [inventory, setInventory] = useState({});
   const [loading, setLoading] = useState(true);
-  
   const [clientes, setClientes] = useState([]);
-  const [selectedCliente, setSelectedCliente] = useState({ value: 'MOSTRADOR', label: 'CLIENTE DE MOSTRADOR' });
-  const [metodoPago, setMetodoPago] = useState('Efectivo');
-
   const [mecanicos, setMecanicos] = useState([]);
-  const [selectedMecanico, setSelectedMecanico] = useState(null);
 
   useEffect(() => {
     const prodRef = ref(rtdb, 'productos');
@@ -259,9 +324,16 @@ export default function POS() {
       }
 
       toast.success(`Factura ${humanId} procesada con éxito`);
-      setCart([]);
-      setSelectedMecanico(null);
       setCompletedSale(newSale); // Mostrar modal de impresión
+      
+      // Cerrar la pestaña actual (o limpiarla si es la única)
+      if (tabs.length === 1) {
+        setTabs([getDefaultTab()]);
+      } else {
+        const newTabs = tabs.filter(t => t.id !== activeTabId);
+        setTabs(newTabs);
+        setActiveTabId(newTabs[0].id);
+      }
     } catch (error) {
       console.error(error);
       toast.error('Error procesando la venta: ' + error.message);
@@ -315,12 +387,47 @@ export default function POS() {
   // ===================================================
 
   return (
-    <div className="min-h-screen bg-gray-100 p-6">
+    <div className="min-h-screen bg-gray-100 p-6 animate-in fade-in duration-500">
       <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6">
         
         {/* Lado Izquierdo */}
         <div className="md:col-span-2 space-y-4">
-          <div className="bg-white p-4 rounded-lg shadow-sm flex items-center justify-between">
+          
+          {/* TAB BAR */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
+            {tabs.map((t, idx) => (
+              <div 
+                key={t.id} 
+                onClick={() => setActiveTabId(t.id)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-t-lg border-t border-x cursor-pointer transition-all ${activeTabId === t.id ? 'bg-white border-white shadow-sm font-bold text-blue-600' : 'bg-gray-200 border-gray-300 text-gray-500 hover:bg-gray-100'}`}
+              >
+                <input 
+                  type="text"
+                  value={t.name}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setTabs(tabs.map(tab => tab.id === t.id ? { ...tab, name: val } : tab));
+                  }}
+                  className="bg-transparent border-none outline-none w-24 focus:w-32 transition-all text-sm truncate p-0 m-0 cursor-text"
+                  placeholder="Nombre..."
+                />
+                {tabs.length > 1 && (
+                  <button onClick={(e) => closeTab(t.id, e)} className="p-0.5 rounded-full hover:bg-red-100 hover:text-red-500 text-gray-400">
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+            ))}
+            <button 
+              onClick={addNewTab}
+              className="flex items-center justify-center p-2 rounded-t-lg bg-blue-100 text-blue-600 hover:bg-blue-200 transition-colors"
+            >
+              <Plus size={18} />
+            </button>
+          </div>
+
+          {/* CONTENIDO POS */}
+          <div className="bg-white p-4 rounded-lg rounded-tl-none shadow-sm flex items-center justify-between -mt-4 relative z-10">
             <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-3">
               Caja POS
             </h1>
