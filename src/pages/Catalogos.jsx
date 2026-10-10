@@ -18,7 +18,6 @@ export default function Catalogos() {
     { id: 'categorias', name: 'Categorías', icon: <Layers size={18} /> },
     { id: 'marcas', name: 'Marcas/Modelos', icon: <Tag size={18} /> },
     { id: 'ubicaciones', name: 'Ubicaciones', icon: <MapPin size={18} /> },
-    { id: 'servicios', name: 'Servicios', icon: <Wrench size={18} /> },
     { id: 'mecanicos', name: 'Mecánicos', icon: <Users size={18} /> },
   ];
 
@@ -96,6 +95,46 @@ export default function Catalogos() {
     }
   };
 
+  const seedCatalogos = async () => {
+    if (!window.confirm("¿Deseas agregar datos de prueba a los catálogos?")) return;
+    
+    try {
+      await set(ref(rtdb, 'catalogos'), {
+        categorias: {
+          "c1": { nombre: "Lubricantes" },
+          "c2": { nombre: "Llantas" },
+          "c3": { nombre: "Frenos" },
+          "c4": { nombre: "Eléctrico" }
+        },
+        marcas: {
+          "m1": { nombre: "Yamaha" },
+          "m2": { nombre: "Honda" },
+          "m3": { nombre: "Suzuki" },
+          "m4": { nombre: "Castrol" }
+        },
+        ubicaciones: {
+          "u1": { nombre: "Bodega Principal" },
+          "u2": { nombre: "Estante A1" },
+          "u3": { nombre: "Estante B2" }
+        },
+        mecanicos: {
+          "mec1": { nombre: "Juan Pérez", telefono: "8888-1111" },
+          "mec2": { nombre: "Carlos Mejía", telefono: "8888-2222" }
+        }
+      });
+
+      await set(ref(rtdb, 'servicios'), {
+        "s1": { nombre: "Cambio de Aceite", precio: 150, descripcion: "Mano de obra por cambio de aceite" },
+        "s2": { nombre: "Alineación y Balanceo", precio: 500, descripcion: "Ajuste completo" },
+        "s3": { nombre: "Revisión Eléctrica", precio: 300, descripcion: "Diagnóstico de sistema eléctrico" }
+      });
+      
+      toast.success("Datos de prueba generados correctamente");
+    } catch (e) {
+      toast.error("Error: " + e.message);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       
@@ -106,8 +145,11 @@ export default function Catalogos() {
             <Settings className="text-gray-600" /> 
             Catálogos del Sistema
           </h1>
-          <p className="text-gray-500 text-sm">Administra las listas desplegables y servicios del taller.</p>
+          <p className="text-gray-500 text-sm">Administra las listas desplegables del taller.</p>
         </div>
+        <button onClick={seedCatalogos} className="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-lg font-bold text-sm shadow-sm transition-colors">
+          Cargar Datos de Prueba
+        </button>
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col md:flex-row">
