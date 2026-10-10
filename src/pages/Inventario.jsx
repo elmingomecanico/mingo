@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { ref, onValue, set, push } from 'firebase/database';
 import { rtdb } from '../firebase';
-import { Search, Plus, Edit2, Package, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { Search, Plus, Edit2, Package, History, Maximize2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Select from 'react-select';
 
 export default function Inventario() {
+  const [activeTab, setActiveTab] = useState('catalogo'); // 'catalogo' | 'ajustes'
   const [products, setProducts] = useState([]);
   const [inventory, setInventory] = useState({});
+  const [ajustes, setAjustes] = useState([]);
   const [search, setSearch] = useState('');
   const [sucursal, setSucursal] = useState('SUC-01');
   const [loading, setLoading] = useState(true);
@@ -17,12 +19,19 @@ export default function Inventario() {
   const [ubicaciones, setUbicaciones] = useState([]);
   const [modelosMoto, setModelosMoto] = useState([]);
   
-  // Modal State
+  // Imagen Ampliada
+  const [enlargedImage, setEnlargedImage] = useState(null);
+
+  // Modal State para Producto
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [formData, setFormData] = useState({
     name: '', price: '', cost: '', cat: '', stock_actual: 0, stock_minimo: 0, ubicacion: '', compatibilidad: [], image: ''
   });
+
+  // Modal State para Ajustes
+  const [isAjusteModalOpen, setIsAjusteModalOpen] = useState(false);
+  const [ajusteForm, setAjusteForm] = useState({ id_producto: null, nuevo_stock: '', motivo: '' });
 
   useEffect(() => {
     const prodsRef = ref(rtdb, 'productos');
@@ -30,6 +39,7 @@ export default function Inventario() {
     const catRef = ref(rtdb, 'catalogos/categorias');
     const ubiRef = ref(rtdb, 'catalogos/ubicaciones');
     const modRef = ref(rtdb, 'catalogos/modelos');
+    const ajustesRef = ref(rtdb, `ajustes_inventario/${sucursal}`);
 
     const unsubProds = onValue(prodsRef, (snapshot) => {
       if (snapshot.exists()) {
@@ -58,12 +68,17 @@ export default function Inventario() {
       if (snapshot.exists()) setModelosMoto(Object.values(snapshot.val()).map(m => m.nombre));
     });
 
+    const unsubAjustes = onValue(ajustesRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const list = Object.keys(snapshot.val()).map(k => ({ id: k, ...snapshot.val()[k] }));
+        setAjustes(list.sort((a,b) => new Date(b.fecha) - new Date(a.fecha)));
+      } else {
+        setAjustes([]);
+      }
+    });
+
     return () => {
-      unsubProds();
-      unsubInv();
-      unsubCat();
-      unsubUbi();
-      unsubMod();
+      unsubProds(); unsubInv(); unsubCat(); unsubUbi(); unsubMod(); unsubAjustes();
     };
   }, [sucursal]);
 
@@ -98,17 +113,12 @@ export default function Inventario() {
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    
-    // Validar tipo
-    if (!file.type.startsWith('image/')) {
-      return toast.error('Seleccione un archivo de imagen válido');
-    }
+    if (!file.type.startsWith('image/')) return toast.error('Seleccione un archivo de imagen válido');
     
     const reader = new FileReader();
     reader.onload = (event) => {
       const img = new Image();
       img.onload = () => {
-        // Redimensionar para no saturar RTDB
         const canvas = document.createElement('canvas');
         const MAX_SIZE = 400;
         let width = img.width;
@@ -131,7 +141,6 @@ export default function Inventario() {
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, width, height);
         
-        // Comprimir a JPEG 0.7
         const base64Str = canvas.toDataURL('image/jpeg', 0.7);
         setFormData({ ...formData, image: base64Str });
       };
@@ -145,10 +154,8 @@ export default function Inventario() {
     try {
       let prodId = editingId;
       if (!prodId) {
-        // Generar nuevo ID si es producto nuevo (simulando PROD-XXXX)
         const num = products.length + 1;
         prodId = `PROD-${num.toString().padStart(4, '0')}`;
-        // Si por casualidad ya existe, usamos push
         if (products.find(p => p.id === prodId)) {
           prodId = push(ref(rtdb, 'productos')).key;
         }
@@ -164,17 +171,73 @@ export default function Inventario() {
         image: formData.image
       });
 
+      // Solo si es nuevo, guardar el stock. Si estamos editando, el stock no se toca por aquí.
       const invRef = ref(rtdb, `inventario/${sucursal}/${prodId}`);
-      await set(invRef, {
-        stock_actual: Number(formData.stock_actual),
-        stock_minimo: Number(formData.stock_minimo),
-        ubicacion: formData.ubicacion
-      });
+      if (!editingId) {
+        await set(invRef, {
+          stock_actual: Number(formData.stock_actual),
+          stock_minimo: Number(formData.stock_minimo),
+          ubicacion: formData.ubicacion
+        });
+      } else {
+        // Actualizar solo ubicacion y minimo si estamos editando
+        const currentInv = inventory[prodId] || { stock_actual: 0 };
+        await set(invRef, {
+          stock_actual: currentInv.stock_actual,
+          stock_minimo: Number(formData.stock_minimo),
+          ubicacion: formData.ubicacion
+        });
+      }
 
       toast.success(editingId ? 'Producto actualizado' : 'Producto creado');
       setIsModalOpen(false);
     } catch (error) {
       toast.error('Error al guardar: ' + error.message);
+    }
+  };
+
+  const handleSaveAjuste = async (e) => {
+    e.preventDefault();
+    if (!ajusteForm.id_producto || ajusteForm.nuevo_stock === '' || !ajusteForm.motivo) {
+      return toast.error("Complete todos los campos del ajuste");
+    }
+
+    try {
+      const pid = ajusteForm.id_producto.value;
+      const pname = ajusteForm.id_producto.label;
+      const nuevo = Number(ajusteForm.nuevo_stock);
+      const anterior = inventory[pid]?.stock_actual || 0;
+      const diff = nuevo - anterior;
+
+      if (diff === 0) return toast.error("El nuevo stock es igual al anterior.");
+
+      const currentUser = JSON.parse(localStorage.getItem('mingo_user') || '{}');
+
+      // 1. Guardar registro
+      await push(ref(rtdb, `ajustes_inventario/${sucursal}`), {
+        id_producto: pid,
+        nombre_producto: pname,
+        stock_anterior: anterior,
+        stock_nuevo: nuevo,
+        diferencia: diff,
+        motivo: ajusteForm.motivo,
+        fecha: new Date().toISOString(),
+        usuario: currentUser.nombre_completo || 'Sistema'
+      });
+
+      // 2. Actualizar inventario
+      const invRef = ref(rtdb, `inventario/${sucursal}/${pid}`);
+      const invData = inventory[pid] || {};
+      await set(invRef, {
+        ...invData,
+        stock_actual: nuevo
+      });
+
+      toast.success("Ajuste de inventario guardado");
+      setIsAjusteModalOpen(false);
+      setAjusteForm({ id_producto: null, nuevo_stock: '', motivo: '' });
+    } catch (error) {
+      toast.error("Error al guardar ajuste: " + error.message);
     }
   };
 
@@ -188,7 +251,7 @@ export default function Inventario() {
             <Package className="text-blue-600" /> 
             Gestión de Inventario
           </h1>
-          <p className="text-gray-500 text-sm">Administra tu catálogo de productos y existencias.</p>
+          <p className="text-gray-500 text-sm">Catálogo de productos y control de existencias.</p>
         </div>
         
         <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
@@ -200,116 +263,181 @@ export default function Inventario() {
             <option value="SUC-01">Sucursal Principal (SUC-01)</option>
             <option value="SUC-02">Sucursal Norte (SUC-02)</option>
           </select>
-          <button 
-            onClick={() => handleOpenModal()}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg font-bold flex items-center justify-center gap-2 shadow-sm transition-colors"
-          >
-            <Plus size={20} />
-            Nuevo Producto
-          </button>
         </div>
       </div>
 
-      {/* Tarjeta Principal */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        
-        {/* Buscador */}
-        <div className="p-4 border-b border-gray-100 bg-gray-50/50">
-          <div className="relative max-w-md">
-            <input 
-              type="text" 
-              placeholder="Buscar por código, nombre o categoría..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-            />
-            <Search size={18} className="absolute left-3 top-3 text-gray-400" />
-          </div>
-        </div>
+      {/* Tabs */}
+      <div className="flex gap-2 overflow-x-auto border-b border-gray-200">
+        <button onClick={() => setActiveTab('catalogo')} className={`px-4 py-2 font-bold text-sm border-b-2 transition-colors ${activeTab === 'catalogo' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Catálogo de Productos</button>
+        <button onClick={() => setActiveTab('ajustes')} className={`px-4 py-2 font-bold text-sm border-b-2 transition-colors ${activeTab === 'ajustes' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Ajustes de Inventario</button>
+      </div>
 
-        {/* Tabla */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm whitespace-nowrap">
-            <thead className="bg-gray-50 text-gray-600 font-medium border-b border-gray-100">
-              <tr>
-                <th className="p-4">Img / Cód</th>
-                <th className="p-4">Producto y Compatibilidad</th>
-                <th className="p-4">Categoría</th>
-                <th className="p-4 text-right">Precio Venta</th>
-                <th className="p-4 text-center">Stock</th>
-                <th className="p-4">Ubicación</th>
-                <th className="p-4 text-center">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {loading ? (
+      {activeTab === 'catalogo' && (
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          
+          <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex flex-col sm:flex-row justify-between gap-4">
+            <div className="relative max-w-md flex-1">
+              <input 
+                type="text" 
+                placeholder="Buscar por código, nombre o categoría..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              />
+              <Search size={18} className="absolute left-3 top-3 text-gray-400" />
+            </div>
+            <button 
+              onClick={() => handleOpenModal()}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-bold flex items-center justify-center gap-2 shadow-sm transition-colors whitespace-nowrap"
+            >
+              <Plus size={18} /> Nuevo Producto
+            </button>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm whitespace-nowrap">
+              <thead className="bg-gray-50 text-gray-600 font-medium border-b border-gray-100">
                 <tr>
-                  <td colSpan="7" className="p-8 text-center text-gray-400">Cargando inventario...</td>
+                  <th className="p-4">Img / Cód</th>
+                  <th className="p-4">Producto y Compatibilidad</th>
+                  <th className="p-4">Categoría</th>
+                  <th className="p-4 text-right">Precio Venta</th>
+                  <th className="p-4 text-center">Stock</th>
+                  <th className="p-4">Ubicación</th>
+                  <th className="p-4 text-center">Acciones</th>
                 </tr>
-              ) : filtered.length === 0 ? (
-                <tr>
-                  <td colSpan="7" className="p-8 text-center text-gray-400">No se encontraron productos.</td>
-                </tr>
-              ) : (
-                filtered.map(prod => {
-                  const inv = inventory[prod.id] || { stock_actual: 0 };
-                  const isLowStock = inv.stock_actual <= (inv.stock_minimo || 0);
-                  
-                  return (
-                    <tr key={prod.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="p-4">
-                        <div className="flex items-center gap-3">
-                          {prod.image ? (
-                            <img src={prod.image} alt={prod.name} className="w-10 h-10 rounded-lg object-cover border border-gray-200 shadow-sm" />
-                          ) : (
-                            <div className="w-10 h-10 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-300">
-                              <Package size={20} />
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {loading ? (
+                  <tr><td colSpan="7" className="p-8 text-center text-gray-400">Cargando inventario...</td></tr>
+                ) : filtered.length === 0 ? (
+                  <tr><td colSpan="7" className="p-8 text-center text-gray-400">No se encontraron productos.</td></tr>
+                ) : (
+                  filtered.map(prod => {
+                    const inv = inventory[prod.id] || { stock_actual: 0 };
+                    const isLowStock = inv.stock_actual <= (inv.stock_minimo || 0);
+                    
+                    return (
+                      <tr key={prod.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="p-4">
+                          <div className="flex items-center gap-3">
+                            {prod.image ? (
+                              <div className="relative group cursor-pointer" onClick={() => setEnlargedImage(prod.image)}>
+                                <img src={prod.image} alt={prod.name} className="w-10 h-10 rounded-lg object-cover border border-gray-200 shadow-sm transition-opacity group-hover:opacity-80" />
+                                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/20 rounded-lg transition-opacity">
+                                  <Maximize2 size={16} className="text-white drop-shadow" />
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="w-10 h-10 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-300">
+                                <Package size={20} />
+                              </div>
+                            )}
+                            <span className="font-mono text-xs text-gray-500">{prod.id}</span>
+                          </div>
+                        </td>
+                        <td className="p-4">
+                          <p className="font-bold text-gray-800">{prod.name}</p>
+                          {prod.compatibilidad && prod.compatibilidad.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {prod.compatibilidad.map((m, idx) => (
+                                <span key={idx} className="bg-blue-50 border border-blue-100 text-blue-700 text-[10px] font-bold px-1.5 py-0.5 rounded">
+                                  {m}
+                                </span>
+                              ))}
                             </div>
                           )}
-                          <span className="font-mono text-xs text-gray-500">{prod.id}</span>
-                        </div>
-                      </td>
-                      <td className="p-4">
-                        <p className="font-bold text-gray-800">{prod.name}</p>
-                        {prod.compatibilidad && prod.compatibilidad.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {prod.compatibilidad.map((m, idx) => (
-                              <span key={idx} className="bg-blue-50 border border-blue-100 text-blue-700 text-[10px] font-bold px-1.5 py-0.5 rounded">
-                                {m}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </td>
-                      <td className="p-4 text-gray-600">
-                        <span className="bg-gray-100 px-2 py-1 rounded text-xs">{prod.cat || 'N/A'}</span>
-                      </td>
-                      <td className="p-4 text-right font-medium text-emerald-600">C$ {prod.price}</td>
-                      <td className="p-4 text-center">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full font-bold ${isLowStock ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
-                          {inv.stock_actual}
-                        </span>
-                      </td>
-                      <td className="p-4 text-gray-500">{inv.ubicacion || '-'}</td>
-                      <td className="p-4 text-center">
-                        <button 
-                          onClick={() => handleOpenModal(prod)}
-                          className="text-blue-500 hover:text-blue-700 hover:bg-blue-50 p-2 rounded transition-colors"
-                          title="Editar Producto"
-                        >
-                          <Edit2 size={18} />
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                })
-              )}
-            </tbody>
-          </table>
+                        </td>
+                        <td className="p-4 text-gray-600">
+                          <span className="bg-gray-100 px-2 py-1 rounded text-xs">{prod.cat || 'N/A'}</span>
+                        </td>
+                        <td className="p-4 text-right font-medium text-emerald-600">C$ {prod.price}</td>
+                        <td className="p-4 text-center">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full font-bold ${isLowStock ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                            {inv.stock_actual}
+                          </span>
+                        </td>
+                        <td className="p-4 text-gray-500">{inv.ubicacion || '-'}</td>
+                        <td className="p-4 text-center">
+                          <button 
+                            onClick={() => handleOpenModal(prod)}
+                            className="text-blue-500 hover:text-blue-700 hover:bg-blue-50 p-2 rounded transition-colors"
+                            title="Editar Producto"
+                          >
+                            <Edit2 size={18} />
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Modal Formulario */}
+      {activeTab === 'ajustes' && (
+        <div className="space-y-4">
+          <div className="flex justify-end">
+            <button onClick={() => {
+              setAjusteForm({ id_producto: null, nuevo_stock: '', motivo: '' });
+              setIsAjusteModalOpen(true);
+            }} className="bg-orange-500 hover:bg-orange-600 text-white px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-orange-200">
+              <History size={20} /> Nuevo Ajuste de Inventario
+            </button>
+          </div>
+          
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            {ajustes.length === 0 ? (
+              <div className="p-10 text-center text-gray-500">No hay ajustes registrados en esta sucursal.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm whitespace-nowrap">
+                  <thead className="bg-gray-50 text-gray-600 font-medium border-b border-gray-100">
+                    <tr>
+                      <th className="p-4">Fecha</th>
+                      <th className="p-4">Producto</th>
+                      <th className="p-4 text-center">Variación</th>
+                      <th className="p-4 text-center">Stock Final</th>
+                      <th className="p-4">Motivo</th>
+                      <th className="p-4">Usuario</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {ajustes.map(aj => (
+                      <tr key={aj.id} className="hover:bg-gray-50">
+                        <td className="p-4 text-gray-600">{new Date(aj.fecha).toLocaleString()}</td>
+                        <td className="p-4 font-bold text-gray-800">
+                          {aj.nombre_producto} <span className="text-xs text-gray-400 font-mono ml-2">({aj.id_producto})</span>
+                        </td>
+                        <td className="p-4 text-center">
+                          <span className={`px-2 py-1 rounded-full text-xs font-bold ${aj.diferencia > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                            {aj.diferencia > 0 ? '+' : ''}{aj.diferencia}
+                          </span>
+                        </td>
+                        <td className="p-4 text-center font-black text-gray-700">{aj.stock_nuevo}</td>
+                        <td className="p-4 text-gray-600">{aj.motivo}</td>
+                        <td className="p-4 text-xs font-medium text-gray-500">{aj.usuario}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal Foto Ampliada */}
+      {enlargedImage && (
+        <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in" onClick={() => setEnlargedImage(null)}>
+          <img src={enlargedImage} alt="Ampliada" className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl border-2 border-white/10" />
+          <button className="absolute top-4 right-4 text-white hover:text-gray-300 font-bold text-3xl" onClick={() => setEnlargedImage(null)}>&times;</button>
+        </div>
+      )}
+
+      {/* Modal Formulario Producto */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white rounded-2xl w-full max-w-2xl shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
@@ -369,7 +497,12 @@ export default function Inventario() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Imagen del Producto (Opcional)</label>
                   <div className="flex items-center gap-4">
                     {formData.image && (
-                      <img src={formData.image} alt="Vista previa" className="w-16 h-16 object-cover rounded-lg border border-gray-200" />
+                      <div className="relative group cursor-pointer" onClick={() => setEnlargedImage(formData.image)}>
+                        <img src={formData.image} alt="Vista previa" className="w-16 h-16 object-cover rounded-lg border border-gray-200" />
+                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/20 rounded-lg">
+                          <Maximize2 size={16} className="text-white drop-shadow" />
+                        </div>
+                      </div>
                     )}
                     <input type="file" accept="image/*" onChange={handleImageUpload} className="text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
                   </div>
@@ -384,7 +517,16 @@ export default function Inventario() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Stock Actual</label>
-                    <input type="number" required value={formData.stock_actual} onChange={e => setFormData({...formData, stock_actual: e.target.value})} className="w-full border p-2.5 rounded-lg outline-none focus:border-blue-500 font-bold text-center" />
+                    <input 
+                      type="number" 
+                      required 
+                      value={formData.stock_actual} 
+                      onChange={e => setFormData({...formData, stock_actual: e.target.value})} 
+                      disabled={!!editingId} // Bloqueado si estamos editando
+                      title={editingId ? "El stock solo se puede modificar desde la pestaña 'Ajustes de Inventario' o mediante Compras/Ventas." : "Stock inicial del nuevo producto"}
+                      className={`w-full border p-2.5 rounded-lg outline-none text-center ${editingId ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : 'focus:border-blue-500 font-bold'}`} 
+                    />
+                    {editingId && <span className="text-[10px] text-red-500 mt-1 block leading-tight">Para modificar el stock, use la pestaña "Ajustes".</span>}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Stock Mínimo (Alerta)</label>
@@ -415,6 +557,81 @@ export default function Inventario() {
                 Guardar Producto
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Formulario Ajuste */}
+      {isAjusteModalOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-xl overflow-hidden flex flex-col">
+            <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+              <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                <History className="text-orange-600" />
+                Ajuste de Inventario
+              </h2>
+              <button onClick={() => setIsAjusteModalOpen(false)} className="text-gray-400 hover:text-gray-600 font-bold text-xl">&times;</button>
+            </div>
+            
+            <form onSubmit={handleSaveAjuste} className="p-5 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Producto</label>
+                <Select
+                  options={products.map(p => ({ value: p.id, label: p.name, stock_actual: inventory[p.id]?.stock_actual || 0 }))}
+                  value={ajusteForm.id_producto}
+                  onChange={sel => {
+                    setAjusteForm({ 
+                      ...ajusteForm, 
+                      id_producto: sel, 
+                      nuevo_stock: sel ? sel.stock_actual : '' 
+                    })
+                  }}
+                  placeholder="Seleccione el producto..."
+                  className="react-select-container"
+                  classNamePrefix="react-select"
+                />
+              </div>
+
+              {ajusteForm.id_producto && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 text-center">
+                    <p className="text-xs font-bold text-gray-500 uppercase">Stock Actual</p>
+                    <p className="text-xl font-black text-gray-700">{ajusteForm.id_producto.stock_actual}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Nuevo Stock</label>
+                    <input 
+                      required 
+                      type="number" 
+                      value={ajusteForm.nuevo_stock} 
+                      onChange={e => setAjusteForm({...ajusteForm, nuevo_stock: e.target.value})} 
+                      className="w-full h-full border p-2 rounded-lg outline-none focus:border-orange-500 font-bold text-center text-xl text-orange-600" 
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Motivo del ajuste *</label>
+                <input 
+                  required 
+                  type="text" 
+                  value={ajusteForm.motivo} 
+                  onChange={e => setAjusteForm({...ajusteForm, motivo: e.target.value})} 
+                  className="w-full border p-2.5 rounded-lg outline-none focus:border-orange-500" 
+                  placeholder="Ej: Conteo físico, Producto dañado, Caducidad..." 
+                />
+              </div>
+
+              <div className="pt-4 flex justify-end gap-3 border-t border-gray-100 mt-6">
+                <button type="button" onClick={() => setIsAjusteModalOpen(false)} className="px-5 py-2.5 rounded-lg text-gray-600 font-medium hover:bg-gray-100 transition-colors">
+                  Cancelar
+                </button>
+                <button type="submit" className="bg-orange-600 hover:bg-orange-700 text-white px-6 py-2.5 rounded-lg font-bold shadow-md shadow-orange-200 transition-colors">
+                  Guardar Ajuste
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
