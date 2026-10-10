@@ -17,7 +17,8 @@ export default function POS() {
     cart: [],
     selectedCliente: { value: 'MOSTRADOR', label: 'CLIENTE DE MOSTRADOR' },
     metodoPago: 'Efectivo',
-    selectedMecanico: null
+    selectedMecanico: null,
+    selectedEmpleadoDeudor: null
   });
 
   const [tabs, setTabsState] = useState(() => {
@@ -59,6 +60,9 @@ export default function POS() {
   const selectedMecanico = activeTab.selectedMecanico;
   const setSelectedMecanico = (val) => updateActiveTab({ selectedMecanico: val });
 
+  const selectedEmpleadoDeudor = activeTab.selectedEmpleadoDeudor;
+  const setSelectedEmpleadoDeudor = (val) => updateActiveTab({ selectedEmpleadoDeudor: val });
+
   const addNewTab = () => {
     const newTab = getDefaultTab();
     newTab.name = `Borrador ${tabs.length + 1}`;
@@ -87,6 +91,7 @@ export default function POS() {
   const [loading, setLoading] = useState(true);
   const [clientes, setClientes] = useState([]);
   const [mecanicos, setMecanicos] = useState([]);
+  const [empleados, setEmpleados] = useState([]);
 
   useEffect(() => {
     const prodRef = ref(rtdb, 'productos');
@@ -147,16 +152,23 @@ export default function POS() {
     const usrRef = ref(rtdb, 'usuarios');
     const unsubUsr = onValue(usrRef, (snapshot) => {
       if (snapshot.exists()) {
-        const list = [];
+        const listMec = [];
+        const listEmp = [];
         Object.keys(snapshot.val()).forEach(key => {
           const u = snapshot.val()[key];
-          if (u.funcion === 'Mecánico') {
-            list.push({ id: key, ...u });
+          if (u.estado === 'Activo') {
+            const empData = { id: key, ...u };
+            listEmp.push(empData);
+            if (u.funcion === 'Mecánico') {
+              listMec.push(empData);
+            }
           }
         });
-        setMecanicos(list);
+        setMecanicos(listMec);
+        setEmpleados(listEmp);
       } else {
         setMecanicos([]);
+        setEmpleados([]);
       }
     });
 
@@ -203,6 +215,11 @@ export default function POS() {
     if (!selectedCliente) return toast.error('Seleccione un cliente');
     if (cart.some(item => item.type === 'servicio') && !selectedMecanico) {
       return toast.error('Debe asignar un mecánico para la mano de obra');
+    }
+    
+    // Si es crédito empleado
+    if (metodoPago === 'Crédito Empleado' && !selectedEmpleadoDeudor) {
+      return toast.error('Debe seleccionar al empleado al que se le otorga el crédito');
     }
     
     // Si es crédito, verificar si hay límite disponible
@@ -258,7 +275,7 @@ export default function POS() {
 
       await set(saleRef, newSale);
 
-      // Si es crédito, generar cuenta por cobrar
+      // Si es crédito a cliente, generar cuenta por cobrar
       if (metodoPago === 'Crédito' && selectedCliente.value !== 'MOSTRADOR') {
         const cxcRecord = push(ref(rtdb, 'cxc'));
         const fechaVence = new Date();
@@ -273,6 +290,21 @@ export default function POS() {
           monto_total: total,
           saldo_pendiente: total,
           estado: 'Pendiente'
+        });
+      }
+
+      // Si es crédito a empleado, registrar deuda en RRHH
+      if (metodoPago === 'Crédito Empleado' && selectedEmpleadoDeudor) {
+        const deudaRecord = push(ref(rtdb, 'deudas_empleados'));
+        await set(deudaRecord, {
+          id_empleado: selectedEmpleadoDeudor.value,
+          tipo: 'Crédito', // Es un crédito por inventario
+          motivo: `Compra interna - Factura ${humanId}`,
+          monto_total: total,
+          saldo_pendiente: total,
+          cuota_por_pago: total, // Se cobra completo por defecto (RRHH puede ajustarlo)
+          fecha_creacion: newSale.fecha,
+          estado: 'Activo'
         });
       }
 
@@ -475,8 +507,25 @@ export default function POS() {
                   <option value="Tarjeta">Tarjeta / POS</option>
                   <option value="Transferencia">Transferencia</option>
                   {selectedCliente?.value !== 'MOSTRADOR' && <option value="Crédito">Crédito (CxC)</option>}
+                  <option value="Crédito Empleado">Crédito a Empleado</option>
                 </select>
               </div>
+              
+              {metodoPago === 'Crédito Empleado' && (
+                <div className="col-span-1 md:col-span-2">
+                  <label className="block text-xs font-bold text-purple-600 mb-1 uppercase">Empleado que recibe crédito</label>
+                  <Select
+                    options={empleados.map(e => ({ value: e.id, label: e.nombre_completo }))}
+                    value={selectedEmpleadoDeudor}
+                    onChange={setSelectedEmpleadoDeudor}
+                    placeholder="Seleccionar empleado..."
+                    isClearable
+                    className="react-select-container text-sm"
+                    classNamePrefix="react-select"
+                  />
+                </div>
+              )}
+
               {cart.some(item => item.type === 'servicio') && (
                 <div className="col-span-1 md:col-span-2">
                   <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Mecánico Asignado</label>
