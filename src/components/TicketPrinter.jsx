@@ -17,6 +17,7 @@ const TicketPrinter = forwardRef(({ sale }, ref) => {
           <p><strong>Factura:</strong> {sale.numero_factura || sale.id.substring(sale.id.length - 6).toUpperCase()}</p>
           <p><strong>Fecha:</strong> {new Date(sale.fecha).toLocaleString()}</p>
           <p><strong>Sucursal:</strong> {sale.sucursal}</p>
+          {sale.metodo_pago && <p><strong>Pago:</strong> {sale.metodo_pago}</p>}
         </div>
 
         <table className="w-full text-xs mb-4">

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, ShoppingCart, Package, BarChart2, Settings, LogOut, Activity } from 'lucide-react';
+import { Home, ShoppingCart, Package, BarChart2, Settings, LogOut, Activity, Users, Wallet } from 'lucide-react';
 import { Toaster } from 'react-hot-toast';
 import logoIcon from '../assets/logo-icon.jpg';
 
@@ -11,6 +11,8 @@ export default function Layout({ children }) {
     { name: 'Dashboard', path: '/', icon: <Home size={20} /> },
     { name: 'Caja POS', path: '/pos', icon: <ShoppingCart size={20} /> },
     { name: 'Inventario', path: '/inventario', icon: <Package size={20} /> },
+    { name: 'Clientes', path: '/clientes', icon: <Users size={20} /> },
+    { name: 'CxC', path: '/cxc', icon: <Wallet size={20} /> },
     { name: 'Kardex', path: '/kardex', icon: <Activity size={20} /> },
     { name: 'Reportes', path: '/reportes', icon: <BarChart2 size={20} /> },
     { name: 'Ajustes', path: '/catalogos', icon: <Settings size={20} /> },

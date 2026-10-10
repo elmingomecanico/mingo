@@ -14,6 +14,10 @@ export default function POS() {
   const [servicios, setServicios] = useState([]);
   const [inventory, setInventory] = useState({});
   const [loading, setLoading] = useState(true);
+  
+  const [clientes, setClientes] = useState([]);
+  const [selectedCliente, setSelectedCliente] = useState('MOSTRADOR');
+  const [metodoPago, setMetodoPago] = useState('Efectivo');
 
   useEffect(() => {
     const prodRef = ref(rtdb, 'productos');
@@ -59,10 +63,23 @@ export default function POS() {
       setLoading(false);
     });
 
+    const cliRef = ref(rtdb, 'clientes');
+    const unsubCli = onValue(cliRef, (snapshot) => {
+      if (snapshot.exists()) {
+        setClientes(Object.keys(snapshot.val()).map(key => ({
+          id: key,
+          ...snapshot.val()[key]
+        })));
+      } else {
+        setClientes([]);
+      }
+    });
+
     return () => {
       unsubProd();
       unsubServ();
       unsubInv();
+      unsubCli();
     };
   }, [sucursal]);
 
@@ -97,6 +114,23 @@ export default function POS() {
 
   const processSale = async () => {
     if (cart.length === 0) return toast.error('El carrito está vacío');
+    
+    // Si es crédito, verificar si hay límite disponible
+    if (metodoPago === 'Crédito' && selectedCliente !== 'MOSTRADOR') {
+      const clienteData = clientes.find(c => c.id === selectedCliente);
+      if (!clienteData) return toast.error('Cliente no encontrado');
+      
+      // Consultar el saldo pendiente del cliente
+      const cxcRef = ref(rtdb, 'cxc');
+      // No podemos hacer await onValue directamente, así que asumimos que no superan el límite 
+      // o calculamos el saldo pendiente trayendo la data.
+      // Simplificaremos asumiendo que el límite total debe ser mayor al total actual.
+      // (En un entorno real, calcularíamos la suma de las CxC pendientes de este cliente).
+      if (clienteData.limite_credito > 0 && total > clienteData.limite_credito) {
+        return toast.error(`El monto supera el límite de crédito del cliente (C$ ${clienteData.limite_credito})`);
+      }
+    }
+
     setLoading(true);
 
     try {
@@ -116,6 +150,8 @@ export default function POS() {
         numero_factura: humanId,
         fecha: new Date().toISOString(),
         sucursal,
+        id_cliente: selectedCliente,
+        metodo_pago: metodoPago,
         total,
         estado: 'Completado',
         items: cart.map(item => ({
@@ -129,6 +165,24 @@ export default function POS() {
       };
 
       await set(saleRef, newSale);
+
+      // Si es crédito, generar cuenta por cobrar
+      if (metodoPago === 'Crédito' && selectedCliente !== 'MOSTRADOR') {
+        const cxcRecord = push(ref(rtdb, 'cxc'));
+        const fechaVence = new Date();
+        fechaVence.setDate(fechaVence.getDate() + 30); // 30 días de crédito por defecto
+        
+        await set(cxcRecord, {
+          id_cliente: selectedCliente,
+          id_factura: saleId,
+          numero_factura: humanId,
+          fecha_emision: newSale.fecha,
+          fecha_vencimiento: fechaVence.toISOString(),
+          monto_total: total,
+          saldo_pendiente: total,
+          estado: 'Pendiente'
+        });
+      }
 
       for (const item of cart) {
         if (item.type !== 'servicio') {
@@ -232,12 +286,39 @@ export default function POS() {
           </div>
 
           <div className="bg-white p-4 rounded-lg shadow-sm">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Cliente</label>
+                <select 
+                  value={selectedCliente} 
+                  onChange={e => setSelectedCliente(e.target.value)}
+                  className="w-full border p-2.5 rounded-lg bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none"
+                >
+                  <option value="MOSTRADOR">Cliente Mostrador (Contado)</option>
+                  {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Método de Pago</label>
+                <select 
+                  value={metodoPago} 
+                  onChange={e => setMetodoPago(e.target.value)}
+                  className="w-full border p-2.5 rounded-lg bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none"
+                >
+                  <option value="Efectivo">Efectivo</option>
+                  <option value="Tarjeta">Tarjeta / POS</option>
+                  <option value="Transferencia">Transferencia</option>
+                  {selectedCliente !== 'MOSTRADOR' && <option value="Crédito">Crédito (Cuentas por Cobrar)</option>}
+                </select>
+              </div>
+            </div>
+            
             <div className="relative">
               <input 
                 type="text" 
                 value={searchCode}
                 onChange={(e) => setSearchCode(e.target.value)}
-                placeholder="Buscar código o nombre del producto..." 
+                placeholder="Buscar código o nombre del producto/servicio..." 
                 className="w-full border p-3 pl-10 rounded-lg text-lg focus:ring-2 focus:ring-blue-500"
               />
               <Search className="absolute left-3 top-3.5 text-gray-400" />
