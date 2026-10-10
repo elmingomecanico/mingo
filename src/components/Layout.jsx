@@ -14,6 +14,7 @@ export default function Layout({ children }) {
     { name: 'Dashboard', path: '/', icon: <Home size={20} />, perm: 'VER_REPORTES' },
     { name: 'Caja POS', path: '/pos', icon: <ShoppingCart size={20} />, perm: 'VER_POS' },
     { name: 'Órdenes (Taller)', path: '/taller', icon: <Wrench size={20} />, perm: 'VER_TALLER' },
+    { name: 'Recursos Humanos', path: '/rrhh', icon: <Users size={20} />, perm: 'VER_USUARIOS' },
     { name: 'Inventario', path: '/inventario', icon: <Package size={20} />, perm: 'VER_INVENTARIO' },
     { name: 'Servicios', path: '/servicios', icon: <Wrench size={20} />, perm: 'VER_INVENTARIO' },
     { name: 'Compras', path: '/compras', icon: <ShoppingBag size={20} />, perm: 'VER_COMPRAS' },

@@ -17,6 +17,7 @@ import Servicios from './pages/Servicios'
 import Login from './pages/Login'
 import Usuarios from './pages/Usuarios'
 import OrdenesTrabajo from './pages/OrdenesTrabajo'
+import RRHH from './pages/RRHH'
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -91,6 +92,7 @@ function AppRouter() {
           <Route path="/kardex" element={<ProtectedRoute perm="VER_REPORTES"><Kardex /></ProtectedRoute>} />
           <Route path="/catalogos" element={<ProtectedRoute perm="VER_CATALOGOS"><Catalogos /></ProtectedRoute>} />
           <Route path="/usuarios" element={<ProtectedRoute perm="VER_USUARIOS"><Usuarios /></ProtectedRoute>} />
+          <Route path="/rrhh" element={<ProtectedRoute perm="VER_USUARIOS"><RRHH /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Layout>
