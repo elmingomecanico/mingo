@@ -15,12 +15,13 @@ export default function Inventario() {
   // State para catálogos
   const [categorias, setCategorias] = useState([]);
   const [ubicaciones, setUbicaciones] = useState([]);
+  const [modelosMoto, setModelosMoto] = useState([]);
   
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [formData, setFormData] = useState({
-    name: '', price: '', cost: '', cat: '', stock_actual: 0, stock_minimo: 0, ubicacion: ''
+    name: '', price: '', cost: '', cat: '', stock_actual: 0, stock_minimo: 0, ubicacion: '', compatibilidad: [], image: ''
   });
 
   useEffect(() => {
@@ -28,6 +29,7 @@ export default function Inventario() {
     const invRef = ref(rtdb, `inventario/${sucursal}`);
     const catRef = ref(rtdb, 'catalogos/categorias');
     const ubiRef = ref(rtdb, 'catalogos/ubicaciones');
+    const modRef = ref(rtdb, 'catalogos/modelos');
 
     const unsubProds = onValue(prodsRef, (snapshot) => {
       if (snapshot.exists()) {
@@ -52,11 +54,16 @@ export default function Inventario() {
       if (snapshot.exists()) setUbicaciones(Object.values(snapshot.val()).map(u => u.nombre));
     });
 
+    const unsubMod = onValue(modRef, (snapshot) => {
+      if (snapshot.exists()) setModelosMoto(Object.values(snapshot.val()).map(m => m.nombre));
+    });
+
     return () => {
       unsubProds();
       unsubInv();
       unsubCat();
       unsubUbi();
+      unsubMod();
     };
   }, [sucursal]);
 
@@ -77,13 +84,60 @@ export default function Inventario() {
         cat: prod.cat || '',
         stock_actual: invData.stock_actual,
         stock_minimo: invData.stock_minimo || 0,
-        ubicacion: invData.ubicacion || ''
+        ubicacion: invData.ubicacion || '',
+        compatibilidad: prod.compatibilidad || [],
+        image: prod.image || ''
       });
     } else {
       setEditingId(null);
-      setFormData({ name: '', price: '', cost: '', cat: '', stock_actual: 0, stock_minimo: 0, ubicacion: '' });
+      setFormData({ name: '', price: '', cost: '', cat: '', stock_actual: 0, stock_minimo: 0, ubicacion: '', compatibilidad: [], image: '' });
     }
     setIsModalOpen(true);
+  };
+
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    // Validar tipo
+    if (!file.type.startsWith('image/')) {
+      return toast.error('Seleccione un archivo de imagen válido');
+    }
+    
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        // Redimensionar para no saturar RTDB
+        const canvas = document.createElement('canvas');
+        const MAX_SIZE = 400;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_SIZE) {
+            height *= MAX_SIZE / width;
+            width = MAX_SIZE;
+          }
+        } else {
+          if (height > MAX_SIZE) {
+            width *= MAX_SIZE / height;
+            height = MAX_SIZE;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        // Comprimir a JPEG 0.7
+        const base64Str = canvas.toDataURL('image/jpeg', 0.7);
+        setFormData({ ...formData, image: base64Str });
+      };
+      img.src = event.target.result;
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleSave = async (e) => {
@@ -105,7 +159,9 @@ export default function Inventario() {
         name: formData.name,
         price: Number(formData.price),
         cost: Number(formData.cost),
-        cat: formData.cat
+        cat: formData.cat,
+        compatibilidad: formData.compatibilidad,
+        image: formData.image
       });
 
       const invRef = ref(rtdb, `inventario/${sucursal}/${prodId}`);
@@ -176,8 +232,8 @@ export default function Inventario() {
           <table className="w-full text-left text-sm whitespace-nowrap">
             <thead className="bg-gray-50 text-gray-600 font-medium border-b border-gray-100">
               <tr>
-                <th className="p-4">Código</th>
-                <th className="p-4">Producto</th>
+                <th className="p-4">Img / Cód</th>
+                <th className="p-4">Producto y Compatibilidad</th>
                 <th className="p-4">Categoría</th>
                 <th className="p-4 text-right">Precio Venta</th>
                 <th className="p-4 text-center">Stock</th>
@@ -201,8 +257,30 @@ export default function Inventario() {
                   
                   return (
                     <tr key={prod.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="p-4 font-mono text-gray-500">{prod.id}</td>
-                      <td className="p-4 font-bold text-gray-800">{prod.name}</td>
+                      <td className="p-4">
+                        <div className="flex items-center gap-3">
+                          {prod.image ? (
+                            <img src={prod.image} alt={prod.name} className="w-10 h-10 rounded-lg object-cover border border-gray-200 shadow-sm" />
+                          ) : (
+                            <div className="w-10 h-10 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-300">
+                              <Package size={20} />
+                            </div>
+                          )}
+                          <span className="font-mono text-xs text-gray-500">{prod.id}</span>
+                        </div>
+                      </td>
+                      <td className="p-4">
+                        <p className="font-bold text-gray-800">{prod.name}</p>
+                        {prod.compatibilidad && prod.compatibilidad.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {prod.compatibilidad.map((m, idx) => (
+                              <span key={idx} className="bg-blue-50 border border-blue-100 text-blue-700 text-[10px] font-bold px-1.5 py-0.5 rounded">
+                                {m}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </td>
                       <td className="p-4 text-gray-600">
                         <span className="bg-gray-100 px-2 py-1 rounded text-xs">{prod.cat || 'N/A'}</span>
                       </td>
@@ -273,6 +351,30 @@ export default function Inventario() {
                     <input required type="number" step="0.01" min="0" value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})} className="w-full border p-2.5 rounded-lg outline-none focus:border-blue-500" />
                   </div>
                 </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Compatibilidad (Modelos de Moto)</label>
+                  <Select
+                    isMulti
+                    options={modelosMoto.map(m => ({ value: m, label: m }))}
+                    value={(formData.compatibilidad || []).map(m => ({ value: m, label: m }))}
+                    onChange={(selected) => setFormData({ ...formData, compatibilidad: selected.map(s => s.value) })}
+                    placeholder="Seleccione los modelos compatibles..."
+                    className="react-select-container text-sm"
+                    classNamePrefix="react-select"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Imagen del Producto (Opcional)</label>
+                  <div className="flex items-center gap-4">
+                    {formData.image && (
+                      <img src={formData.image} alt="Vista previa" className="w-16 h-16 object-cover rounded-lg border border-gray-200" />
+                    )}
+                    <input type="file" accept="image/*" onChange={handleImageUpload} className="text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
+                  </div>
+                </div>
+
               </div>
 
               <div className="space-y-4">
