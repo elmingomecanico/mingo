@@ -212,37 +212,39 @@ export default function CxC() {
       </div>
 
       {abonoModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl overflow-hidden flex flex-col">
-            <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-              <h2 className="text-lg font-bold text-gray-800">Registrar Abono</h2>
-              <button onClick={() => setAbonoModal(null)} className="text-gray-400 hover:text-gray-600 font-bold text-xl">&times;</button>
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm animate-in fade-in duration-200 overflow-hidden">
+          <div className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-200">
+            <div className="p-4 sm:p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/80 shrink-0">
+              <h2 className="text-base sm:text-lg font-bold text-gray-800">Registrar Abono</h2>
+              <button onClick={() => setAbonoModal(null)} className="text-gray-400 hover:text-gray-600 font-bold text-xl leading-none">&times;</button>
             </div>
             
-            <form onSubmit={handleAbonar} className="p-6 space-y-4">
-              <div className="bg-amber-50 p-3 rounded-lg border border-amber-100 mb-4">
-                <p className="text-xs text-amber-600 font-bold uppercase mb-1">Saldo Pendiente Actual</p>
-                <p className="text-2xl font-black text-amber-700">C$ {abonoModal.saldo_pendiente.toFixed(2)}</p>
+            <form onSubmit={handleAbonar} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
+                <div className="bg-amber-50 p-3 rounded-xl border border-amber-100 mb-2">
+                  <p className="text-xs text-amber-600 font-bold uppercase mb-1">Saldo Pendiente Actual</p>
+                  <p className="text-2xl font-black text-amber-700">C$ {abonoModal.saldo_pendiente.toFixed(2)}</p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Monto a Abonar (C$)</label>
+                  <input 
+                    required 
+                    type="number" 
+                    step="0.01" 
+                    min="0.01" 
+                    max={abonoModal.saldo_pendiente}
+                    value={montoAbono} 
+                    onChange={e => setMontoAbono(e.target.value)} 
+                    className="w-full border-2 border-gray-200 p-2.5 rounded-xl outline-none focus:border-blue-500 text-lg font-bold text-center" 
+                    autoFocus
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Monto a Abonar (C$)</label>
-                <input 
-                  required 
-                  type="number" 
-                  step="0.01" 
-                  min="0.01" 
-                  max={abonoModal.saldo_pendiente}
-                  value={montoAbono} 
-                  onChange={e => setMontoAbono(e.target.value)} 
-                  className="w-full border-2 border-gray-200 p-3 rounded-xl outline-none focus:border-blue-500 text-lg font-bold text-center" 
-                  autoFocus
-                />
-              </div>
-
-              <div className="pt-4 flex justify-end gap-3 border-t border-gray-100 mt-6">
-                <button type="button" onClick={() => setAbonoModal(null)} className="px-4 py-2 rounded-lg text-gray-600 font-medium hover:bg-gray-100">Cancelar</button>
-                <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-bold shadow-md shadow-blue-200 active:scale-95 transition-all">Confirmar Abono</button>
+              <div className="p-3 sm:p-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3 shrink-0">
+                <button type="button" onClick={() => setAbonoModal(null)} className="px-4 py-2 rounded-xl text-gray-600 font-medium hover:bg-gray-100 text-sm">Cancelar</button>
+                <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-xl font-bold shadow-md shadow-blue-200 active:scale-95 transition-all text-sm">Confirmar Abono</button>
               </div>
             </form>
           </div>

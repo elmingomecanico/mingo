@@ -185,46 +185,54 @@ export default function Proveedores() {
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-2xl w-full max-w-lg shadow-xl overflow-hidden flex flex-col">
-            <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-              <h2 className="text-lg font-bold text-gray-800">
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm animate-in fade-in overflow-hidden">
+          <div className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+            <div className="p-4 sm:p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/80 shrink-0">
+              <h2 className="text-base sm:text-lg font-black text-gray-800">
                 {editingId ? 'Editar Proveedor' : 'Nuevo Proveedor'}
               </h2>
-              <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600 font-bold text-xl">&times;</button>
+              <button 
+                type="button" 
+                onClick={() => setIsModalOpen(false)} 
+                className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors font-bold text-xl"
+              >
+                &times;
+              </button>
             </div>
             
-            <form onSubmit={handleSave} className="p-6 space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Nombre Comercial / Razón Social *</label>
-                  <input required type="text" value={formData.nombre} onChange={e => setFormData({...formData, nombre: e.target.value})} className="w-full border p-2.5 rounded-lg outline-none focus:border-indigo-500" placeholder="Ej: Repuestos S.A." />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">RUC</label>
-                  <input type="text" value={formData.ruc} onChange={e => setFormData({...formData, ruc: e.target.value})} className="w-full border p-2.5 rounded-lg outline-none focus:border-indigo-500" placeholder="Ej: J0310000000000" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Nombre del Contacto</label>
-                  <input type="text" value={formData.contacto} onChange={e => setFormData({...formData, contacto: e.target.value})} className="w-full border p-2.5 rounded-lg outline-none focus:border-indigo-500" placeholder="Ej: Carlos Mejía" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Teléfono</label>
-                  <input type="tel" value={formData.telefono} onChange={e => setFormData({...formData, telefono: e.target.value})} className="w-full border p-2.5 rounded-lg outline-none focus:border-indigo-500" placeholder="Ej: 8888-8888" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                  <input type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full border p-2.5 rounded-lg outline-none focus:border-indigo-500" placeholder="contacto@empresa.com" />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Dirección</label>
-                  <textarea value={formData.direccion} onChange={e => setFormData({...formData, direccion: e.target.value})} rows="2" className="w-full border p-2.5 rounded-lg outline-none focus:border-indigo-500 resize-none" placeholder="Dirección completa..."></textarea>
+            <form onSubmit={handleSave} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Nombre Comercial / Razón Social *</label>
+                    <input required type="text" value={formData.nombre} onChange={e => setFormData({...formData, nombre: e.target.value})} className="w-full border p-2.5 rounded-xl outline-none focus:border-indigo-500 text-sm" placeholder="Ej: Repuestos S.A." />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">RUC</label>
+                    <input type="text" value={formData.ruc} onChange={e => setFormData({...formData, ruc: e.target.value})} className="w-full border p-2.5 rounded-xl outline-none focus:border-indigo-500 text-sm font-mono" placeholder="Ej: J0310000000000" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Nombre del Contacto</label>
+                    <input type="text" value={formData.contacto} onChange={e => setFormData({...formData, contacto: e.target.value})} className="w-full border p-2.5 rounded-xl outline-none focus:border-indigo-500 text-sm" placeholder="Ej: Carlos Mejía" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Teléfono</label>
+                    <input type="tel" value={formData.telefono} onChange={e => setFormData({...formData, telefono: e.target.value})} className="w-full border p-2.5 rounded-xl outline-none focus:border-indigo-500 text-sm" placeholder="Ej: 8888-8888" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Email</label>
+                    <input type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full border p-2.5 rounded-xl outline-none focus:border-indigo-500 text-sm" placeholder="contacto@empresa.com" />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Dirección</label>
+                    <textarea value={formData.direccion} onChange={e => setFormData({...formData, direccion: e.target.value})} rows="2" className="w-full border p-2.5 rounded-xl outline-none focus:border-indigo-500 resize-none text-sm" placeholder="Dirección completa..."></textarea>
+                  </div>
                 </div>
               </div>
 
-              <div className="pt-4 flex justify-end gap-3 border-t border-gray-100 mt-6">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2.5 rounded-lg text-gray-600 font-medium hover:bg-gray-100 transition-colors">Cancelar</button>
-                <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-lg font-bold shadow-md shadow-indigo-200 transition-all active:scale-95">Guardar Proveedor</button>
+              <div className="p-3 sm:p-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3 shrink-0">
+                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2.5 rounded-xl text-gray-600 font-bold hover:bg-gray-100 text-xs sm:text-sm transition-colors">Cancelar</button>
+                <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 sm:px-6 py-2.5 rounded-xl font-bold shadow-md shadow-indigo-200 transition-all active:scale-95 text-xs sm:text-sm">Guardar Proveedor</button>
               </div>
             </form>
           </div>

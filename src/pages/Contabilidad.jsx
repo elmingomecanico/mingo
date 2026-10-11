@@ -1058,126 +1058,134 @@ export default function Contabilidad() {
 
       {/* ================= MODAL NUEVO MOVIMIENTO (ENTRADA / SALIDA) ================= */}
       {isMovModalOpen && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
-            <div className={`p-5 border-b flex justify-between items-center ${movTipo === 'Ingreso' ? 'bg-emerald-50 border-emerald-100 text-emerald-900' : 'bg-rose-50 border-rose-100 text-rose-900'}`}>
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm animate-in fade-in overflow-hidden">
+          <div className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+            <div className={`p-4 sm:p-5 border-b flex justify-between items-center shrink-0 ${movTipo === 'Ingreso' ? 'bg-emerald-50 border-emerald-100 text-emerald-900' : 'bg-rose-50 border-rose-100 text-rose-900'}`}>
               <div className="flex items-center gap-2">
                 <div className={`p-2 rounded-xl text-white ${movTipo === 'Ingreso' ? 'bg-emerald-600' : 'bg-rose-600'}`}>
                   {movTipo === 'Ingreso' ? <Plus size={20} /> : <Minus size={20} />}
                 </div>
                 <div>
-                  <h2 className="text-lg font-black">
+                  <h2 className="text-base sm:text-lg font-black">
                     {movTipo === 'Ingreso' ? 'Registrar Entrada / Ingreso' : 'Registrar Salida / Gasto'}
                   </h2>
                   <p className="text-xs opacity-75">Asiento directo en el libro diario contable</p>
                 </div>
               </div>
-              <button onClick={() => setIsMovModalOpen(false)} className="text-gray-400 hover:text-gray-600 font-bold text-2xl">&times;</button>
+              <button 
+                type="button" 
+                onClick={() => setIsMovModalOpen(false)} 
+                className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-white/50 transition-colors font-bold text-xl"
+              >
+                &times;
+              </button>
             </div>
 
-            <form onSubmit={handleSaveMovimiento} className="p-5 space-y-4 overflow-y-auto">
-              <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Categoría *</label>
-                <select
-                  value={movForm.categoria}
-                  onChange={e => setMovForm({ ...movForm, categoria: e.target.value })}
-                  className="w-full border border-gray-200 p-2.5 rounded-xl bg-gray-50 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  {(movTipo === 'Ingreso' ? CATEGORIAS_INGRESOS_DEFAULT : CATEGORIAS_GASTOS_DEFAULT).map((c, i) => (
-                    <option key={i} value={c}>{c}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Concepto / Motivo *</label>
-                <input
-                  required
-                  type="text"
-                  placeholder="Ej: Pago de recibo de luz comercial, Compra de café, etc."
-                  value={movForm.concepto}
-                  onChange={e => setMovForm({ ...movForm, concepto: e.target.value })}
-                  className="w-full border border-gray-200 p-2.5 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
+            <form onSubmit={handleSaveMovimiento} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1">
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Monto (C$) *</label>
-                  <input
-                    required
-                    type="number"
-                    step="0.01"
-                    min="0.01"
-                    placeholder="0.00"
-                    value={movForm.monto}
-                    onChange={e => setMovForm({ ...movForm, monto: e.target.value })}
-                    className="w-full border border-gray-200 p-2.5 rounded-xl text-lg font-black text-gray-900 outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Método de Pago</label>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Categoría *</label>
                   <select
-                    value={movForm.metodo_pago}
-                    onChange={e => setMovForm({ ...movForm, metodo_pago: e.target.value })}
+                    value={movForm.categoria}
+                    onChange={e => setMovForm({ ...movForm, categoria: e.target.value })}
                     className="w-full border border-gray-200 p-2.5 rounded-xl bg-gray-50 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    <option value="Efectivo">Efectivo</option>
-                    <option value="Transferencia">Transferencia</option>
-                    <option value="Tarjeta">Tarjeta / POS</option>
-                    <option value="Cheque">Cheque</option>
+                    {(movTipo === 'Ingreso' ? CATEGORIAS_INGRESOS_DEFAULT : CATEGORIAS_GASTOS_DEFAULT).map((c, i) => (
+                      <option key={i} value={c}>{c}</option>
+                    ))}
                   </select>
                 </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Comprobante / Recibo #</label>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Concepto / Motivo *</label>
                   <input
+                    required
                     type="text"
-                    placeholder="Ej: REC-1029 / FACT-88"
-                    value={movForm.numero_comprobante}
-                    onChange={e => setMovForm({ ...movForm, numero_comprobante: e.target.value })}
+                    placeholder="Ej: Pago de recibo de luz comercial, Compra de café, etc."
+                    value={movForm.concepto}
+                    onChange={e => setMovForm({ ...movForm, concepto: e.target.value })}
                     className="w-full border border-gray-200 p-2.5 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
 
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Monto (C$) *</label>
+                    <input
+                      required
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      placeholder="0.00"
+                      value={movForm.monto}
+                      onChange={e => setMovForm({ ...movForm, monto: e.target.value })}
+                      className="w-full border border-gray-200 p-2.5 rounded-xl text-lg font-black text-gray-900 outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Método de Pago</label>
+                    <select
+                      value={movForm.metodo_pago}
+                      onChange={e => setMovForm({ ...movForm, metodo_pago: e.target.value })}
+                      className="w-full border border-gray-200 p-2.5 rounded-xl bg-gray-50 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="Efectivo">Efectivo</option>
+                      <option value="Transferencia">Transferencia</option>
+                      <option value="Tarjeta">Tarjeta / POS</option>
+                      <option value="Cheque">Cheque</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Comprobante / Recibo #</label>
+                    <input
+                      type="text"
+                      placeholder="Ej: REC-1029 / FACT-88"
+                      value={movForm.numero_comprobante}
+                      onChange={e => setMovForm({ ...movForm, numero_comprobante: e.target.value })}
+                      className="w-full border border-gray-200 p-2.5 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Sucursal</label>
+                    <select
+                      value={movForm.sucursal}
+                      onChange={e => setMovForm({ ...movForm, sucursal: e.target.value })}
+                      className="w-full border border-gray-200 p-2.5 rounded-xl bg-gray-50 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="SUC-01">Sucursal Principal (SUC-01)</option>
+                      <option value="SUC-02">Sucursal Norte (SUC-02)</option>
+                    </select>
+                  </div>
+                </div>
+
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Sucursal</label>
-                  <select
-                    value={movForm.sucursal}
-                    onChange={e => setMovForm({ ...movForm, sucursal: e.target.value })}
-                    className="w-full border border-gray-200 p-2.5 rounded-xl bg-gray-50 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="SUC-01">Sucursal Principal (SUC-01)</option>
-                    <option value="SUC-02">Sucursal Norte (SUC-02)</option>
-                  </select>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Beneficiario / Proveedor / Persona</label>
+                  <input
+                    type="text"
+                    placeholder="Ej: Disnorte-Dissur, Enacal, Don Juan..."
+                    value={movForm.beneficiario}
+                    onChange={e => setMovForm({ ...movForm, beneficiario: e.target.value })}
+                    className="w-full border border-gray-200 p-2.5 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                  />
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Beneficiario / Proveedor / Persona</label>
-                <input
-                  type="text"
-                  placeholder="Ej: Disnorte-Dissur, Enacal, Don Juan..."
-                  value={movForm.beneficiario}
-                  onChange={e => setMovForm({ ...movForm, beneficiario: e.target.value })}
-                  className="w-full border border-gray-200 p-2.5 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              <div className="pt-3 flex justify-end gap-3 border-t border-gray-100">
+              <div className="p-3 sm:p-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3 shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsMovModalOpen(false)}
-                  className="px-4 py-2.5 rounded-xl text-gray-600 font-bold hover:bg-gray-100 text-sm"
+                  className="px-4 py-2.5 rounded-xl text-gray-600 font-bold hover:bg-gray-100 text-xs sm:text-sm"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className={`px-5 py-2.5 rounded-xl font-bold text-sm text-white shadow-md transition-all active:scale-95 ${movTipo === 'Ingreso' ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200' : 'bg-rose-600 hover:bg-rose-700 shadow-rose-200'}`}
+                  className={`px-5 sm:px-6 py-2.5 rounded-xl font-bold text-xs sm:text-sm text-white shadow-md transition-all active:scale-95 ${movTipo === 'Ingreso' ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200' : 'bg-rose-600 hover:bg-rose-700 shadow-rose-200'}`}
                 >
                   Guardar Asiento Contable
                 </button>
@@ -1189,75 +1197,83 @@ export default function Contabilidad() {
 
       {/* ================= MODAL ABONAR A FACTURA CxP ================= */}
       {abonoModal && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col">
-            <div className="p-5 border-b border-gray-100 bg-rose-50/50 flex justify-between items-center">
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm animate-in fade-in overflow-hidden">
+          <div className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+            <div className="p-4 sm:p-5 border-b border-gray-100 bg-rose-50/50 flex justify-between items-center shrink-0">
               <div>
                 <h3 className="text-base font-bold text-gray-800">Abonar a Factura de Proveedor</h3>
                 <p className="text-xs text-gray-500">
                   {proveedoresMap[abonoModal.id_proveedor] || 'Proveedor'} • Factura {abonoModal.numero_factura}
                 </p>
               </div>
-              <button onClick={() => setAbonoModal(null)} className="text-gray-400 hover:text-gray-600 text-2xl font-bold">&times;</button>
+              <button 
+                type="button" 
+                onClick={() => setAbonoModal(null)} 
+                className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors font-bold text-xl"
+              >
+                &times;
+              </button>
             </div>
 
-            <form onSubmit={handleAbonarCxP} className="p-5 space-y-4">
-              <div className="p-3 bg-gray-50 rounded-xl border border-gray-100 flex justify-between items-center">
-                <span className="text-xs font-bold text-gray-500 uppercase">Saldo Pendiente:</span>
-                <span className="text-lg font-black text-rose-600">
-                  C$ {Number(abonoModal.saldo_pendiente).toLocaleString('es-NI', { minimumFractionDigits: 2 })}
-                </span>
+            <form onSubmit={handleAbonarCxP} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1">
+                <div className="p-3 bg-gray-50 rounded-xl border border-gray-100 flex justify-between items-center">
+                  <span className="text-xs font-bold text-gray-500 uppercase">Saldo Pendiente:</span>
+                  <span className="text-lg font-black text-rose-600 font-mono">
+                    C$ {Number(abonoModal.saldo_pendiente).toLocaleString('es-NI', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Monto a Pagar (C$) *</label>
+                  <input
+                    required
+                    type="number"
+                    step="0.01"
+                    max={abonoModal.saldo_pendiente}
+                    min="0.01"
+                    value={abonoForm.monto}
+                    onChange={e => setAbonoForm({ ...abonoForm, monto: e.target.value })}
+                    className="w-full border p-2.5 rounded-xl font-black text-xl text-gray-800 outline-none focus:ring-2 focus:ring-rose-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Método de Pago</label>
+                  <select
+                    value={abonoForm.metodo_pago}
+                    onChange={e => setAbonoForm({ ...abonoForm, metodo_pago: e.target.value })}
+                    className="w-full border p-2.5 rounded-xl bg-gray-50 text-sm font-medium outline-none focus:ring-2 focus:ring-rose-500"
+                  >
+                    <option value="Efectivo">Efectivo</option>
+                    <option value="Transferencia">Transferencia Bancaria</option>
+                    <option value="Cheque">Cheque</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Recibo de Caja / Minuta #</label>
+                  <input
+                    type="text"
+                    placeholder="Ej: REC-9923"
+                    value={abonoForm.comprobante}
+                    onChange={e => setAbonoForm({ ...abonoForm, comprobante: e.target.value })}
+                    className="w-full border p-2.5 rounded-xl text-sm outline-none focus:ring-2 focus:ring-rose-500 font-mono"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Monto a Pagar (C$) *</label>
-                <input
-                  required
-                  type="number"
-                  step="0.01"
-                  max={abonoModal.saldo_pendiente}
-                  min="0.01"
-                  value={abonoForm.monto}
-                  onChange={e => setAbonoForm({ ...abonoForm, monto: e.target.value })}
-                  className="w-full border p-2.5 rounded-xl font-black text-xl text-gray-800 outline-none focus:ring-2 focus:ring-rose-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Método de Pago</label>
-                <select
-                  value={abonoForm.metodo_pago}
-                  onChange={e => setAbonoForm({ ...abonoForm, metodo_pago: e.target.value })}
-                  className="w-full border p-2.5 rounded-xl bg-gray-50 text-sm font-medium outline-none focus:ring-2 focus:ring-rose-500"
-                >
-                  <option value="Efectivo">Efectivo</option>
-                  <option value="Transferencia">Transferencia Bancaria</option>
-                  <option value="Cheque">Cheque</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Recibo de Caja / Minuta #</label>
-                <input
-                  type="text"
-                  placeholder="Ej: REC-9923"
-                  value={abonoForm.comprobante}
-                  onChange={e => setAbonoForm({ ...abonoForm, comprobante: e.target.value })}
-                  className="w-full border p-2.5 rounded-xl text-sm outline-none focus:ring-2 focus:ring-rose-500"
-                />
-              </div>
-
-              <div className="pt-3 flex justify-end gap-3 border-t border-gray-100">
+              <div className="p-3 sm:p-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3 shrink-0">
                 <button
                   type="button"
                   onClick={() => setAbonoModal(null)}
-                  className="px-4 py-2 rounded-xl text-gray-600 font-bold hover:bg-gray-100 text-sm"
+                  className="px-4 py-2.5 rounded-xl text-gray-600 font-bold hover:bg-gray-100 text-xs sm:text-sm"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="bg-rose-600 hover:bg-rose-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-md shadow-rose-200 transition-all active:scale-95"
+                  className="bg-rose-600 hover:bg-rose-700 text-white px-5 sm:px-6 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-md shadow-rose-200 transition-all active:scale-95"
                 >
                   Confirmar Pago
                 </button>
@@ -1269,89 +1285,97 @@ export default function Contabilidad() {
 
       {/* ================= MODAL NUEVA FACTURA CxP ================= */}
       {isNewCxpModalOpen && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col">
-            <div className="p-5 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm animate-in fade-in overflow-hidden">
+          <div className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+            <div className="p-4 sm:p-5 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center shrink-0">
               <h3 className="text-base font-bold text-gray-800">Registrar Factura por Pagar a Proveedor</h3>
-              <button onClick={() => setIsNewCxpModalOpen(false)} className="text-gray-400 hover:text-gray-600 text-2xl font-bold">&times;</button>
+              <button 
+                type="button" 
+                onClick={() => setIsNewCxpModalOpen(false)} 
+                className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors font-bold text-xl"
+              >
+                &times;
+              </button>
             </div>
 
-            <form onSubmit={handleSaveNewCxp} className="p-5 space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Proveedor *</label>
-                <TokenizedSearchSelect
-                  options={proveedoresList.map(p => ({
-                    id: p.id,
-                    value: p.id,
-                    label: p.nombre,
-                    sublabel: [p.telefono1, p.contacto ? `Contacto: ${p.contacto}` : '', p.ruc ? `RUC: ${p.ruc}` : ''].filter(Boolean).join(' • '),
-                    searchFields: [p.nombre, p.telefono1, p.telefono2, p.contacto, p.ruc, p.direccion]
-                  }))}
-                  value={newCxpForm.id_proveedor}
-                  onChange={sel => setNewCxpForm({ ...newCxpForm, id_proveedor: sel ? (sel.id || sel.value) : '' })}
-                  placeholder="Buscar proveedor por nombre, RUC o teléfono..."
-                  icon={Building}
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Número de Factura *</label>
-                <input
-                  required
-                  type="text"
-                  placeholder="Ej: F-10293"
-                  value={newCxpForm.numero_factura}
-                  onChange={e => setNewCxpForm({ ...newCxpForm, numero_factura: e.target.value })}
-                  className="w-full border p-2.5 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Monto Total Factura (C$) *</label>
-                <input
-                  required
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  placeholder="0.00"
-                  value={newCxpForm.monto_total}
-                  onChange={e => setNewCxpForm({ ...newCxpForm, monto_total: e.target.value })}
-                  className="w-full border p-2.5 rounded-xl font-black text-xl text-gray-900 outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
+            <form onSubmit={handleSaveNewCxp} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1">
                 <div>
-                  <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Fecha Emisión</label>
-                  <input
-                    type="date"
-                    value={newCxpForm.fecha_emision}
-                    onChange={e => setNewCxpForm({ ...newCxpForm, fecha_emision: e.target.value })}
-                    className="w-full border p-2 rounded-xl text-xs outline-none"
+                  <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Proveedor *</label>
+                  <TokenizedSearchSelect
+                    options={proveedoresList.map(p => ({
+                      id: p.id,
+                      value: p.id,
+                      label: p.nombre,
+                      sublabel: [p.telefono1, p.contacto ? `Contacto: ${p.contacto}` : '', p.ruc ? `RUC: ${p.ruc}` : ''].filter(Boolean).join(' • '),
+                      searchFields: [p.nombre, p.telefono1, p.telefono2, p.contacto, p.ruc, p.direccion]
+                    }))}
+                    value={newCxpForm.id_proveedor}
+                    onChange={sel => setNewCxpForm({ ...newCxpForm, id_proveedor: sel ? (sel.id || sel.value) : '' })}
+                    placeholder="Buscar proveedor por nombre, RUC o teléfono..."
+                    icon={Building}
                   />
                 </div>
+
                 <div>
-                  <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Fecha Vence</label>
+                  <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Número de Factura *</label>
                   <input
-                    type="date"
-                    value={newCxpForm.fecha_vencimiento}
-                    onChange={e => setNewCxpForm({ ...newCxpForm, fecha_vencimiento: e.target.value })}
-                    className="w-full border p-2 rounded-xl text-xs outline-none"
+                    required
+                    type="text"
+                    placeholder="Ej: F-10293"
+                    value={newCxpForm.numero_factura}
+                    onChange={e => setNewCxpForm({ ...newCxpForm, numero_factura: e.target.value })}
+                    className="w-full border p-2.5 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 font-mono"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Monto Total Factura (C$) *</label>
+                  <input
+                    required
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    placeholder="0.00"
+                    value={newCxpForm.monto_total}
+                    onChange={e => setNewCxpForm({ ...newCxpForm, monto_total: e.target.value })}
+                    className="w-full border p-2.5 rounded-xl font-black text-xl text-gray-900 outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Fecha Emisión</label>
+                    <input
+                      type="date"
+                      value={newCxpForm.fecha_emision}
+                      onChange={e => setNewCxpForm({ ...newCxpForm, fecha_emision: e.target.value })}
+                      className="w-full border p-2 rounded-xl text-xs outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Fecha Vence</label>
+                    <input
+                      type="date"
+                      value={newCxpForm.fecha_vencimiento}
+                      onChange={e => setNewCxpForm({ ...newCxpForm, fecha_vencimiento: e.target.value })}
+                      className="w-full border p-2 rounded-xl text-xs outline-none"
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div className="pt-3 flex justify-end gap-3 border-t border-gray-100">
+              <div className="p-3 sm:p-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3 shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsNewCxpModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-gray-600 font-bold hover:bg-gray-100 text-sm"
+                  className="px-4 py-2.5 rounded-xl text-gray-600 font-bold hover:bg-gray-100 text-xs sm:text-sm"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-md shadow-blue-200 transition-all active:scale-95"
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-5 sm:px-6 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-md shadow-blue-200 transition-all active:scale-95"
                 >
                   Guardar Factura
                 </button>

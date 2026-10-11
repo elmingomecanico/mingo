@@ -12,15 +12,15 @@ export default function ImagePreviewModal({ isOpen, onClose, product }) {
 
   return (
     <div 
-      className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-md animate-in fade-in duration-200"
+      className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-md animate-in fade-in duration-200 overflow-hidden"
       onClick={onClose}
     >
       <div 
-        className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200"
+        className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="p-4 bg-gray-900 text-white flex justify-between items-center border-b border-gray-800">
+        <div className="p-4 bg-gray-900 text-white flex justify-between items-center border-b border-gray-800 shrink-0">
           <div className="flex items-center gap-2">
             <Package className="text-blue-400" size={18} />
             <div>
@@ -37,12 +37,12 @@ export default function ImagePreviewModal({ isOpen, onClose, product }) {
         </div>
 
         {/* Imagen */}
-        <div className="bg-black/95 flex items-center justify-center p-4 min-h-[300px] max-h-[70vh]">
+        <div className="bg-black/95 flex items-center justify-center p-4 min-h-[220px] overflow-y-auto flex-1">
           {imageUrl ? (
             <img 
               src={imageUrl} 
               alt={productName} 
-              className="max-w-full max-h-[60vh] object-contain rounded-xl shadow-lg border border-white/10"
+              className="max-w-full max-h-[55vh] object-contain rounded-xl shadow-lg border border-white/10"
             />
           ) : (
             <div className="text-center p-8 text-gray-500">
@@ -53,7 +53,7 @@ export default function ImagePreviewModal({ isOpen, onClose, product }) {
         </div>
 
         {/* Footer con información del producto */}
-        <div className="p-4 bg-gray-50 flex items-center justify-between border-t border-gray-100">
+        <div className="p-3 sm:p-4 bg-gray-50 flex items-center justify-between border-t border-gray-100 shrink-0">
           <div>
             {productCategory && (
               <span className="text-[10px] uppercase font-bold tracking-wider text-gray-400 block">

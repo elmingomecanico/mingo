@@ -1078,7 +1078,7 @@ export default function POS() {
             
             {/* Cliente y Método de Pago */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
+              <div className="min-w-0">
                 <div className="flex justify-between items-center mb-1 flex-wrap gap-1">
                   <label className="block text-xs font-bold text-gray-500 uppercase">Cliente</label>
                   {clienteActualObj && (
@@ -1108,8 +1108,8 @@ export default function POS() {
                     </div>
                   )}
                 </div>
-                <div className="flex gap-2 items-center">
-                  <div className="flex-1">
+                <div className="flex gap-2 items-center min-w-0">
+                  <div className="flex-1 min-w-0">
                     <TokenizedSearchSelect
                       options={clientOptions}
                       value={selectedCliente?.value || 'MOSTRADOR'}
@@ -1129,7 +1129,7 @@ export default function POS() {
                 </div>
               </div>
 
-              <div>
+              <div className="min-w-0">
                 <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Método de Pago</label>
                 <select 
                   value={metodoPago} 
@@ -1572,77 +1572,79 @@ export default function POS() {
 
       {/* Modal Creación Rápida de Cliente por Cajero */}
       {isNewClientModalOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col">
-            <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm animate-in fade-in duration-200 overflow-hidden">
+          <div className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-200">
+            <div className="p-4 sm:p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/80 shrink-0">
               <div>
-                <h2 className="text-lg font-black text-gray-800 flex items-center gap-2">
+                <h2 className="text-base sm:text-lg font-black text-gray-800 flex items-center gap-2">
                   <UserPlus className="text-blue-600" size={20} />
                   Nuevo Cliente Rápido
                 </h2>
                 <p className="text-[11px] text-gray-400">Datos básicos. Privilegios de crédito son otorgados por gerencia.</p>
               </div>
-              <button onClick={() => setIsNewClientModalOpen(false)} className="text-gray-400 hover:text-gray-600 font-bold text-xl">&times;</button>
+              <button onClick={() => setIsNewClientModalOpen(false)} className="text-gray-400 hover:text-gray-600 font-bold text-xl leading-none">&times;</button>
             </div>
             
-            <form onSubmit={handleCreateQuickClient} className="p-5 space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Nombre Completo *</label>
-                <input 
-                  required 
-                  type="text" 
-                  value={newClientForm.nombre} 
-                  onChange={e => setNewClientForm({...newClientForm, nombre: e.target.value})} 
-                  placeholder="Ej: Santos Gómez" 
-                  className="w-full border p-2.5 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm" 
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
+            <form onSubmit={handleCreateQuickClient} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1">
                 <div>
-                  <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Teléfono</label>
+                  <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Nombre Completo *</label>
                   <input 
+                    required 
                     type="text" 
-                    value={newClientForm.telefono1} 
-                    onChange={e => setNewClientForm({...newClientForm, telefono1: e.target.value})} 
-                    placeholder="Ej: 8888-8888" 
+                    value={newClientForm.nombre} 
+                    onChange={e => setNewClientForm({...newClientForm, nombre: e.target.value})} 
+                    placeholder="Ej: Santos Gómez" 
                     className="w-full border p-2.5 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm" 
                   />
                 </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Teléfono</label>
+                    <input 
+                      type="text" 
+                      value={newClientForm.telefono1} 
+                      onChange={e => setNewClientForm({...newClientForm, telefono1: e.target.value})} 
+                      placeholder="Ej: 8888-8888" 
+                      className="w-full border p-2.5 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm" 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Cédula / RUC</label>
+                    <input 
+                      type="text" 
+                      value={newClientForm.cedula} 
+                      onChange={e => setNewClientForm({...newClientForm, cedula: e.target.value})} 
+                      placeholder="Ej: 001-..." 
+                      className="w-full border p-2.5 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm" 
+                    />
+                  </div>
+                </div>
+
                 <div>
-                  <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Cédula / RUC</label>
+                  <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Dirección</label>
                   <input 
                     type="text" 
-                    value={newClientForm.cedula} 
-                    onChange={e => setNewClientForm({...newClientForm, cedula: e.target.value})} 
-                    placeholder="Ej: 001-..." 
+                    value={newClientForm.direccion} 
+                    onChange={e => setNewClientForm({...newClientForm, direccion: e.target.value})} 
+                    placeholder="Ej: Barrio Central..." 
                     className="w-full border p-2.5 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm" 
                   />
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Dirección</label>
-                <input 
-                  type="text" 
-                  value={newClientForm.direccion} 
-                  onChange={e => setNewClientForm({...newClientForm, direccion: e.target.value})} 
-                  placeholder="Ej: Barrio Central..." 
-                  className="w-full border p-2.5 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm" 
-                />
-              </div>
-
-              <div className="pt-4 flex justify-end gap-3 border-t border-gray-100">
+              <div className="p-3 sm:p-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3 shrink-0">
                 <button 
                   type="button" 
                   onClick={() => setIsNewClientModalOpen(false)} 
-                  className="px-4 py-2 rounded-lg text-gray-600 font-bold hover:bg-gray-100 text-sm transition-colors"
+                  className="px-4 py-2 rounded-xl text-gray-600 font-bold hover:bg-gray-100 text-sm transition-colors"
                 >
                   Cancelar
                 </button>
                 <button 
                   type="submit" 
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg font-bold text-sm shadow-md shadow-blue-200 transition-colors"
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-xl font-bold text-sm shadow-md shadow-blue-200 transition-colors"
                 >
                   Guardar y Seleccionar
                 </button>
@@ -1654,9 +1656,9 @@ export default function POS() {
 
       {/* MODAL DE FINALIZACIÓN CON TICKET TÉRMICO POS-80 Y PDF */}
       {completedSale && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[95vh]">
-            <div className="p-4 text-center border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm animate-in fade-in duration-200 overflow-hidden">
+          <div className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+            <div className="p-4 text-center border-b border-gray-100 bg-gray-50/80 flex justify-between items-center shrink-0">
               <span className="text-xs font-bold text-green-600 bg-green-50 px-2.5 py-1 rounded-full">
                 ✓ Factura Generada: {completedSale.numero_factura}
               </span>
@@ -1669,7 +1671,7 @@ export default function POS() {
             </div>
 
             {/* BOTONES DE IMPRESIÓN Y ACCIONES */}
-            <div className="p-4 bg-white border-t border-gray-100 space-y-2">
+            <div className="p-3 sm:p-4 bg-white border-t border-gray-100 space-y-2 shrink-0">
               <div className="grid grid-cols-2 gap-3">
                 <button 
                   onClick={handlePrint}

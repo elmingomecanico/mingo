@@ -225,32 +225,34 @@ export default function Catalogos() {
 
       {/* Modal Agregar/Editar */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl overflow-hidden flex flex-col scale-in-center">
-            <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-              <h2 className="text-lg font-bold text-gray-800">
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm animate-in fade-in duration-200 overflow-hidden">
+          <div className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-200">
+            <div className="p-4 sm:p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/80 shrink-0">
+              <h2 className="text-base sm:text-lg font-bold text-gray-800">
                 {editingId ? 'Editar Registro' : 'Nuevo Registro'}
               </h2>
-              <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600 font-bold text-xl">&times;</button>
+              <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600 font-bold text-xl leading-none">&times;</button>
             </div>
             
-            <form onSubmit={handleSave} className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Nombre *</label>
-                <input 
-                  required 
-                  type="text" 
-                  value={formData.nombre} 
-                  onChange={e => setFormData({...formData, nombre: e.target.value})} 
-                  className="w-full border-2 border-gray-200 p-3 rounded-xl outline-none focus:border-blue-500" 
-                  placeholder="Ej: Llaves, Frenos..." 
-                  autoFocus
-                />
+            <form onSubmit={handleSave} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Nombre *</label>
+                  <input 
+                    required 
+                    type="text" 
+                    value={formData.nombre} 
+                    onChange={e => setFormData({...formData, nombre: e.target.value})} 
+                    className="w-full border-2 border-gray-200 p-2.5 rounded-xl outline-none focus:border-blue-500 text-sm" 
+                    placeholder="Ej: Llaves, Frenos..." 
+                    autoFocus
+                  />
+                </div>
               </div>
 
-              <div className="pt-2 flex justify-end gap-3">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 rounded-xl text-gray-600 font-medium hover:bg-gray-100">Cancelar</button>
-                <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-xl font-bold shadow-md active:scale-95 transition-all">Guardar</button>
+              <div className="p-3 sm:p-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3 shrink-0">
+                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 rounded-xl text-gray-600 font-medium hover:bg-gray-100 text-sm">Cancelar</button>
+                <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-xl font-bold shadow-md active:scale-95 transition-all text-sm">Guardar</button>
               </div>
             </form>
           </div>

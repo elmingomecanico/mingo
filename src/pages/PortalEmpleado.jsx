@@ -697,11 +697,11 @@ export default function PortalEmpleado() {
 
       {/* MODAL CREAR NUEVA SOLICITUD */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm animate-in fade-in duration-200 overflow-hidden">
+          <div className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[92vh]">
             
             {/* Header del modal */}
-            <div className="p-6 bg-gradient-to-r from-blue-900 to-indigo-900 text-white flex justify-between items-center">
+            <div className="p-4 sm:p-6 bg-gradient-to-r from-blue-900 to-indigo-900 text-white flex justify-between items-center shrink-0">
               <div>
                 <h3 className="font-black text-lg flex items-center gap-2">
                   <FileText className="text-blue-300" size={20} />
@@ -720,8 +720,9 @@ export default function PortalEmpleado() {
             </div>
 
             {/* Selector de Tipo */}
-            <form onSubmit={handleSubmitSolicitud} className="p-6 space-y-4">
-              <div>
+            <form onSubmit={handleSubmitSolicitud} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
+                <div>
                 <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase">Tipo de Solicitud</label>
                 <div className="grid grid-cols-2 gap-2">
                   {[
@@ -913,8 +914,10 @@ export default function PortalEmpleado() {
                 />
               </div>
 
+              </div>
+
               {/* BOTONES ACCIÓN */}
-              <div className="pt-2 flex justify-end gap-3 border-t border-gray-100">
+              <div className="p-3 sm:p-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3 shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}

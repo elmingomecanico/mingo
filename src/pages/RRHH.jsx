@@ -1223,13 +1223,13 @@ export default function RRHH() {
       {/* MODAL FICHA / EXPEDIENTE INTEGRAL DEL COLABORADOR                         */}
       {/* ========================================================================= */}
       {isExpedienteModalOpen && selectedExpediente && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl w-full max-w-4xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 max-h-[92vh] flex flex-col">
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm animate-in fade-in duration-200 overflow-hidden">
+          <div className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-4xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 max-h-[92vh] flex flex-col">
             
             {/* Header del expediente */}
-            <div className="p-6 bg-gradient-to-r from-blue-900 to-indigo-900 text-white flex justify-between items-center">
+            <div className="p-4 sm:p-6 bg-gradient-to-r from-blue-900 to-indigo-900 text-white flex justify-between items-center shrink-0">
               <div>
-                <h3 className="font-black text-xl flex items-center gap-2">
+                <h3 className="font-black text-lg sm:text-xl flex items-center gap-2">
                   <Briefcase className="text-blue-300" size={22} />
                   Expediente de {selectedExpediente.nombre_completo}
                 </h3>
@@ -1246,10 +1246,10 @@ export default function RRHH() {
             </div>
 
             {/* Pestañas del expediente */}
-            <div className="flex border-b border-gray-200 px-6 bg-gray-50 gap-2">
+            <div className="flex border-b border-gray-200 px-4 sm:px-6 bg-gray-50 gap-2 shrink-0 overflow-x-auto">
               <button
                 onClick={() => setExpedienteTab('general')}
-                className={`py-3 px-3 text-xs font-bold border-b-2 transition-all ${
+                className={`py-3 px-3 text-xs font-bold border-b-2 transition-all whitespace-nowrap ${
                   expedienteTab === 'general' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500'
                 }`}
               >
@@ -1257,7 +1257,7 @@ export default function RRHH() {
               </button>
               <button
                 onClick={() => setExpedienteTab('prestaciones')}
-                className={`py-3 px-3 text-xs font-bold border-b-2 transition-all ${
+                className={`py-3 px-3 text-xs font-bold border-b-2 transition-all whitespace-nowrap ${
                   expedienteTab === 'prestaciones' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500'
                 }`}
               >
@@ -1266,7 +1266,8 @@ export default function RRHH() {
             </div>
 
             {/* Contenido del expediente */}
-            <form onSubmit={handleSaveExpediente} className="p-6 overflow-y-auto space-y-4 flex-1">
+            <form onSubmit={handleSaveExpediente} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="p-4 sm:p-6 overflow-y-auto space-y-4 flex-1">
               {expedienteTab === 'general' && (
                 <div className="space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1625,7 +1626,9 @@ export default function RRHH() {
                 </div>
               )}
 
-              <div className="pt-4 flex justify-end gap-3 border-t border-gray-100">
+              </div>
+
+              <div className="p-3 sm:p-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3 shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsExpedienteModalOpen(false)}
@@ -1648,69 +1651,78 @@ export default function RRHH() {
 
       {/* MODAL REGISTRAR DEUDA MANUAL */}
       {isDeudaModalOpen && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-              <h3 className="font-bold text-lg text-gray-800 flex items-center gap-2">
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm animate-in fade-in duration-200 overflow-hidden">
+          <div className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[92vh]">
+            <div className="p-4 sm:p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50 shrink-0">
+              <h3 className="font-bold text-base sm:text-lg text-gray-800 flex items-center gap-2">
                 <HandCoins className="text-purple-600" /> Registrar Deuda / Adelanto
               </h3>
+              <button
+                type="button"
+                onClick={() => setIsDeudaModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 text-xl font-bold leading-none"
+              >
+                &times;
+              </button>
             </div>
-            <form onSubmit={guardarDeudaManual} className="p-5 space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Empleado *</label>
-                <TokenizedSearchSelect
-                  options={usuarios.map(u => ({
-                    id: u.id,
-                    value: u.id,
-                    label: u.nombre_completo,
-                    sublabel: [u.funcion, u.cedula ? `Céd: ${u.cedula}` : '', u.telefono ? `Tel: ${u.telefono}` : ''].filter(Boolean).join(' • '),
-                    searchFields: [u.nombre_completo, u.usuario, u.funcion, u.cedula, u.telefono]
-                  }))}
-                  value={deudaForm.id_empleado}
-                  onChange={sel => setDeudaForm({ ...deudaForm, id_empleado: sel ? (sel.id || sel.value) : '' })}
-                  placeholder="Buscar empleado por nombre, cargo o cédula..."
-                  icon={User}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Tipo</label>
-                <select required value={deudaForm.tipo} onChange={e => {
-                  const newTipo = e.target.value;
-                  setDeudaForm(prev => ({
-                    ...prev, 
-                    tipo: newTipo, 
-                    cuota_por_pago: newTipo === 'Adelanto' ? prev.monto_total : prev.cuota_por_pago 
-                  }));
-                }} className="w-full border p-2.5 rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm">
-                  <option value="Adelanto">Adelanto (Deducción Única en Próximo Pago)</option>
-                  <option value="Préstamo">Préstamo (Pago en Cuotas)</option>
-                  <option value="Crédito">Crédito de Producto (Pago en Cuotas)</option>
-                </select>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-3">
+            <form onSubmit={guardarDeudaManual} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1">
                 <div>
-                  <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Monto Total (C$)</label>
-                  <input required type="number" step="0.01" value={deudaForm.monto_total} onChange={e => {
-                    const newMonto = e.target.value;
-                    setDeudaForm({
-                      ...deudaForm, 
-                      monto_total: newMonto,
-                      cuota_por_pago: deudaForm.tipo === 'Adelanto' ? newMonto : deudaForm.cuota_por_pago
-                    });
-                  }} className="w-full border p-2.5 rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm font-bold" placeholder="Ej: 500.00" />
+                  <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Empleado *</label>
+                  <TokenizedSearchSelect
+                    options={usuarios.map(u => ({
+                      id: u.id,
+                      value: u.id,
+                      label: u.nombre_completo,
+                      sublabel: [u.funcion, u.cedula ? `Céd: ${u.cedula}` : '', u.telefono ? `Tel: ${u.telefono}` : ''].filter(Boolean).join(' • '),
+                      searchFields: [u.nombre_completo, u.usuario, u.funcion, u.cedula, u.telefono]
+                    }))}
+                    value={deudaForm.id_empleado}
+                    onChange={sel => setDeudaForm({ ...deudaForm, id_empleado: sel ? (sel.id || sel.value) : '' })}
+                    placeholder="Buscar empleado por nombre, cargo o cédula..."
+                    icon={User}
+                  />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Cuota x Pago (C$)</label>
-                  <input required type="number" step="0.01" value={deudaForm.cuota_por_pago} onChange={e => setDeudaForm({...deudaForm, cuota_por_pago: e.target.value})} className="w-full border p-2.5 rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm font-bold" placeholder="Ej: 100.00" />
+                  <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Tipo</label>
+                  <select required value={deudaForm.tipo} onChange={e => {
+                    const newTipo = e.target.value;
+                    setDeudaForm(prev => ({
+                      ...prev, 
+                      tipo: newTipo, 
+                      cuota_por_pago: newTipo === 'Adelanto' ? prev.monto_total : prev.cuota_por_pago 
+                    }));
+                  }} className="w-full border p-2.5 rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm">
+                    <option value="Adelanto">Adelanto (Deducción Única en Próximo Pago)</option>
+                    <option value="Préstamo">Préstamo (Pago en Cuotas)</option>
+                    <option value="Crédito">Crédito de Producto (Pago en Cuotas)</option>
+                  </select>
                 </div>
-              </div>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Monto Total (C$)</label>
+                    <input required type="number" step="0.01" value={deudaForm.monto_total} onChange={e => {
+                      const newMonto = e.target.value;
+                      setDeudaForm({
+                        ...deudaForm, 
+                        monto_total: newMonto,
+                        cuota_por_pago: deudaForm.tipo === 'Adelanto' ? newMonto : deudaForm.cuota_por_pago
+                      });
+                    }} className="w-full border p-2.5 rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm font-bold" placeholder="Ej: 500.00" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Cuota x Pago (C$)</label>
+                    <input required type="number" step="0.01" value={deudaForm.cuota_por_pago} onChange={e => setDeudaForm({...deudaForm, cuota_por_pago: e.target.value})} className="w-full border p-2.5 rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm font-bold" placeholder="Ej: 100.00" />
+                  </div>
+                </div>
 
-              <div>
-                <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Motivo / Descripción</label>
-                <input type="text" value={deudaForm.motivo} onChange={e => setDeudaForm({...deudaForm, motivo: e.target.value})} className="w-full border p-2.5 rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm" placeholder="Ej: Adelanto por emergencia familiar" />
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Motivo / Descripción</label>
+                  <input type="text" value={deudaForm.motivo} onChange={e => setDeudaForm({...deudaForm, motivo: e.target.value})} className="w-full border p-2.5 rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm" placeholder="Ej: Adelanto por emergencia familiar" />
+                </div>
               </div>
-              <div className="pt-4 flex justify-end gap-3 border-t border-gray-100">
+              <div className="p-3 sm:p-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3 shrink-0">
                 <button type="button" onClick={() => setIsDeudaModalOpen(false)} className="px-4 py-2.5 rounded-xl text-gray-600 text-sm font-medium hover:bg-gray-100">Cancelar</button>
                 <button type="submit" className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2.5 rounded-xl text-sm font-bold shadow-md shadow-purple-200">Registrar</button>
               </div>
@@ -1721,23 +1733,33 @@ export default function RRHH() {
 
       {/* MODAL RECHAZO DE SOLICITUD */}
       {solicitudARechazar && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden p-6 space-y-4">
-            <h3 className="font-bold text-lg text-gray-800 flex items-center gap-2">
-              <AlertCircle className="text-red-500" /> Rechazar Solicitud
-            </h3>
-            <p className="text-xs text-gray-500">
-              Indica la razón por la que no es posible aprobar esta solicitud de <strong>{solicitudARechazar.tipo}</strong> para <strong>{solicitudARechazar.nombre_empleado}</strong>.
-            </p>
-            <textarea
-              required
-              rows="3"
-              value={motivoRechazo}
-              onChange={e => setMotivoRechazo(e.target.value)}
-              placeholder="Ej: Fechas no disponibles debido a alta demanda de trabajo en taller..."
-              className="w-full border p-3 rounded-xl text-sm outline-none focus:ring-2 focus:ring-red-500"
-            />
-            <div className="flex justify-end gap-3 pt-2">
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm animate-in fade-in duration-200 overflow-hidden">
+          <div className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-200">
+            <div className="p-4 sm:p-5 border-b border-red-100 bg-red-50/50 flex justify-between items-center shrink-0">
+              <h3 className="font-bold text-base sm:text-lg text-gray-800 flex items-center gap-2">
+                <AlertCircle className="text-red-500" /> Rechazar Solicitud
+              </h3>
+              <button
+                onClick={() => setSolicitudARechazar(null)}
+                className="text-gray-400 hover:text-gray-600 text-xl font-bold leading-none"
+              >
+                &times;
+              </button>
+            </div>
+            <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
+              <p className="text-xs text-gray-500">
+                Indica la razón por la que no es posible aprobar esta solicitud de <strong>{solicitudARechazar.tipo}</strong> para <strong>{solicitudARechazar.nombre_empleado}</strong>.
+              </p>
+              <textarea
+                required
+                rows="3"
+                value={motivoRechazo}
+                onChange={e => setMotivoRechazo(e.target.value)}
+                placeholder="Ej: Fechas no disponibles debido a alta demanda de trabajo en taller..."
+                className="w-full border p-3 rounded-xl text-sm outline-none focus:ring-2 focus:ring-red-500"
+              />
+            </div>
+            <div className="p-3 sm:p-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3 shrink-0">
               <button
                 onClick={() => setSolicitudARechazar(null)}
                 className="px-4 py-2 rounded-xl text-gray-600 text-sm font-medium hover:bg-gray-100"
@@ -1757,11 +1779,11 @@ export default function RRHH() {
 
       {/* MODAL REGISTRAR PERÍODO DE VACACIONES (HISTÓRICO O ASENTADO) */}
       {isPeriodoModalOpen && selectedExpediente && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="p-5 bg-gradient-to-r from-amber-600 to-amber-700 text-white flex justify-between items-center">
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm animate-in fade-in duration-200 overflow-hidden">
+          <div className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-200">
+            <div className="p-4 sm:p-5 bg-gradient-to-r from-amber-600 to-amber-700 text-white flex justify-between items-center shrink-0">
               <div>
-                <h3 className="font-bold text-lg flex items-center gap-2">
+                <h3 className="font-bold text-base sm:text-lg flex items-center gap-2">
                   <CalendarPlus size={20} /> Asentar Período de Vacaciones
                 </h3>
                 <p className="text-xs text-amber-100">
@@ -1778,75 +1800,77 @@ export default function RRHH() {
               </button>
             </div>
 
-            <form onSubmit={handleGuardarPeriodoVacaciones} className="p-6 space-y-4">
-              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900 leading-relaxed">
-                <strong>Norma de Integridad:</strong> Para que el expediente laboral sea creíble y auditable, especifique las fechas exactas en que el colaborador tomó su descanso dentro de su relación de trabajo.
-              </div>
+            <form onSubmit={handleGuardarPeriodoVacaciones} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
+                <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900 leading-relaxed">
+                  <strong>Norma de Integridad:</strong> Para que el expediente laboral sea creíble y auditable, especifique las fechas exactas en que el colaborador tomó su descanso dentro de su relación de trabajo.
+                </div>
 
-              <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Fecha de Inicio *</label>
+                    <input
+                      required
+                      type="date"
+                      value={periodoForm.fecha_inicio}
+                      onChange={e => handlePeriodoFechaChange('fecha_inicio', e.target.value)}
+                      className="w-full border p-2.5 rounded-xl text-sm outline-none focus:ring-2 focus:ring-amber-500 font-bold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Fecha de Fin *</label>
+                    <input
+                      required
+                      type="date"
+                      value={periodoForm.fecha_fin}
+                      onChange={e => handlePeriodoFechaChange('fecha_fin', e.target.value)}
+                      className="w-full border p-2.5 rounded-xl text-sm outline-none focus:ring-2 focus:ring-amber-500 font-bold"
+                    />
+                  </div>
+                </div>
+
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Fecha de Inicio *</label>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-xs font-bold text-gray-700 uppercase">Días a Descontar *</label>
+                    <span className="text-[11px] text-gray-400">Calculado por rango de fechas</span>
+                  </div>
                   <input
                     required
-                    type="date"
-                    value={periodoForm.fecha_inicio}
-                    onChange={e => handlePeriodoFechaChange('fecha_inicio', e.target.value)}
-                    className="w-full border p-2.5 rounded-xl text-sm outline-none focus:ring-2 focus:ring-amber-500 font-bold"
+                    type="number"
+                    step="0.5"
+                    min="0.5"
+                    value={periodoForm.dias}
+                    onChange={e => setPeriodoForm({ ...periodoForm, dias: e.target.value })}
+                    className="w-full border p-2.5 rounded-xl text-base outline-none focus:ring-2 focus:ring-amber-500 font-black text-red-600"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Fecha de Fin *</label>
+                  <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Período / Motivo *</label>
                   <input
                     required
-                    type="date"
-                    value={periodoForm.fecha_fin}
-                    onChange={e => handlePeriodoFechaChange('fecha_fin', e.target.value)}
-                    className="w-full border p-2.5 rounded-xl text-sm outline-none focus:ring-2 focus:ring-amber-500 font-bold"
+                    type="text"
+                    placeholder="Ej: Período 2023 - 2024, Vacaciones Diciembre 2024..."
+                    value={periodoForm.periodo_correspondiente}
+                    onChange={e => setPeriodoForm({ ...periodoForm, periodo_correspondiente: e.target.value })}
+                    className="w-full border p-2.5 rounded-xl text-sm outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Observaciones / Soporte</label>
+                  <textarea
+                    rows="2"
+                    placeholder="Observaciones de autorización, memo o constancia física..."
+                    value={periodoForm.observaciones}
+                    onChange={e => setPeriodoForm({ ...periodoForm, observaciones: e.target.value })}
+                    className="w-full border p-2.5 rounded-xl text-sm outline-none focus:ring-2 focus:ring-amber-500"
                   />
                 </div>
               </div>
 
-              <div>
-                <div className="flex justify-between items-center mb-1">
-                  <label className="block text-xs font-bold text-gray-700 uppercase">Días a Descontar *</label>
-                  <span className="text-[11px] text-gray-400">Calculado por rango de fechas</span>
-                </div>
-                <input
-                  required
-                  type="number"
-                  step="0.5"
-                  min="0.5"
-                  value={periodoForm.dias}
-                  onChange={e => setPeriodoForm({ ...periodoForm, dias: e.target.value })}
-                  className="w-full border p-2.5 rounded-xl text-base outline-none focus:ring-2 focus:ring-amber-500 font-black text-red-600"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Período / Motivo *</label>
-                <input
-                  required
-                  type="text"
-                  placeholder="Ej: Período 2023 - 2024, Vacaciones Diciembre 2024..."
-                  value={periodoForm.periodo_correspondiente}
-                  onChange={e => setPeriodoForm({ ...periodoForm, periodo_correspondiente: e.target.value })}
-                  className="w-full border p-2.5 rounded-xl text-sm outline-none focus:ring-2 focus:ring-amber-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Observaciones / Soporte</label>
-                <textarea
-                  rows="2"
-                  placeholder="Observaciones de autorización, memo o constancia física..."
-                  value={periodoForm.observaciones}
-                  onChange={e => setPeriodoForm({ ...periodoForm, observaciones: e.target.value })}
-                  className="w-full border p-2.5 rounded-xl text-sm outline-none focus:ring-2 focus:ring-amber-500"
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 pt-3 border-t border-gray-100">
+              <div className="p-3 sm:p-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3 shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsPeriodoModalOpen(false)}
@@ -1868,18 +1892,29 @@ export default function RRHH() {
 
       {/* MODAL CONFIRMAR ELIMINACIÓN DE PERÍODO DE VACACIONES */}
       {periodoAEliminar && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden p-6 space-y-4">
-            <h3 className="font-bold text-lg text-gray-800 flex items-center gap-2">
-              <AlertCircle className="text-red-500" /> Eliminar Registro de Vacaciones
-            </h3>
-            <p className="text-sm text-gray-600">
-              ¿Está seguro de eliminar el período registrado del <strong>{periodoAEliminar.fecha_inicio}</strong> al <strong>{periodoAEliminar.fecha_fin}</strong> (<strong>{periodoAEliminar.dias} días</strong>)?
-            </p>
-            <p className="text-xs text-amber-700 bg-amber-50 p-3 rounded-xl border border-amber-200">
-              Los <strong>{periodoAEliminar.dias} días</strong> se reintegrarán automáticamente al saldo disponible de vacaciones del colaborador.
-            </p>
-            <div className="flex justify-end gap-3 pt-2">
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm animate-in fade-in duration-200 overflow-hidden">
+          <div className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-200">
+            <div className="p-4 sm:p-5 border-b border-red-100 bg-red-50/50 flex justify-between items-center shrink-0">
+              <h3 className="font-bold text-base sm:text-lg text-gray-800 flex items-center gap-2">
+                <AlertCircle className="text-red-500" /> Eliminar Registro de Vacaciones
+              </h3>
+              <button
+                type="button"
+                onClick={() => setPeriodoAEliminar(null)}
+                className="text-gray-400 hover:text-gray-600 text-xl font-bold leading-none"
+              >
+                &times;
+              </button>
+            </div>
+            <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
+              <p className="text-sm text-gray-600">
+                ¿Está seguro de eliminar el período registrado del <strong>{periodoAEliminar.fecha_inicio}</strong> al <strong>{periodoAEliminar.fecha_fin}</strong> (<strong>{periodoAEliminar.dias} días</strong>)?
+              </p>
+              <p className="text-xs text-amber-700 bg-amber-50 p-3 rounded-xl border border-amber-200">
+                Los <strong>{periodoAEliminar.dias} días</strong> se reintegrarán automáticamente al saldo disponible de vacaciones del colaborador.
+              </p>
+            </div>
+            <div className="p-3 sm:p-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3 shrink-0">
               <button
                 type="button"
                 onClick={() => setPeriodoAEliminar(null)}

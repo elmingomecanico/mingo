@@ -100,16 +100,16 @@ export default function MoneyCounterModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-3 md:p-6 backdrop-blur-sm animate-in fade-in">
-      <div className="bg-white rounded-3xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col max-h-[95vh]">
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm animate-in fade-in duration-200 overflow-hidden">
+      <div className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-200">
         {/* Cabecera */}
-        <div className="p-4 md:p-5 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-blue-700 via-indigo-700 to-blue-800 text-white">
+        <div className="p-4 sm:p-5 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-blue-700 via-indigo-700 to-blue-800 text-white shrink-0">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-white/10 rounded-2xl backdrop-blur-sm">
               <Calculator size={24} className="text-blue-100" />
             </div>
             <div>
-              <h2 className="text-lg font-black tracking-tight">{title}</h2>
+              <h2 className="text-base sm:text-lg font-black tracking-tight">{title}</h2>
               <p className="text-xs text-blue-100">{subtitle}</p>
             </div>
           </div>
@@ -122,7 +122,7 @@ export default function MoneyCounterModal({
         </div>
 
         {/* Barra de Controles y Tipo de Cambio */}
-        <div className="bg-gray-50 border-b border-gray-200 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="bg-gray-50 border-b border-gray-200 px-4 py-3 flex flex-wrap items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold text-gray-500 uppercase">Moneda:</span>
             <div className="inline-flex bg-gray-200 p-1 rounded-xl">
@@ -341,7 +341,7 @@ export default function MoneyCounterModal({
         </div>
 
         {/* Resumen Final y Acciones */}
-        <div className="p-4 md:p-5 bg-gray-50 border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="p-3 sm:p-4 bg-gray-50 border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-4 shrink-0">
           <div className="flex flex-wrap items-center gap-4 text-center sm:text-left">
             <div className="bg-white px-4 py-2 rounded-xl border border-gray-200 shadow-sm">
               <span className="block text-[10px] uppercase font-bold text-gray-400">Total Córdobas</span>

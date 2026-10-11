@@ -1477,84 +1477,92 @@ export default function Compras() {
 
       {/* ================= MODAL EDITAR PRODUCTO MAESTRO ================= */}
       {isEditProductModalOpen && editingProduct && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
-            <div className="p-5 border-b border-gray-100 bg-blue-50/70 flex justify-between items-center text-blue-900">
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm animate-in fade-in overflow-hidden">
+          <div className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+            <div className="p-4 sm:p-5 border-b border-gray-100 bg-blue-50/70 flex justify-between items-center text-blue-900 shrink-0">
               <div className="flex items-center gap-2">
                 <div className="p-2 rounded-xl bg-blue-600 text-white">
                   <Edit2 size={18} />
                 </div>
                 <div>
-                  <h2 className="text-lg font-black">Editar Datos del Producto</h2>
+                  <h2 className="text-base sm:text-lg font-black">Editar Datos del Producto</h2>
                   <p className="text-xs text-blue-700 font-mono">{editingProduct.id}</p>
                 </div>
               </div>
-              <button onClick={() => setIsEditProductModalOpen(false)} className="text-gray-400 hover:text-gray-600 font-bold text-2xl">&times;</button>
+              <button 
+                type="button" 
+                onClick={() => setIsEditProductModalOpen(false)} 
+                className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-white/50 transition-colors font-bold text-xl"
+              >
+                &times;
+              </button>
             </div>
 
-            <form onSubmit={handleSaveEditedProduct} className="p-5 space-y-4 overflow-y-auto">
-              <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Nombre Completo del Producto *</label>
-                <input 
-                  required
-                  type="text"
-                  value={editProductForm.name}
-                  onChange={e => setEditProductForm({ ...editProductForm, name: e.target.value })}
-                  className="w-full border border-gray-200 p-2.5 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
+            <form onSubmit={handleSaveEditedProduct} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1">
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Categoría</label>
-                  <select
-                    value={editProductForm.cat}
-                    onChange={e => setEditProductForm({ ...editProductForm, cat: e.target.value })}
-                    className="w-full border border-gray-200 p-2.5 rounded-xl bg-gray-50 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    {(categorias.length > 0 ? categorias : ['Repuestos', 'Llantas', 'Aceites', 'Baterías', 'Accesorios']).map((c, i) => (
-                      <option key={i} value={c}>{c}</option>
-                    ))}
-                  </select>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Nombre Completo del Producto *</label>
+                  <input 
+                    required
+                    type="text"
+                    value={editProductForm.name}
+                    onChange={e => setEditProductForm({ ...editProductForm, name: e.target.value })}
+                    className="w-full border border-gray-200 p-2.5 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Categoría</label>
+                    <select
+                      value={editProductForm.cat}
+                      onChange={e => setEditProductForm({ ...editProductForm, cat: e.target.value })}
+                      className="w-full border border-gray-200 p-2.5 rounded-xl bg-gray-50 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      {(categorias.length > 0 ? categorias : ['Repuestos', 'Llantas', 'Aceites', 'Baterías', 'Accesorios']).map((c, i) => (
+                        <option key={i} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Ubicación / Estante</label>
+                    <select
+                      value={editProductForm.ubicacion}
+                      onChange={e => setEditProductForm({ ...editProductForm, ubicacion: e.target.value })}
+                      className="w-full border border-gray-200 p-2.5 rounded-xl bg-gray-50 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">Sin asignar</option>
+                      {ubicaciones.map((u, i) => (
+                        <option key={i} value={u}>{u}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Ubicación / Estante</label>
-                  <select
-                    value={editProductForm.ubicacion}
-                    onChange={e => setEditProductForm({ ...editProductForm, ubicacion: e.target.value })}
-                    className="w-full border border-gray-200 p-2.5 rounded-xl bg-gray-50 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Sin asignar</option>
-                    {ubicaciones.map((u, i) => (
-                      <option key={i} value={u}>{u}</option>
-                    ))}
-                  </select>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Modelos de Moto Compatibles (Separados por coma)</label>
+                  <input 
+                    type="text"
+                    placeholder="Ej: Pulsar 180, Boxer 100, YBR 125"
+                    value={editProductForm.compatibilidadText}
+                    onChange={e => setEditProductForm({ ...editProductForm, compatibilidadText: e.target.value })}
+                    className="w-full border border-gray-200 p-2.5 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                  />
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Modelos de Moto Compatibles (Separados por coma)</label>
-                <input 
-                  type="text"
-                  placeholder="Ej: Pulsar 180, Boxer 100, YBR 125"
-                  value={editProductForm.compatibilidadText}
-                  onChange={e => setEditProductForm({ ...editProductForm, compatibilidadText: e.target.value })}
-                  className="w-full border border-gray-200 p-2.5 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              <div className="pt-3 flex justify-end gap-3 border-t border-gray-100">
+              <div className="p-3 sm:p-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3 shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsEditProductModalOpen(false)}
-                  className="px-4 py-2.5 rounded-xl text-gray-600 font-bold hover:bg-gray-100 text-sm"
+                  className="px-4 py-2.5 rounded-xl text-gray-600 font-bold hover:bg-gray-100 text-xs sm:text-sm"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-md shadow-blue-200 transition-all active:scale-95"
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-5 sm:px-6 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-md shadow-blue-200 transition-all active:scale-95"
                 >
                   Guardar Cambios
                 </button>
@@ -1566,101 +1574,109 @@ export default function Compras() {
 
       {/* ================= MODAL CREAR NUEVO PRODUCTO RÁPIDO ================= */}
       {isNewProductModalOpen && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
-            <div className="p-5 border-b border-gray-100 bg-emerald-50/70 flex justify-between items-center text-emerald-900">
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm animate-in fade-in overflow-hidden">
+          <div className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+            <div className="p-4 sm:p-5 border-b border-gray-100 bg-emerald-50/70 flex justify-between items-center text-emerald-900 shrink-0">
               <div className="flex items-center gap-2">
                 <div className="p-2 rounded-xl bg-emerald-600 text-white">
                   <PackagePlus size={20} />
                 </div>
                 <div>
-                  <h2 className="text-lg font-black">Crear Nuevo Producto</h2>
+                  <h2 className="text-base sm:text-lg font-black">Crear Nuevo Producto</h2>
                   <p className="text-xs text-emerald-700">Se agregará al catálogo maestro y a la factura actual</p>
                 </div>
               </div>
-              <button onClick={() => setIsNewProductModalOpen(false)} className="text-gray-400 hover:text-gray-600 font-bold text-2xl">&times;</button>
+              <button 
+                type="button" 
+                onClick={() => setIsNewProductModalOpen(false)} 
+                className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-white/50 transition-colors font-bold text-xl"
+              >
+                &times;
+              </button>
             </div>
 
-            <form onSubmit={handleSaveNewProduct} className="p-5 space-y-4 overflow-y-auto">
-              <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Nombre del Producto *</label>
-                <input 
-                  required
-                  type="text"
-                  placeholder="Ej: Llanta Delantera 2.75-18 Tubeless"
-                  value={newProductForm.name}
-                  onChange={e => setNewProductForm({ ...newProductForm, name: e.target.value })}
-                  className="w-full border border-gray-200 p-2.5 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
+            <form onSubmit={handleSaveNewProduct} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1">
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Código / Código de Barras *</label>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Nombre del Producto *</label>
                   <input 
                     required
                     type="text"
-                    placeholder="PROD-0005 o código de barras"
-                    value={newProductForm.id}
-                    onChange={e => setNewProductForm({ ...newProductForm, id: e.target.value })}
-                    className="w-full border border-gray-200 p-2.5 rounded-xl text-sm font-mono outline-none focus:ring-2 focus:ring-emerald-500"
+                    placeholder="Ej: Llanta Delantera 2.75-18 Tubeless"
+                    value={newProductForm.name}
+                    onChange={e => setNewProductForm({ ...newProductForm, name: e.target.value })}
+                    className="w-full border border-gray-200 p-2.5 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Categoría</label>
-                  <select
-                    value={newProductForm.cat}
-                    onChange={e => setNewProductForm({ ...newProductForm, cat: e.target.value })}
-                    className="w-full border border-gray-200 p-2.5 rounded-xl bg-gray-50 text-sm font-medium outline-none focus:ring-2 focus:ring-emerald-500"
-                  >
-                    {(categorias.length > 0 ? categorias : ['Repuestos', 'Llantas', 'Aceites', 'Baterías', 'Accesorios']).map((c, i) => (
-                      <option key={i} value={c}>{c}</option>
-                    ))}
-                  </select>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Código / Código de Barras *</label>
+                    <input 
+                      required
+                      type="text"
+                      placeholder="PROD-0005 o código de barras"
+                      value={newProductForm.id}
+                      onChange={e => setNewProductForm({ ...newProductForm, id: e.target.value })}
+                      className="w-full border border-gray-200 p-2.5 rounded-xl text-sm font-mono outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Categoría</label>
+                    <select
+                      value={newProductForm.cat}
+                      onChange={e => setNewProductForm({ ...newProductForm, cat: e.target.value })}
+                      className="w-full border border-gray-200 p-2.5 rounded-xl bg-gray-50 text-sm font-medium outline-none focus:ring-2 focus:ring-emerald-500"
+                    >
+                      {(categorias.length > 0 ? categorias : ['Repuestos', 'Llantas', 'Aceites', 'Baterías', 'Accesorios']).map((c, i) => (
+                        <option key={i} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Costo de Compra (C$) *</label>
+                    <input 
+                      required
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="0.00"
+                      value={newProductForm.cost}
+                      onChange={e => setNewProductForm({ ...newProductForm, cost: e.target.value })}
+                      className="w-full border border-gray-200 p-2.5 rounded-xl text-base font-black text-gray-900 outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Precio Venta Sugerido (C$)</label>
+                    <input 
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="0.00"
+                      value={newProductForm.price}
+                      onChange={e => setNewProductForm({ ...newProductForm, price: e.target.value })}
+                      className="w-full border border-gray-200 p-2.5 rounded-xl text-base font-black text-emerald-700 outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Costo de Compra (C$) *</label>
-                  <input 
-                    required
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="0.00"
-                    value={newProductForm.cost}
-                    onChange={e => setNewProductForm({ ...newProductForm, cost: e.target.value })}
-                    className="w-full border border-gray-200 p-2.5 rounded-xl text-base font-black text-gray-900 outline-none focus:ring-2 focus:ring-emerald-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Precio Venta Sugerido (C$)</label>
-                  <input 
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="0.00"
-                    value={newProductForm.price}
-                    onChange={e => setNewProductForm({ ...newProductForm, price: e.target.value })}
-                    className="w-full border border-gray-200 p-2.5 rounded-xl text-base font-black text-emerald-700 outline-none focus:ring-2 focus:ring-emerald-500"
-                  />
-                </div>
-              </div>
-
-              <div className="pt-3 flex justify-end gap-3 border-t border-gray-100">
+              <div className="p-3 sm:p-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3 shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsNewProductModalOpen(false)}
-                  className="px-4 py-2.5 rounded-xl text-gray-600 font-bold hover:bg-gray-100 text-sm"
+                  className="px-4 py-2.5 rounded-xl text-gray-600 font-bold hover:bg-gray-100 text-xs sm:text-sm"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-md shadow-emerald-200 transition-all active:scale-95"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 sm:px-6 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-md shadow-emerald-200 transition-all active:scale-95"
                 >
                   Guardar y Agregar a Factura
                 </button>
@@ -1673,63 +1689,71 @@ export default function Compras() {
 
       {/* ================= MODAL CREAR NUEVO PROVEEDOR RÁPIDO ================= */}
       {isNewProvModalOpen && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col">
-            <div className="p-5 border-b border-gray-100 bg-gray-50/70 flex justify-between items-center">
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm animate-in fade-in overflow-hidden">
+          <div className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+            <div className="p-4 sm:p-5 border-b border-gray-100 bg-gray-50/70 flex justify-between items-center shrink-0">
               <div className="flex items-center gap-2">
                 <Truck className="text-blue-600" size={20} />
                 <h3 className="text-base font-bold text-gray-800">Registrar Nuevo Proveedor</h3>
               </div>
-              <button onClick={() => setIsNewProvModalOpen(false)} className="text-gray-400 hover:text-gray-600 text-2xl font-bold">&times;</button>
+              <button 
+                type="button" 
+                onClick={() => setIsNewProvModalOpen(false)} 
+                className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors font-bold text-xl"
+              >
+                &times;
+              </button>
             </div>
 
-            <form onSubmit={handleSaveNewProvider} className="p-5 space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Nombre o Razón Social *</label>
-                <input 
-                  required
-                  type="text" 
-                  placeholder="Ej: Distribuidora Motopartes S.A." 
-                  value={newProvForm.nombre}
-                  onChange={e => setNewProvForm({ ...newProvForm, nombre: e.target.value })}
-                  className="w-full border p-2.5 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
+            <form onSubmit={handleSaveNewProvider} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1">
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">RUC / Cédula</label>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Nombre o Razón Social *</label>
                   <input 
+                    required
                     type="text" 
-                    placeholder="Ej: J031000..." 
-                    value={newProvForm.ruc}
-                    onChange={e => setNewProvForm({ ...newProvForm, ruc: e.target.value })}
+                    placeholder="Ej: Distribuidora Motopartes S.A." 
+                    value={newProvForm.nombre}
+                    onChange={e => setNewProvForm({ ...newProvForm, nombre: e.target.value })}
                     className="w-full border p-2.5 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Teléfono</label>
-                  <input 
-                    type="text" 
-                    placeholder="Ej: 2255-0000" 
-                    value={newProvForm.telefono}
-                    onChange={e => setNewProvForm({ ...newProvForm, telefono: e.target.value })}
-                    className="w-full border p-2.5 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">RUC / Cédula</label>
+                    <input 
+                      type="text" 
+                      placeholder="Ej: J031000..." 
+                      value={newProvForm.ruc}
+                      onChange={e => setNewProvForm({ ...newProvForm, ruc: e.target.value })}
+                      className="w-full border p-2.5 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Teléfono</label>
+                    <input 
+                      type="text" 
+                      placeholder="Ej: 2255-0000" 
+                      value={newProvForm.telefono}
+                      onChange={e => setNewProvForm({ ...newProvForm, telefono: e.target.value })}
+                      className="w-full border p-2.5 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div className="pt-3 flex justify-end gap-3 border-t border-gray-100">
+              <div className="p-3 sm:p-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3 shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsNewProvModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-gray-600 font-bold hover:bg-gray-100 text-sm"
+                  className="px-4 py-2.5 rounded-xl text-gray-600 font-bold hover:bg-gray-100 text-xs sm:text-sm"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-md shadow-blue-200 transition-all active:scale-95"
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-5 sm:px-6 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-md shadow-blue-200 transition-all active:scale-95"
                 >
                   Guardar y Seleccionar
                 </button>

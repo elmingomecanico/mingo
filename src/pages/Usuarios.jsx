@@ -252,169 +252,177 @@ export default function Usuarios() {
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in overflow-y-auto">
-          <div className="bg-white rounded-2xl w-full max-w-2xl shadow-xl overflow-hidden flex flex-col my-8">
-            <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-              <h2 className="text-lg font-bold text-gray-800">
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm animate-in fade-in overflow-hidden">
+          <div className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+            <div className="p-4 sm:p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/80 shrink-0">
+              <h2 className="text-base sm:text-lg font-black text-gray-800">
                 {editingId ? 'Editar Usuario' : 'Nuevo Usuario'}
               </h2>
-              <button type="button" onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600 font-bold text-xl">&times;</button>
+              <button 
+                type="button" 
+                onClick={() => setIsModalOpen(false)} 
+                className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors font-bold text-xl"
+              >
+                &times;
+              </button>
             </div>
             
-            <form onSubmit={handleSave} className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Nombre Completo *</label>
-                <input required type="text" value={formData.nombre_completo} onChange={e => setFormData({...formData, nombre_completo: e.target.value})} className="w-full border p-2.5 rounded-lg outline-none focus:border-blue-500" placeholder="Ej: Mario Rodríguez" />
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
+            <form onSubmit={handleSave} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Usuario (Login) *</label>
-                  <input required type="text" value={formData.usuario} onChange={e => setFormData({...formData, usuario: e.target.value})} className="w-full border p-2.5 rounded-lg outline-none focus:border-blue-500" placeholder="mario.r" />
+                  <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Nombre Completo *</label>
+                  <input required type="text" value={formData.nombre_completo} onChange={e => setFormData({...formData, nombre_completo: e.target.value})} className="w-full border p-2.5 rounded-xl outline-none focus:border-blue-500 text-sm" placeholder="Ej: Mario Rodríguez" />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Contraseña *</label>
-                  <input required type="text" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="w-full border p-2.5 rounded-lg outline-none focus:border-blue-500" placeholder="••••••••" />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Nivel de Acceso (Rol)</label>
-                  <select value={formData.rol} onChange={e => setFormData({...formData, rol: e.target.value})} className="w-full border p-2.5 rounded-lg outline-none focus:border-blue-500">
-                    <option value="SuperAdmin">Super Administrador</option>
-                    <option value="Administrador">Administrador</option>
-                    <option value="Usuario">Usuario Regular</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Función (Puesto)</label>
-                  <Select
-                    options={FUNCIONES_OPTIONS}
-                    value={formData.funcion}
-                    onChange={(selected) => setFormData({ ...formData, funcion: selected })}
-                    placeholder="Buscar función..."
-                    className="react-select-container"
-                    classNamePrefix="react-select"
-                  />
-                </div>
-              </div>
-
-              <div className="bg-green-50 p-4 rounded-xl border border-green-100 space-y-4">
-                <h3 className="font-bold text-green-800 text-sm flex items-center gap-2">
-                  Estructura Salarial (RRHH)
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-green-800 mb-1">Tipo de Salario</label>
-                    <select value={formData.tipo_salario} onChange={e => setFormData({...formData, tipo_salario: e.target.value})} className="w-full border border-green-200 bg-white p-2.5 rounded-lg outline-none focus:border-green-500">
-                      <option value="Comisión">100% Comisión</option>
-                      <option value="Fijo">Sueldo Fijo</option>
-                      <option value="Mixto">Fijo + Comisión</option>
+                    <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Usuario (Login) *</label>
+                    <input required type="text" value={formData.usuario} onChange={e => setFormData({...formData, usuario: e.target.value})} className="w-full border p-2.5 rounded-xl outline-none focus:border-blue-500 text-sm font-mono" placeholder="mario.r" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Contraseña *</label>
+                    <input required type="text" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="w-full border p-2.5 rounded-xl outline-none focus:border-blue-500 text-sm" placeholder="••••••••" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Nivel de Acceso (Rol)</label>
+                    <select value={formData.rol} onChange={e => setFormData({...formData, rol: e.target.value})} className="w-full border p-2.5 rounded-xl outline-none focus:border-blue-500 text-sm bg-white">
+                      <option value="SuperAdmin">Super Administrador</option>
+                      <option value="Administrador">Administrador</option>
+                      <option value="Usuario">Usuario Regular</option>
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-green-800 mb-1">Sueldo Base (C$)</label>
-                    <input 
-                      type="number" 
-                      disabled={formData.tipo_salario === 'Comisión'}
-                      value={formData.salario_base} 
-                      onChange={e => setFormData({...formData, salario_base: e.target.value})} 
-                      className="w-full border border-green-200 disabled:bg-gray-100 disabled:text-gray-400 bg-white p-2.5 rounded-lg outline-none focus:border-green-500" 
-                      placeholder="0.00" 
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-green-800 mb-1">Comisión (%)</label>
-                    <input 
-                      type="number" 
-                      disabled={formData.tipo_salario === 'Fijo'}
-                      value={formData.porcentaje_comision} 
-                      onChange={e => setFormData({...formData, porcentaje_comision: e.target.value})} 
-                      className="w-full border border-green-200 disabled:bg-gray-100 disabled:text-gray-400 bg-white p-2.5 rounded-lg outline-none focus:border-green-500" 
-                      placeholder="50" 
+                    <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Función (Puesto)</label>
+                    <Select
+                      options={FUNCIONES_OPTIONS}
+                      value={formData.funcion}
+                      onChange={(selected) => setFormData({ ...formData, funcion: selected })}
+                      placeholder="Buscar función..."
+                      className="react-select-container text-sm"
+                      classNamePrefix="react-select"
                     />
                   </div>
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Permisos Especiales</label>
-                {formData.rol === 'SuperAdmin' ? (
-                  <div className="bg-purple-50 text-purple-700 p-4 rounded-xl text-sm font-medium border border-purple-100 flex items-center gap-2">
-                    <ShieldCheck size={18} />
-                    Los Super Administradores tienen acceso total e irrestricto al sistema.
-                  </div>
-                ) : (
-                  <div className="border border-gray-200 rounded-xl overflow-hidden bg-gray-50/30">
-                    <div className="grid grid-cols-1 md:grid-cols-2">
-                      {Object.entries(PERMISOS_CATEGORIAS).map(([cat, perms]) => (
-                        <div key={cat} className="p-4 border-b border-gray-200 last:border-0 odd:border-r">
-                          <div className="flex justify-between items-center mb-2">
-                            <h4 className="font-bold text-gray-800 text-sm">{cat}</h4>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const allCatPerms = perms.map(p => p.id);
-                                const hasAll = allCatPerms.every(p => formData.permisos.includes(p));
-                                if (hasAll) {
-                                  setFormData({ ...formData, permisos: formData.permisos.filter(p => !allCatPerms.includes(p)) });
-                                } else {
-                                  const newPerms = new Set([...formData.permisos, ...allCatPerms]);
-                                  setFormData({ ...formData, permisos: Array.from(newPerms) });
-                                }
-                              }}
-                              className="text-xs font-bold text-blue-600 hover:text-blue-800"
-                            >
-                              Marcar Todo
-                            </button>
-                          </div>
-                          <div className="space-y-2">
-                            {perms.map(p => (
-                              <label key={p.id} className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer hover:text-gray-900">
-                                <input
-                                  type="checkbox"
-                                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-4 h-4"
-                                  checked={formData.permisos.includes(p.id)}
-                                  onChange={(e) => {
-                                    if (e.target.checked) {
-                                      setFormData({ ...formData, permisos: [...formData.permisos, p.id] });
-                                    } else {
-                                      setFormData({ ...formData, permisos: formData.permisos.filter(x => x !== p.id) });
-                                    }
-                                  }}
-                                />
-                                {p.label}
-                              </label>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
+                <div className="bg-green-50 p-3.5 sm:p-4 rounded-2xl border border-green-100 space-y-3">
+                  <h3 className="font-bold text-green-900 text-xs sm:text-sm flex items-center gap-2">
+                    Estructura Salarial (RRHH)
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-green-800 mb-1 uppercase">Tipo de Salario</label>
+                      <select value={formData.tipo_salario} onChange={e => setFormData({...formData, tipo_salario: e.target.value})} className="w-full border border-green-200 bg-white p-2.5 rounded-xl outline-none focus:border-green-500 text-xs sm:text-sm">
+                        <option value="Comisión">100% Comisión</option>
+                        <option value="Fijo">Sueldo Fijo</option>
+                        <option value="Mixto">Fijo + Comisión</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-green-800 mb-1 uppercase">Sueldo Base (C$)</label>
+                      <input 
+                        type="number" 
+                        disabled={formData.tipo_salario === 'Comisión'}
+                        value={formData.salario_base} 
+                        onChange={e => setFormData({...formData, salario_base: e.target.value})} 
+                        className="w-full border border-green-200 disabled:bg-gray-100 disabled:text-gray-400 bg-white p-2.5 rounded-xl outline-none focus:border-green-500 text-xs sm:text-sm" 
+                        placeholder="0.00" 
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-green-800 mb-1 uppercase">Comisión (%)</label>
+                      <input 
+                        type="number" 
+                        disabled={formData.tipo_salario === 'Fijo'}
+                        value={formData.porcentaje_comision} 
+                        onChange={e => setFormData({...formData, porcentaje_comision: e.target.value})} 
+                        className="w-full border border-green-200 disabled:bg-gray-100 disabled:text-gray-400 bg-white p-2.5 rounded-xl outline-none focus:border-green-500 text-xs sm:text-sm" 
+                        placeholder="50" 
+                      />
                     </div>
                   </div>
-                )}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-2 uppercase">Permisos Especiales</label>
+                  {formData.rol === 'SuperAdmin' ? (
+                    <div className="bg-purple-50 text-purple-700 p-4 rounded-2xl text-xs sm:text-sm font-medium border border-purple-100 flex items-center gap-2">
+                      <ShieldCheck size={18} className="shrink-0" />
+                      Los Super Administradores tienen acceso total e irrestricto al sistema.
+                    </div>
+                  ) : (
+                    <div className="border border-gray-200 rounded-2xl overflow-hidden bg-gray-50/30">
+                      <div className="grid grid-cols-1 sm:grid-cols-2">
+                        {Object.entries(PERMISOS_CATEGORIAS).map(([cat, perms]) => (
+                          <div key={cat} className="p-3 sm:p-4 border-b border-gray-200 last:border-0 odd:border-r">
+                            <div className="flex justify-between items-center mb-2">
+                              <h4 className="font-bold text-gray-800 text-xs sm:text-sm">{cat}</h4>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const allCatPerms = perms.map(p => p.id);
+                                  const hasAll = allCatPerms.every(p => formData.permisos.includes(p));
+                                  if (hasAll) {
+                                    setFormData({ ...formData, permisos: formData.permisos.filter(p => !allCatPerms.includes(p)) });
+                                  } else {
+                                    const newPerms = new Set([...formData.permisos, ...allCatPerms]);
+                                    setFormData({ ...formData, permisos: Array.from(newPerms) });
+                                  }
+                                }}
+                                className="text-[11px] font-bold text-blue-600 hover:text-blue-800"
+                              >
+                                Marcar Todo
+                              </button>
+                            </div>
+                            <div className="space-y-1.5 sm:space-y-2">
+                              {perms.map(p => (
+                                <label key={p.id} className="flex items-center gap-2 text-xs sm:text-sm text-gray-600 cursor-pointer hover:text-gray-900">
+                                  <input
+                                    type="checkbox"
+                                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-4 h-4"
+                                    checked={formData.permisos.includes(p.id)}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setFormData({ ...formData, permisos: [...formData.permisos, p.id] });
+                                      } else {
+                                        setFormData({ ...formData, permisos: formData.permisos.filter(x => x !== p.id) });
+                                      }
+                                    }}
+                                  />
+                                  {p.label}
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Sucursal Asignada</label>
+                    <select value={formData.id_sucursal} onChange={e => setFormData({...formData, id_sucursal: e.target.value})} className="w-full border p-2.5 rounded-xl outline-none focus:border-blue-500 text-xs sm:text-sm bg-white">
+                      <option value="SUC-01">Sucursal Principal (SUC-01)</option>
+                      <option value="SUC-02">Sucursal Norte (SUC-02)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Estado</label>
+                    <select value={formData.estado} onChange={e => setFormData({...formData, estado: e.target.value})} className="w-full border p-2.5 rounded-xl outline-none focus:border-blue-500 text-xs sm:text-sm bg-white">
+                      <option value="Activo">Activo</option>
+                      <option value="Inactivo">Inactivo</option>
+                    </select>
+                  </div>
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Sucursal Asignada</label>
-                  <select value={formData.id_sucursal} onChange={e => setFormData({...formData, id_sucursal: e.target.value})} className="w-full border p-2.5 rounded-lg outline-none focus:border-blue-500">
-                    <option value="SUC-01">Sucursal Principal (SUC-01)</option>
-                    <option value="SUC-02">Sucursal Norte (SUC-02)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Estado</label>
-                  <select value={formData.estado} onChange={e => setFormData({...formData, estado: e.target.value})} className="w-full border p-2.5 rounded-lg outline-none focus:border-blue-500">
-                    <option value="Activo">Activo</option>
-                    <option value="Inactivo">Inactivo</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="pt-4 flex justify-end gap-3 border-t border-gray-100 mt-6">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2.5 rounded-lg text-gray-600 font-medium hover:bg-gray-100 transition-colors">Cancelar</button>
-                <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-bold shadow-md shadow-blue-200 transition-all active:scale-95">Guardar Usuario</button>
+              <div className="p-3 sm:p-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3 shrink-0">
+                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2.5 rounded-xl text-gray-600 font-bold hover:bg-gray-100 text-xs sm:text-sm transition-colors">Cancelar</button>
+                <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-5 sm:px-6 py-2.5 rounded-xl font-bold shadow-md shadow-blue-200 transition-all active:scale-95 text-xs sm:text-sm">Guardar Usuario</button>
               </div>
             </form>
           </div>

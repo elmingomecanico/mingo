@@ -89,16 +89,16 @@ export default function CashOpenModal({
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-3 md:p-6 backdrop-blur-sm animate-in fade-in">
-        <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[95vh]">
+      <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm animate-in fade-in duration-200 overflow-hidden">
+        <div className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-200">
           {/* Header */}
-          <div className="p-5 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-emerald-600 to-teal-700 text-white">
+          <div className="p-4 sm:p-5 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-emerald-600 to-teal-700 text-white shrink-0">
             <div className="flex items-center gap-3">
               <div className="p-2.5 bg-white/20 rounded-2xl backdrop-blur-sm">
                 <LockOpen size={24} className="text-white" />
               </div>
               <div>
-                <h2 className="text-lg font-black tracking-tight">Apertura de Caja (Iniciar Turno)</h2>
+                <h2 className="text-base sm:text-lg font-black tracking-tight">Apertura de Caja (Iniciar Turno)</h2>
                 <p className="text-xs text-emerald-100">Ingrese el fondo inicial en efectivo para comenzar a facturar</p>
               </div>
             </div>
@@ -110,7 +110,8 @@ export default function CashOpenModal({
             </button>
           </div>
 
-          <form onSubmit={handleSubmit} className="p-5 md:p-6 space-y-4 overflow-y-auto">
+          <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+            <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
             {/* Metadatos informativos */}
             <div className="grid grid-cols-2 gap-3 bg-gray-50 p-3 rounded-2xl border border-gray-100 text-xs">
               <div>
@@ -221,8 +222,10 @@ export default function CashOpenModal({
               />
             </div>
 
+            </div>
+
             {/* Acciones */}
-            <div className="pt-3 border-t border-gray-100 flex items-center justify-end gap-3">
+            <div className="p-3 sm:p-4 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-3 shrink-0">
               <button
                 type="button"
                 onClick={onClose}

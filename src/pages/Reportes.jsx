@@ -368,20 +368,20 @@ export default function Reportes() {
 
       {/* MODAL PARA REIMPRIMIR ACTA DE CIERRE */}
       {selectedTurnoPrint && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-3 md:p-6 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden flex flex-col max-h-[95vh]">
-            <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50">
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm animate-in fade-in duration-200 overflow-hidden">
+          <div className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+            <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50 shrink-0">
               <span className="text-xs font-bold text-slate-800 bg-slate-100 px-2.5 py-1 rounded-full">
                 Acta de Cierre: {selectedTurnoPrint.numero_turno}
               </span>
-              <button onClick={() => setSelectedTurnoPrint(null)} className="text-gray-400 hover:text-gray-600 font-bold text-xl">&times;</button>
+              <button onClick={() => setSelectedTurnoPrint(null)} className="text-gray-400 hover:text-gray-600 font-bold text-xl leading-none">&times;</button>
             </div>
 
             <div className="p-4 overflow-y-auto bg-gray-100 flex-1 flex justify-center">
               <CashTicketPrinter data={selectedTurnoPrint} type="cierre" isPreview={true} />
             </div>
 
-            <div className="p-4 bg-white border-t border-gray-100 space-y-2">
+            <div className="p-3 sm:p-4 bg-white border-t border-gray-100 space-y-2 shrink-0">
               <button
                 type="button"
                 onClick={handlePrint}

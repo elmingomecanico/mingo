@@ -163,16 +163,16 @@ export default function CashCloseModal({
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-3 md:p-6 backdrop-blur-sm animate-in fade-in">
-        <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[95vh]">
+      <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm animate-in fade-in duration-200 overflow-hidden">
+        <div className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-200">
           {/* Header */}
-          <div className="p-4 md:p-5 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-gray-900 via-slate-800 to-gray-900 text-white">
+          <div className="p-4 sm:p-5 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-gray-900 via-slate-800 to-gray-900 text-white shrink-0">
             <div className="flex items-center gap-3">
               <div className="p-2.5 bg-white/10 rounded-2xl backdrop-blur-sm">
                 <Lock size={24} className="text-amber-400" />
               </div>
               <div>
-                <h2 className="text-lg font-black tracking-tight">Cierre y Arqueo de Caja</h2>
+                <h2 className="text-base sm:text-lg font-black tracking-tight">Cierre y Arqueo de Caja</h2>
                 <p className="text-xs text-gray-300">
                   Turno: <span className="font-bold text-amber-300">{activeTurno.numero_turno || 'Activo'}</span> | Sucursal: {activeTurno.sucursal}
                 </p>
@@ -186,7 +186,8 @@ export default function CashCloseModal({
             </button>
           </div>
 
-          <form onSubmit={handleConfirmClose} className="p-5 md:p-6 space-y-5 overflow-y-auto flex-1">
+          <form onSubmit={handleConfirmClose} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+            <div className="p-4 sm:p-6 space-y-5 overflow-y-auto flex-1">
             
             {/* Metadatos del Turno */}
             <div className="grid grid-cols-3 gap-2 bg-gray-50 p-3 rounded-2xl border border-gray-100 text-xs">
@@ -371,8 +372,10 @@ export default function CashCloseModal({
               />
             </div>
 
+            </div>
+
             {/* Acciones */}
-            <div className="pt-3 border-t border-gray-100 flex items-center justify-end gap-3">
+            <div className="p-3 sm:p-4 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-3 shrink-0">
               <button
                 type="button"
                 onClick={onClose}
@@ -407,20 +410,20 @@ export default function CashCloseModal({
 
       {/* Modal Impresión del Acta de Cierre */}
       {closedTurnoData && (
-        <div className="fixed inset-0 bg-black/70 z-[60] flex items-center justify-center p-3 md:p-6 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden flex flex-col max-h-[95vh]">
-            <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50">
+        <div className="fixed inset-0 bg-black/70 z-[60] flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm animate-in fade-in duration-200 overflow-hidden">
+          <div className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+            <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50 shrink-0">
               <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full">
                 ✓ Turno Cerrado: {closedTurnoData.numero_turno}
               </span>
-              <button onClick={() => { setClosedTurnoData(null); onClose(); }} className="text-gray-400 hover:text-gray-600 font-bold text-xl">&times;</button>
+              <button onClick={() => { setClosedTurnoData(null); onClose(); }} className="text-gray-400 hover:text-gray-600 font-bold text-xl leading-none">&times;</button>
             </div>
 
             <div className="p-4 overflow-y-auto bg-gray-100 flex-1 flex justify-center">
               <CashTicketPrinter data={closedTurnoData} type="cierre" isPreview={true} />
             </div>
 
-            <div className="p-4 bg-white border-t border-gray-100 space-y-2">
+            <div className="p-3 sm:p-4 bg-white border-t border-gray-100 space-y-2 shrink-0">
               <button
                 type="button"
                 onClick={handlePrint}

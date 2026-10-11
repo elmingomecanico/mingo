@@ -141,11 +141,11 @@ export default function BarcodeScannerModal({ isOpen, onClose, onScanSuccess }) 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-md animate-in fade-in duration-200 overflow-hidden">
+      <div className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-200">
         
         {/* Header */}
-        <div className="p-4 bg-gradient-to-r from-blue-900 to-indigo-900 text-white flex justify-between items-center">
+        <div className="p-4 bg-gradient-to-r from-blue-900 to-indigo-900 text-white flex justify-between items-center shrink-0">
           <div className="flex items-center gap-2">
             <Camera className="text-blue-300" size={20} />
             <div>
@@ -162,7 +162,7 @@ export default function BarcodeScannerModal({ isOpen, onClose, onScanSuccess }) 
         </div>
 
         {/* Viewport del Escáner */}
-        <div className="p-4 bg-gray-900 relative flex flex-col items-center justify-center min-h-[300px]">
+        <div className="p-4 bg-gray-900 relative flex flex-col items-center justify-center min-h-[260px] overflow-y-auto flex-1">
           {errorMsg ? (
             <div className="text-center p-6 text-red-400 space-y-2">
               <AlertCircle className="mx-auto text-red-500" size={36} />
@@ -181,7 +181,7 @@ export default function BarcodeScannerModal({ isOpen, onClose, onScanSuccess }) 
         </div>
 
         {/* Controles de Cámara y Ayuda */}
-        <div className="p-4 bg-gray-50 flex flex-col gap-3 border-t border-gray-100">
+        <div className="p-4 bg-gray-50 flex flex-col gap-3 border-t border-gray-100 shrink-0">
           {cameras.length > 1 && (
             <div className="flex items-center justify-between gap-2">
               <label className="text-xs font-bold text-gray-600 flex items-center gap-1">

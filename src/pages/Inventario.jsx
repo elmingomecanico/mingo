@@ -488,195 +488,212 @@ export default function Inventario() {
 
       {/* Modal Formulario Producto */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-2xl w-full max-w-2xl shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-              <h2 className="text-xl font-bold text-gray-800">
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm animate-in fade-in overflow-hidden">
+          <div className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+            <div className="p-4 sm:p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/80 shrink-0">
+              <h2 className="text-base sm:text-lg font-black text-gray-800">
                 {editingId ? `Editar Producto: ${editingId}` : 'Nuevo Producto'}
               </h2>
-              <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600 font-bold text-xl">&times;</button>
+              <button 
+                type="button" 
+                onClick={() => setIsModalOpen(false)} 
+                className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors font-bold text-xl"
+              >
+                &times;
+              </button>
             </div>
             
-            <form onSubmit={handleSave} className="p-6 overflow-y-auto flex-1 space-y-6">
-              
-              <div className="space-y-4">
-                <h3 className="font-bold text-blue-900 border-b pb-2">Datos Generales</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Nombre del Producto *</label>
-                    <input required type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full border p-2.5 rounded-lg outline-none focus:border-blue-500" />
+            <form onSubmit={handleSave} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-6">
+                
+                <div className="space-y-4">
+                  <h3 className="font-bold text-blue-900 border-b pb-2 text-xs sm:text-sm uppercase tracking-wider">Datos Generales</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Nombre del Producto *</label>
+                      <input required type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full border p-2.5 rounded-xl outline-none focus:border-blue-500 text-sm" placeholder="Ej: Llanta Delantera 2.75-18" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Categoría</label>
+                      <Select
+                        options={categorias.map(c => ({ value: c, label: c }))}
+                        value={formData.cat ? { value: formData.cat, label: formData.cat } : null}
+                        onChange={(selected) => setFormData({ ...formData, cat: selected ? selected.value : '' })}
+                        placeholder="Buscar categoría..."
+                        isClearable
+                        className="react-select-container text-sm"
+                        classNamePrefix="react-select"
+                      />
+                    </div>
+                    <div className="hidden sm:block"></div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Costo (Compra)</label>
+                      <input type="number" step="0.01" min="0" value={formData.cost} onChange={e => setFormData({...formData, cost: e.target.value})} className="w-full border p-2.5 rounded-xl outline-none focus:border-blue-500 text-sm font-bold" placeholder="0.00" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Precio (Venta) *</label>
+                      <input required type="number" step="0.01" min="0" value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})} className="w-full border p-2.5 rounded-xl outline-none focus:border-blue-500 text-sm font-bold text-emerald-700" placeholder="0.00" />
+                    </div>
                   </div>
+
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Categoría</label>
+                    <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Compatibilidad (Modelos de Moto)</label>
                     <Select
-                      options={categorias.map(c => ({ value: c, label: c }))}
-                      value={formData.cat ? { value: formData.cat, label: formData.cat } : null}
-                      onChange={(selected) => setFormData({ ...formData, cat: selected ? selected.value : '' })}
-                      placeholder="Buscar categoría..."
-                      isClearable
-                      className="react-select-container"
+                      isMulti
+                      options={modelosMoto.map(m => ({ value: m, label: m }))}
+                      value={(formData.compatibilidad || []).map(m => ({ value: m, label: m }))}
+                      onChange={(selected) => setFormData({ ...formData, compatibilidad: selected.map(s => s.value) })}
+                      placeholder="Seleccione los modelos compatibles..."
+                      className="react-select-container text-xs sm:text-sm"
                       classNamePrefix="react-select"
                     />
                   </div>
-                  <div className="hidden md:block"></div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Costo (Compra)</label>
-                    <input type="number" step="0.01" min="0" value={formData.cost} onChange={e => setFormData({...formData, cost: e.target.value})} className="w-full border p-2.5 rounded-lg outline-none focus:border-blue-500" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Precio (Venta) *</label>
-                    <input required type="number" step="0.01" min="0" value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})} className="w-full border p-2.5 rounded-lg outline-none focus:border-blue-500" />
-                  </div>
-                </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Compatibilidad (Modelos de Moto)</label>
-                  <Select
-                    isMulti
-                    options={modelosMoto.map(m => ({ value: m, label: m }))}
-                    value={(formData.compatibilidad || []).map(m => ({ value: m, label: m }))}
-                    onChange={(selected) => setFormData({ ...formData, compatibilidad: selected.map(s => s.value) })}
-                    placeholder="Seleccione los modelos compatibles..."
-                    className="react-select-container text-sm"
-                    classNamePrefix="react-select"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Imagen del Producto (Opcional)</label>
-                  <div className="flex items-center gap-4">
-                    {formData.image && (
-                      <div className="relative group cursor-pointer" onClick={() => setSelectedPreviewProduct({ name: formData.name || 'Vista previa', image: formData.image })}>
-                        <img src={formData.image} alt="Vista previa" className="w-16 h-16 object-cover rounded-lg border border-gray-200" />
-                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/20 rounded-lg">
-                          <Maximize2 size={16} className="text-white drop-shadow" />
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Imagen del Producto (Opcional)</label>
+                    <div className="flex items-center gap-4">
+                      {formData.image && (
+                        <div className="relative group cursor-pointer" onClick={() => setSelectedPreviewProduct({ name: formData.name || 'Vista previa', image: formData.image })}>
+                          <img src={formData.image} alt="Vista previa" className="w-16 h-16 object-cover rounded-xl border border-gray-200" />
+                          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/20 rounded-xl">
+                            <Maximize2 size={16} className="text-white drop-shadow" />
+                          </div>
                         </div>
-                      </div>
-                    )}
-                    <input type="file" accept="image/*" onChange={handleImageUpload} className="text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
+                      )}
+                      <input type="file" accept="image/*" onChange={handleImageUpload} className="text-xs sm:text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
+                    </div>
+                  </div>
+
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="font-bold text-blue-900 border-b pb-2 text-xs sm:text-sm uppercase tracking-wider flex items-center justify-between">
+                    <span>Inventario de Bodega</span>
+                    <span className="text-blue-600 bg-blue-100 px-2 py-0.5 rounded text-xs">{sucursal}</span>
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Stock Actual</label>
+                      <input 
+                        type="number" 
+                        required 
+                        value={formData.stock_actual} 
+                        onChange={e => setFormData({...formData, stock_actual: e.target.value})} 
+                        disabled={!!editingId}
+                        title={editingId ? "El stock solo se puede modificar desde la pestaña 'Ajustes de Inventario' o mediante Compras/Ventas." : "Stock inicial del nuevo producto"}
+                        className={`w-full border p-2.5 rounded-xl outline-none text-center ${editingId ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : 'focus:border-blue-500 font-bold'}`} 
+                      />
+                      {editingId && <span className="text-[10px] text-red-500 mt-1 block leading-tight">Para modificar el stock, use la pestaña "Ajustes".</span>}
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Stock Mínimo (Alerta)</label>
+                      <input type="number" value={formData.stock_minimo} onChange={e => setFormData({...formData, stock_minimo: e.target.value})} className="w-full border p-2.5 rounded-xl outline-none focus:border-blue-500 text-center" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Ubicación / Estante</label>
+                      <Select
+                        options={ubicaciones.map(u => ({ value: u, label: u }))}
+                        value={formData.ubicacion ? { value: formData.ubicacion, label: formData.ubicacion } : null}
+                        onChange={(selected) => setFormData({ ...formData, ubicacion: selected ? selected.value : '' })}
+                        placeholder="Buscar ubicación..."
+                        isClearable
+                        className="react-select-container text-xs sm:text-sm"
+                        classNamePrefix="react-select"
+                      />
+                    </div>
                   </div>
                 </div>
 
               </div>
 
-              <div className="space-y-4">
-                <h3 className="font-bold text-blue-900 border-b pb-2">
-                  Inventario para: <span className="text-blue-600 bg-blue-100 px-2 py-0.5 rounded text-sm">{sucursal}</span>
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Stock Actual</label>
-                    <input 
-                      type="number" 
-                      required 
-                      value={formData.stock_actual} 
-                      onChange={e => setFormData({...formData, stock_actual: e.target.value})} 
-                      disabled={!!editingId} // Bloqueado si estamos editando
-                      title={editingId ? "El stock solo se puede modificar desde la pestaña 'Ajustes de Inventario' o mediante Compras/Ventas." : "Stock inicial del nuevo producto"}
-                      className={`w-full border p-2.5 rounded-lg outline-none text-center ${editingId ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : 'focus:border-blue-500 font-bold'}`} 
-                    />
-                    {editingId && <span className="text-[10px] text-red-500 mt-1 block leading-tight">Para modificar el stock, use la pestaña "Ajustes".</span>}
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Stock Mínimo (Alerta)</label>
-                    <input type="number" value={formData.stock_minimo} onChange={e => setFormData({...formData, stock_minimo: e.target.value})} className="w-full border p-2.5 rounded-lg outline-none focus:border-blue-500 text-center" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Ubicación / Estante</label>
-                    <Select
-                      options={ubicaciones.map(u => ({ value: u, label: u }))}
-                      value={formData.ubicacion ? { value: formData.ubicacion, label: formData.ubicacion } : null}
-                      onChange={(selected) => setFormData({ ...formData, ubicacion: selected ? selected.value : '' })}
-                      placeholder="Buscar ubicación..."
-                      isClearable
-                      className="react-select-container"
-                      classNamePrefix="react-select"
-                    />
-                  </div>
-                </div>
+              <div className="p-3 sm:p-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-3 shrink-0">
+                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2.5 rounded-xl text-gray-600 font-bold hover:bg-gray-100 text-xs sm:text-sm transition-colors">
+                  Cancelar
+                </button>
+                <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-5 sm:px-6 py-2.5 rounded-xl font-bold shadow-md shadow-blue-200 transition-all active:scale-95 text-xs sm:text-sm">
+                  Guardar Producto
+                </button>
               </div>
-
             </form>
-
-            <div className="p-6 border-t border-gray-100 bg-gray-50 flex justify-end gap-3">
-              <button type="button" onClick={() => setIsModalOpen(false)} className="px-5 py-2.5 rounded-lg text-gray-600 font-medium hover:bg-gray-200 transition-colors">
-                Cancelar
-              </button>
-              <button onClick={handleSave} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-bold shadow-sm transition-colors">
-                Guardar Producto
-              </button>
-            </div>
           </div>
         </div>
       )}
 
       {/* Modal Formulario Ajuste */}
       {isAjusteModalOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-2xl w-full max-w-md shadow-xl overflow-hidden flex flex-col">
-            <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-              <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                <History className="text-orange-600" />
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm animate-in fade-in overflow-hidden">
+          <div className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+            <div className="p-4 sm:p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/80 shrink-0">
+              <h2 className="text-base sm:text-lg font-bold text-gray-800 flex items-center gap-2">
+                <History className="text-orange-600" size={20} />
                 Ajuste de Inventario
               </h2>
-              <button onClick={() => setIsAjusteModalOpen(false)} className="text-gray-400 hover:text-gray-600 font-bold text-xl">&times;</button>
+              <button 
+                type="button" 
+                onClick={() => setIsAjusteModalOpen(false)} 
+                className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors font-bold text-xl"
+              >
+                &times;
+              </button>
             </div>
             
-            <form onSubmit={handleSaveAjuste} className="p-5 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Producto</label>
-                <Select
-                  options={products.map(p => ({ value: p.id, label: p.name, stock_actual: inventory[p.id]?.stock_actual || 0 }))}
-                  value={ajusteForm.id_producto}
-                  onChange={sel => {
-                    setAjusteForm({ 
-                      ...ajusteForm, 
-                      id_producto: sel, 
-                      nuevo_stock: sel ? sel.stock_actual : '' 
-                    })
-                  }}
-                  placeholder="Seleccione el producto..."
-                  className="react-select-container"
-                  classNamePrefix="react-select"
-                />
-              </div>
-
-              {ajusteForm.id_producto && (
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 text-center">
-                    <p className="text-xs font-bold text-gray-500 uppercase">Stock Actual</p>
-                    <p className="text-xl font-black text-gray-700">{ajusteForm.id_producto.stock_actual}</p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Nuevo Stock</label>
-                    <input 
-                      required 
-                      type="number" 
-                      value={ajusteForm.nuevo_stock} 
-                      onChange={e => setAjusteForm({...ajusteForm, nuevo_stock: e.target.value})} 
-                      className="w-full h-full border p-2 rounded-lg outline-none focus:border-orange-500 font-bold text-center text-xl text-orange-600" 
-                    />
-                  </div>
+            <form onSubmit={handleSaveAjuste} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Producto</label>
+                  <Select
+                    options={products.map(p => ({ value: p.id, label: p.name, stock_actual: inventory[p.id]?.stock_actual || 0 }))}
+                    value={ajusteForm.id_producto}
+                    onChange={sel => {
+                      setAjusteForm({ 
+                        ...ajusteForm, 
+                        id_producto: sel, 
+                        nuevo_stock: sel ? sel.stock_actual : '' 
+                      })
+                    }}
+                    placeholder="Seleccione el producto..."
+                    className="react-select-container text-xs sm:text-sm"
+                    classNamePrefix="react-select"
+                  />
                 </div>
-              )}
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Motivo del ajuste *</label>
-                <input 
-                  required 
-                  type="text" 
-                  value={ajusteForm.motivo} 
-                  onChange={e => setAjusteForm({...ajusteForm, motivo: e.target.value})} 
-                  className="w-full border p-2.5 rounded-lg outline-none focus:border-orange-500" 
-                  placeholder="Ej: Conteo físico, Producto dañado, Caducidad..." 
-                />
+                {ajusteForm.id_producto && (
+                  <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                    <div className="bg-gray-50 p-3 rounded-xl border border-gray-200 text-center">
+                      <p className="text-[10px] font-bold text-gray-500 uppercase">Stock Actual</p>
+                      <p className="text-xl font-black text-gray-800">{ajusteForm.id_producto.stock_actual}</p>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-gray-700 mb-1 uppercase">Nuevo Stock</label>
+                      <input 
+                        required 
+                        type="number" 
+                        value={ajusteForm.nuevo_stock} 
+                        onChange={e => setAjusteForm({...ajusteForm, nuevo_stock: e.target.value})} 
+                        className="w-full h-11 border p-2 rounded-xl outline-none focus:border-orange-500 font-bold text-center text-xl text-orange-600 bg-white" 
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Motivo del ajuste *</label>
+                  <input 
+                    required 
+                    type="text" 
+                    value={ajusteForm.motivo} 
+                    onChange={e => setAjusteForm({...ajusteForm, motivo: e.target.value})} 
+                    className="w-full border p-2.5 rounded-xl outline-none focus:border-orange-500 text-sm" 
+                    placeholder="Ej: Conteo físico, Producto dañado, Caducidad..." 
+                  />
+                </div>
               </div>
 
-              <div className="pt-4 flex justify-end gap-3 border-t border-gray-100 mt-6">
-                <button type="button" onClick={() => setIsAjusteModalOpen(false)} className="px-5 py-2.5 rounded-lg text-gray-600 font-medium hover:bg-gray-100 transition-colors">
+              <div className="p-3 sm:p-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-3 shrink-0">
+                <button type="button" onClick={() => setIsAjusteModalOpen(false)} className="px-4 py-2.5 rounded-xl text-gray-600 font-bold hover:bg-gray-100 text-xs sm:text-sm transition-colors">
                   Cancelar
                 </button>
-                <button type="submit" className="bg-orange-600 hover:bg-orange-700 text-white px-6 py-2.5 rounded-lg font-bold shadow-md shadow-orange-200 transition-colors">
+                <button type="submit" className="bg-orange-600 hover:bg-orange-700 text-white px-5 sm:px-6 py-2.5 rounded-xl font-bold shadow-md shadow-orange-200 transition-all active:scale-95 text-xs sm:text-sm">
                   Guardar Ajuste
                 </button>
               </div>

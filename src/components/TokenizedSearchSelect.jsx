@@ -115,7 +115,7 @@ export default function TokenizedSearchSelect({
   };
 
   return (
-    <div ref={containerRef} className={`relative w-full ${className}`}>
+    <div ref={containerRef} className={`relative w-full min-w-0 max-w-full ${className}`}>
       
       {/* CAJA PRINCIPAL VISIBLE */}
       {!isOpen ? (
@@ -125,32 +125,25 @@ export default function TokenizedSearchSelect({
               setIsOpen(true);
             }
           }}
-          className={`w-full min-h-[42px] px-3 py-1.5 border rounded-xl bg-white flex items-center justify-between gap-2 cursor-pointer transition-all shadow-sm ${
+          className={`w-full min-w-0 max-w-full min-h-[42px] px-3 py-1.5 border rounded-xl bg-white flex items-center justify-between gap-2 cursor-pointer transition-all shadow-sm overflow-hidden ${
             disabled 
               ? 'bg-gray-100 border-gray-200 cursor-not-allowed text-gray-400' 
               : 'hover:border-blue-400 border-gray-200 focus-within:ring-2 focus-within:ring-blue-500'
           }`}
         >
-          <div className="flex items-center gap-2.5 flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden">
             <div className="text-blue-600 shrink-0">
               <IconComponent size={18} />
             </div>
 
             {selectedOption ? (
-              <div className="flex-1 min-w-0 flex items-center gap-2">
-                <span className="font-bold text-gray-800 text-sm truncate">
+              <div className="flex-1 min-w-0 flex items-center gap-1.5 overflow-hidden">
+                <span className="font-bold text-gray-800 text-sm truncate shrink min-w-0">
                   {selectedOption.label || selectedOption.nombre || selectedOption.name}
                 </span>
 
-                {/* Subetiquetas o Badges */}
-                {selectedOption.sublabel && (
-                  <span className="text-[11px] text-gray-400 truncate hidden sm:inline">
-                    ({selectedOption.sublabel})
-                  </span>
-                )}
-
                 {selectedOption.badge && (
-                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0 ${
+                  <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider shrink-0 ${
                     selectedOption.badgeColor === 'amber'
                       ? 'bg-amber-100 text-amber-800 border border-amber-200'
                       : selectedOption.badgeColor === 'purple'
@@ -158,6 +151,13 @@ export default function TokenizedSearchSelect({
                       : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
                   }`}>
                     {selectedOption.badge}
+                  </span>
+                )}
+
+                {/* Subetiquetas discretas con límite estricto de ancho */}
+                {selectedOption.sublabel && (
+                  <span className="text-[11px] text-gray-400 truncate hidden xl:inline max-w-[120px] shrink">
+                    {selectedOption.sublabel}
                   </span>
                 )}
               </div>
@@ -168,16 +168,13 @@ export default function TokenizedSearchSelect({
             )}
           </div>
 
-          <div className="flex items-center gap-1.5 shrink-0 text-gray-400">
-            <span className="text-[10px] bg-gray-100 px-1.5 py-0.5 rounded font-mono font-bold text-gray-500 hidden md:inline">
-              Buscar 🔍
-            </span>
-            <ChevronDown size={16} className="text-gray-400" />
+          <div className="flex items-center shrink-0 text-gray-400">
+            <ChevronDown size={16} className="text-gray-400 transition-transform" />
           </div>
         </div>
       ) : (
         /* CAJA ACTIVA DE BÚSQUEDA DIRECTA */
-        <div className="w-full min-h-[42px] px-3 py-1.5 border-2 border-blue-500 rounded-xl bg-white flex items-center gap-2 shadow-lg ring-2 ring-blue-100 transition-all">
+        <div className="w-full min-w-0 max-w-full min-h-[42px] px-3 py-1.5 border-2 border-blue-500 rounded-xl bg-white flex items-center gap-2 shadow-lg ring-2 ring-blue-100 transition-all overflow-hidden">
           <div className="text-blue-600 shrink-0">
             <Search size={18} />
           </div>
