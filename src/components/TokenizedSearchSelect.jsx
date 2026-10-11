@@ -11,7 +11,8 @@ export default function TokenizedSearchSelect({
   emptyMessage = 'No se encontraron resultados',
   disabled = false,
   className = '',
-  buttonRight = null // Botón extra a la derecha (ej. botón "+" para agregar nuevo)
+  buttonRight = null, // Botón extra a la derecha (ej. botón "+" para agregar nuevo)
+  showDetailsBelow = false
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -137,32 +138,14 @@ export default function TokenizedSearchSelect({
             </div>
 
             {selectedOption ? (
-              <div className="flex-1 min-w-0 flex items-center gap-1.5 overflow-hidden">
-                <span className="font-bold text-gray-800 text-sm truncate shrink min-w-0">
-                  {selectedOption.label || selectedOption.nombre || selectedOption.name}
-                </span>
-
-                {selectedOption.badge && (
-                  <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider shrink-0 ${
-                    selectedOption.badgeColor === 'amber'
-                      ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                      : selectedOption.badgeColor === 'purple'
-                      ? 'bg-purple-100 text-purple-800 border border-purple-200'
-                      : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                  }`}>
-                    {selectedOption.badge}
-                  </span>
-                )}
-
-                {/* Subetiquetas discretas con límite estricto de ancho */}
-                {selectedOption.sublabel && (
-                  <span className="text-[11px] text-gray-400 truncate hidden xl:inline max-w-[120px] shrink">
-                    {selectedOption.sublabel}
-                  </span>
-                )}
-              </div>
+              <span 
+                className="font-bold text-gray-800 text-sm truncate flex-1 min-w-0 text-left" 
+                title={selectedOption.label || selectedOption.nombre || selectedOption.name}
+              >
+                {selectedOption.label || selectedOption.nombre || selectedOption.name}
+              </span>
             ) : (
-              <span className="text-sm text-gray-400 font-medium truncate">
+              <span className="text-sm text-gray-400 font-medium truncate flex-1 min-w-0 text-left">
                 {placeholder}
               </span>
             )}
@@ -203,6 +186,28 @@ export default function TokenizedSearchSelect({
             >
               Cerrar
             </button>
+          )}
+        </div>
+      )}
+
+      {/* DETALLES SECUNDARIOS DEBAJO DEL CAMPO SI SE SOLICITA */}
+      {showDetailsBelow && selectedOption && (selectedOption.sublabel || selectedOption.badge) && !isOpen && (
+        <div className="mt-1 flex items-center gap-1.5 flex-wrap text-xs text-gray-500 px-1">
+          {selectedOption.badge && (
+            <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider shrink-0 ${
+              selectedOption.badgeColor === 'amber'
+                ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                : selectedOption.badgeColor === 'purple'
+                ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+            }`}>
+              {selectedOption.badge}
+            </span>
+          )}
+          {selectedOption.sublabel && (
+            <span className="text-[11px] text-gray-500 truncate" title={selectedOption.sublabel}>
+              {selectedOption.sublabel}
+            </span>
           )}
         </div>
       )}

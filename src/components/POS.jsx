@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingCart, Trash2, Search, Save, Loader, Printer, Plus, X, UserPlus, Minus, Percent, FileDown, ShieldAlert, Sparkles, RefreshCw, Gift, Lock, Camera, Maximize2, Package, ScanBarcode, LockOpen, ArrowUpRight, Calculator, CheckCircle2, AlertTriangle, Coins, DollarSign, User, Wrench } from 'lucide-react';
+import { ShoppingCart, Trash2, Search, Save, Loader, Printer, Plus, X, UserPlus, Minus, Percent, FileDown, ShieldAlert, Sparkles, RefreshCw, Gift, Lock, Camera, Maximize2, Package, ScanBarcode, LockOpen, ArrowUpRight, Calculator, CheckCircle2, AlertTriangle, Coins, DollarSign, User, Wrench, Phone, CreditCard, MapPin } from 'lucide-react';
 import { ref, onValue, push, set, runTransaction } from 'firebase/database';
 import { rtdb } from '../firebase';
 import { useAuth } from '../context/AuthContext';
@@ -1127,6 +1127,39 @@ export default function POS() {
                     <Plus size={20} />
                   </button>
                 </div>
+
+                {/* DATOS SECUNDARIOS DEL CLIENTE SELECCIONADO (DEBAJO DEL BUSCADOR) */}
+                {clienteActualObj ? (
+                  <div className="mt-2 p-2.5 bg-blue-50/60 rounded-xl border border-blue-100 text-xs text-gray-600 space-y-1 animate-in fade-in">
+                    <div className="flex items-center gap-3 flex-wrap font-medium">
+                      {clienteActualObj.telefono1 && (
+                        <span className="flex items-center gap-1 text-gray-700">
+                          <Phone size={12} className="text-blue-500 shrink-0" /> {clienteActualObj.telefono1}
+                        </span>
+                      )}
+                      {clienteActualObj.cedula && (
+                        <span className="flex items-center gap-1 text-gray-700">
+                          <CreditCard size={12} className="text-blue-500 shrink-0" /> Céd: {clienteActualObj.cedula}
+                        </span>
+                      )}
+                      {clienteActualObj.credito_habilitado && (
+                        <span className="font-bold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full text-[10px] uppercase">
+                          💳 Crédito: C$ {Number(clienteActualObj.limite_credito || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        </span>
+                      )}
+                    </div>
+                    {clienteActualObj.direccion && (
+                      <div className="flex items-center gap-1 text-gray-500 text-[11px] truncate" title={clienteActualObj.direccion}>
+                        <MapPin size={11} className="text-gray-400 shrink-0" />
+                        <span className="truncate">{clienteActualObj.direccion}</span>
+                      </div>
+                    )}
+                  </div>
+                ) : isMostrador ? (
+                  <div className="mt-1.5 text-[11px] text-gray-400 font-medium px-1 flex items-center gap-1">
+                    <span>🧾 Venta rápida a cliente mostrador (Contado)</span>
+                  </div>
+                ) : null}
               </div>
 
               <div className="min-w-0">
@@ -1172,6 +1205,7 @@ export default function POS() {
                     onChange={(sel) => setSelectedEmpleadoDeudor(sel ? { value: sel.id, label: sel.label } : null)}
                     placeholder="Buscar empleado por nombre, cédula o cargo..."
                     icon={User}
+                    showDetailsBelow={true}
                   />
                 </div>
               )}
@@ -1185,6 +1219,7 @@ export default function POS() {
                     onChange={(sel) => setSelectedMecanico(sel ? { value: sel.id, label: sel.label, comision: sel.comision } : null)}
                     placeholder="Buscar mecánico por nombre o teléfono..."
                     icon={Wrench}
+                    showDetailsBelow={true}
                   />
                 </div>
               )}
