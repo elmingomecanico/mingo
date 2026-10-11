@@ -1,15 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingCart, Trash2, Search, Save, Loader, Printer, Plus, X, UserPlus, Minus, Percent, FileDown, ShieldAlert, Sparkles, RefreshCw, Gift, Lock, Camera, Maximize2, Package, ScanBarcode } from 'lucide-react';
+import { ShoppingCart, Trash2, Search, Save, Loader, Printer, Plus, X, UserPlus, Minus, Percent, FileDown, ShieldAlert, Sparkles, RefreshCw, Gift, Lock, Camera, Maximize2, Package, ScanBarcode, LockOpen, ArrowUpRight, Calculator, CheckCircle2, AlertTriangle, Coins, DollarSign } from 'lucide-react';
 import { ref, onValue, push, set, runTransaction } from 'firebase/database';
 import { rtdb } from '../firebase';
+import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import { useReactToPrint } from 'react-to-print';
 import Select from 'react-select';
 import TicketPrinter from './TicketPrinter';
 import BarcodeScannerModal from './BarcodeScannerModal';
 import ImagePreviewModal from './ImagePreviewModal';
+import CashOpenModal from './CashOpenModal';
+import CashCloseModal from './CashCloseModal';
+import CashMovementModal from './CashMovementModal';
+import MoneyCounterModal from './MoneyCounterModal';
 
 export default function POS() {
+  const { user } = useAuth();
   const [sucursal, setSucursal] = useState('SUC-01');
   
   // ================= TAB SYSTEM =================
@@ -112,10 +118,50 @@ export default function POS() {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [previewProduct, setPreviewProduct] = useState(null);
 
+  // Estados de Control de Caja (Apertura, Salidas a Gerencia, Cierre y Contador)
+  const [activeTurno, setActiveTurno] = useState(null);
+  const [turnosList, setTurnosList] = useState([]);
+  const [salesList, setSalesList] = useState([]);
+  const [isCashOpenModalOpen, setIsCashOpenModalOpen] = useState(false);
+  const [isCashCloseModalOpen, setIsCashCloseModalOpen] = useState(false);
+  const [isCashMovementModalOpen, setIsCashMovementModalOpen] = useState(false);
+  const [isMoneyCounterOpen, setIsMoneyCounterOpen] = useState(false);
+
   useEffect(() => {
     const prodRef = ref(rtdb, 'productos');
     const servRef = ref(rtdb, 'servicios');
     const invRef = ref(rtdb, `inventario/${sucursal}`);
+    const turnosRef = ref(rtdb, 'turnos_caja');
+    const ventasRef = ref(rtdb, 'ventas');
+
+    const unsubTurnos = onValue(turnosRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        const list = Object.keys(data).map(key => ({
+          id: key,
+          ...data[key]
+        }));
+        setTurnosList(list);
+        const abierto = list.find(t => t.sucursal === sucursal && t.estado === 'Abierta');
+        setActiveTurno(abierto || null);
+      } else {
+        setTurnosList([]);
+        setActiveTurno(null);
+      }
+    });
+
+    const unsubVentas = onValue(ventasRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        const list = Object.keys(data).map(key => ({
+          id: key,
+          ...data[key]
+        }));
+        setSalesList(list);
+      } else {
+        setSalesList([]);
+      }
+    });
 
     const unsubProd = onValue(prodRef, (snapshot) => {
       const data = snapshot.val();
@@ -197,6 +243,8 @@ export default function POS() {
       unsubInv();
       unsubCli();
       unsubUsr();
+      unsubTurnos();
+      unsubVentas();
     };
   }, [sucursal]);
 
@@ -627,6 +675,13 @@ export default function POS() {
   };
 
   const processSale = async () => {
+    // Validar que la caja esté abierta para poder facturar
+    if (!activeTurno) {
+      toast.error('⚠️ La caja está cerrada en esta sucursal. Debe abrir turno de caja para registrar el fondo inicial antes de facturar.', { duration: 4500 });
+      setIsCashOpenModalOpen(true);
+      return;
+    }
+
     if (cart.length === 0) return toast.error('El carrito está vacío');
     if (!selectedCliente) return toast.error('Seleccione un cliente');
     if (cart.some(item => item.type === 'servicio') && !selectedMecanico) {
@@ -681,6 +736,8 @@ export default function POS() {
       const newSale = {
         id: saleId,
         numero_factura: humanId,
+        id_turno: activeTurno?.id || null,
+        numero_turno: activeTurno?.numero_turno || null,
         fecha: new Date().toISOString(),
         sucursal,
         id_cliente: targetClienteId,
@@ -870,6 +927,92 @@ export default function POS() {
               <option value="SUC-02">Sucursal Norte (SUC-02)</option>
             </select>
           </div>
+
+          {/* CONTROL DE TURNO DE CAJA (APERTURA, SALIDAS A GERENCIA, CIERRE Y CONTADOR) */}
+          {activeTurno ? (
+            <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white p-3.5 rounded-2xl shadow-sm flex flex-wrap items-center justify-between gap-3 border border-emerald-500 animate-in fade-in">
+              <div className="flex items-center gap-3">
+                <div className="flex h-3.5 w-3.5 relative">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-200 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-white"></span>
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-black text-sm tracking-wide">CAJA ABIERTA: {activeTurno.numero_turno}</span>
+                    <span className="text-[11px] bg-white/20 px-2.5 py-0.5 rounded-full font-bold">
+                      Fondo: C$ {Number(activeTurno.total_inicial_cordobas || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-emerald-100">
+                    Cajero: <strong className="text-white">{activeTurno.cajero_nombre}</strong> | Apertura: {new Date(activeTurno.fecha_apertura).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                </div>
+              </div>
+
+              {/* ACCIONES DEL TURNO DE CAJA */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setIsMoneyCounterOpen(true)}
+                  className="px-3 py-1.5 bg-white/15 hover:bg-white/25 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 backdrop-blur-sm transition-all"
+                  title="Contador de billetes y monedas en Córdobas y Dólares"
+                >
+                  <Calculator size={15} />
+                  Contador de Dinero
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsCashMovementModalOpen(true)}
+                  className="px-3 py-1.5 bg-rose-500 hover:bg-rose-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all active:scale-95"
+                  title="Registrar entregas de efectivo a gerencia o gastos de caja chica"
+                >
+                  <ArrowUpRight size={15} />
+                  Salida / Entrega a Gerencia
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsCashCloseModalOpen(true)}
+                  className="px-3.5 py-1.5 bg-gray-900 hover:bg-black text-amber-300 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm transition-all active:scale-95 border border-amber-300/30"
+                  title="Cierre y Cuadre de Caja del Turno"
+                >
+                  <Lock size={15} className="text-amber-400" />
+                  Cerrar Caja
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white p-3.5 rounded-2xl shadow-sm flex flex-wrap items-center justify-between gap-3 border border-amber-400 animate-in fade-in">
+              <div className="flex items-center gap-2.5">
+                <AlertTriangle size={22} className="text-amber-100 shrink-0" />
+                <div>
+                  <span className="font-black text-sm tracking-wide block">CAJA CERRADA EN ESTA SUCURSAL</span>
+                  <p className="text-[11px] text-amber-100">
+                    Debe registrar el fondo inicial para abrir el turno antes de comenzar a facturar.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsMoneyCounterOpen(true)}
+                  className="px-3 py-1.5 bg-white/15 hover:bg-white/25 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 backdrop-blur-sm transition-all"
+                  title="Contador de billetes y monedas"
+                >
+                  <Calculator size={15} />
+                  Contador de Dinero
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsCashOpenModalOpen(true)}
+                  className="px-4 py-2 bg-white text-amber-900 hover:bg-amber-50 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-md transition-all active:scale-95"
+                >
+                  <LockOpen size={16} className="text-amber-700" />
+                  Abrir Caja (Iniciar Turno)
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* DATOS DE LA VENTA (CLIENTE, PAGO, BUSCADOR) */}
           <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 space-y-4">
@@ -1558,6 +1701,40 @@ export default function POS() {
         isOpen={!!previewProduct} 
         onClose={() => setPreviewProduct(null)} 
         product={previewProduct} 
+      />
+
+      {/* MODAL APERTURA DE CAJA (INICIAR TURNO) */}
+      <CashOpenModal
+        isOpen={isCashOpenModalOpen}
+        onClose={() => setIsCashOpenModalOpen(false)}
+        sucursal={sucursal}
+        currentUser={user}
+        onOpenSuccess={(newT) => setActiveTurno(newT)}
+      />
+
+      {/* MODAL SALIDAS Y ENTREGAS DE EFECTIVO A GERENCIA */}
+      <CashMovementModal
+        isOpen={isCashMovementModalOpen}
+        onClose={() => setIsCashMovementModalOpen(false)}
+        activeTurno={activeTurno}
+        currentUser={user}
+        onMovementAdded={() => {}}
+      />
+
+      {/* MODAL CIERRE Y ARQUEO FINAL DE CAJA */}
+      <CashCloseModal
+        isOpen={isCashCloseModalOpen}
+        onClose={() => setIsCashCloseModalOpen(false)}
+        activeTurno={activeTurno}
+        currentUser={user}
+        salesList={salesList}
+        onCloseSuccess={() => setActiveTurno(null)}
+      />
+
+      {/* MODAL CONTADOR INDEPENDIENTE DE BILLETES Y MONEDAS */}
+      <MoneyCounterModal
+        isOpen={isMoneyCounterOpen}
+        onClose={() => setIsMoneyCounterOpen(false)}
       />
 
     </div>
