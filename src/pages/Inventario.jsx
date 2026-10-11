@@ -486,14 +486,6 @@ export default function Inventario() {
         </div>
       )}
 
-      {/* Modal Foto Ampliada */}
-      {enlargedImage && (
-        <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in" onClick={() => setEnlargedImage(null)}>
-          <img src={enlargedImage} alt="Ampliada" className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl border-2 border-white/10" />
-          <button className="absolute top-4 right-4 text-white hover:text-gray-300 font-bold text-3xl" onClick={() => setEnlargedImage(null)}>&times;</button>
-        </div>
-      )}
-
       {/* Modal Formulario Producto */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
@@ -554,7 +546,7 @@ export default function Inventario() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Imagen del Producto (Opcional)</label>
                   <div className="flex items-center gap-4">
                     {formData.image && (
-                      <div className="relative group cursor-pointer" onClick={() => setEnlargedImage(formData.image)}>
+                      <div className="relative group cursor-pointer" onClick={() => setSelectedPreviewProduct({ name: formData.name || 'Vista previa', image: formData.image })}>
                         <img src={formData.image} alt="Vista previa" className="w-16 h-16 object-cover rounded-lg border border-gray-200" />
                         <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/20 rounded-lg">
                           <Maximize2 size={16} className="text-white drop-shadow" />

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, ShoppingCart, Package, BarChart2, Settings, LogOut, Activity, Users, Wallet, Menu, X, ShieldCheck, Truck, Wrench, ShoppingBag, UserCheck } from 'lucide-react';
+import { Home, ShoppingCart, Package, BarChart2, Settings, LogOut, Activity, Users, Wallet, Menu, X, ShieldCheck, Truck, Wrench, ShoppingBag, UserCheck, Landmark } from 'lucide-react';
 import { Toaster } from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import logoIcon from '../assets/logo-icon.jpg';
@@ -19,6 +19,7 @@ export default function Layout({ children }) {
     { name: 'Inventario', path: '/inventario', icon: <Package size={20} />, perm: 'VER_INVENTARIO' },
     { name: 'Servicios', path: '/servicios', icon: <Wrench size={20} />, perm: 'VER_INVENTARIO' },
     { name: 'Compras', path: '/compras', icon: <ShoppingBag size={20} />, perm: 'VER_COMPRAS' },
+    { name: 'Contabilidad', path: '/contabilidad', icon: <Landmark size={20} />, perm: 'VER_CONTABILIDAD' },
     { name: 'Clientes', path: '/clientes', icon: <Users size={20} />, perm: 'VER_CLIENTES' },
     { name: 'CxC', path: '/cxc', icon: <Wallet size={20} />, perm: 'VER_CXC' },
     { name: 'Proveedores', path: '/proveedores', icon: <Truck size={20} />, perm: 'VER_PROVEEDORES' },
@@ -35,6 +36,7 @@ export default function Layout({ children }) {
     if (perm === 'PUBLICO') return true;
     if (user.rol === 'SuperAdmin') return true;
     if (perm === 'VER_TALLER' && user.funcion === 'Mecánico') return true;
+    if (perm === 'VER_CONTABILIDAD' && (user.permisos?.includes('VER_CONTABILIDAD') || user.permisos?.includes('VER_CXP') || user.permisos?.includes('VER_REPORTES'))) return true;
     // Si no es SuperAdmin, debe tener el permiso explícito en su array
     return user.permisos && user.permisos.includes(perm);
   };

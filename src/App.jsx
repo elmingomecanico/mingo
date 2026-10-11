@@ -13,6 +13,7 @@ import CxC from './pages/CxC'
 import Proveedores from './pages/Proveedores'
 import CxP from './pages/CxP'
 import Compras from './pages/Compras'
+import Contabilidad from './pages/Contabilidad'
 import Servicios from './pages/Servicios'
 import Login from './pages/Login'
 import Usuarios from './pages/Usuarios'
@@ -64,6 +65,7 @@ function AppRouter() {
   const hasPermission = (perm) => {
     if (user.rol === 'SuperAdmin') return true;
     if (perm === 'VER_TALLER' && user.funcion === 'Mecánico') return true;
+    if (perm === 'VER_CONTABILIDAD' && (user.permisos?.includes('VER_CONTABILIDAD') || user.permisos?.includes('VER_CXP') || user.permisos?.includes('VER_REPORTES'))) return true;
     return user.permisos && user.permisos.includes(perm);
   };
 
@@ -87,6 +89,7 @@ function AppRouter() {
           <Route path="/cxc" element={<ProtectedRoute perm="VER_CXC"><CxC /></ProtectedRoute>} />
           <Route path="/proveedores" element={<ProtectedRoute perm="VER_PROVEEDORES"><Proveedores /></ProtectedRoute>} />
           <Route path="/cxp" element={<ProtectedRoute perm="VER_CXP"><CxP /></ProtectedRoute>} />
+          <Route path="/contabilidad" element={<ProtectedRoute perm="VER_CONTABILIDAD"><Contabilidad /></ProtectedRoute>} />
           <Route path="/compras" element={<ProtectedRoute perm="VER_COMPRAS"><Compras /></ProtectedRoute>} />
           <Route path="/servicios" element={<ProtectedRoute perm="VER_INVENTARIO"><Servicios /></ProtectedRoute>} />
           <Route path="/reportes" element={<ProtectedRoute perm="VER_REPORTES"><Reportes /></ProtectedRoute>} />

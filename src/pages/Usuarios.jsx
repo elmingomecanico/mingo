@@ -29,6 +29,7 @@ const PERMISOS_CATEGORIAS = {
     { id: 'AJUSTE_INVENTARIO', label: 'Ajustar Stock Manualmente' }
   ],
   'Finanzas y Cuentas': [
+    { id: 'VER_CONTABILIDAD', label: 'Acceso a Contabilidad y Libro Diario' },
     { id: 'VER_CXC', label: 'Ver Cuentas por Cobrar (CxC)' },
     { id: 'VER_CXP', label: 'Ver Cuentas por Pagar (CxP)' },
     { id: 'VER_REPORTES', label: 'Ver Reportes y Estadísticas' }

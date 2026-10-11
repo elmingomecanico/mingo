@@ -75,7 +75,20 @@ export default function CxC() {
         return currentData;
       });
 
-      // TODO: Registrar en caja el ingreso del dinero (Flujo de Caja)
+      // Registrar ingreso en contabilidad (Flujo de Caja)
+      const movRef = push(ref(rtdb, 'movimientos_contables'));
+      await set(movRef, {
+        fecha: new Date().toISOString(),
+        tipo: 'Ingreso',
+        categoria: 'Cobro Cliente (CxC)',
+        concepto: `Abono de cliente a factura ${abonoModal.numero_factura || ''} (${clientesMap[abonoModal.id_cliente] || 'Cliente'})`,
+        monto: monto,
+        metodo_pago: 'Efectivo',
+        id_referencia: abonoModal.id,
+        numero_comprobante: abonoModal.numero_factura || '',
+        sucursal: 'SUC-01',
+        usuario: 'Caja'
+      });
       
       toast.success("Abono registrado con éxito");
       setAbonoModal(null);

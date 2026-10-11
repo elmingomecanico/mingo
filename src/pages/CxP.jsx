@@ -109,6 +109,21 @@ export default function CxP() {
         
         return currentData;
       });
+
+      // Registrar egreso en contabilidad
+      const movRef = push(ref(rtdb, 'movimientos_contables'));
+      await set(movRef, {
+        fecha: new Date().toISOString(),
+        tipo: 'Egreso',
+        categoria: 'Pago a Proveedor (CxP)',
+        concepto: `Abono a factura ${abonoModal.numero_factura || ''} (${proveedoresMap[abonoModal.id_proveedor] || 'Proveedor'})`,
+        monto: monto,
+        metodo_pago: 'Efectivo',
+        id_referencia: abonoModal.id,
+        numero_comprobante: abonoModal.numero_factura || '',
+        sucursal: 'SUC-01',
+        usuario: 'Administración'
+      });
       
       toast.success("Pago a proveedor registrado con éxito");
       setAbonoModal(null);
