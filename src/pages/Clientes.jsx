@@ -1,8 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { ref, onValue, set, push, remove } from 'firebase/database';
 import { rtdb } from '../firebase';
-import { Users, Plus, Edit2, Trash2, Search, Phone, FileText, CreditCard, Percent, ShieldCheck } from 'lucide-react';
+import { Users, Plus, Edit2, Trash2, Search, Phone, FileText, CreditCard, Percent, ShieldCheck, Gift, CheckSquare } from 'lucide-react';
 import toast from 'react-hot-toast';
+
+const defaultMetodosDescuento = {
+  Efectivo: true,
+  Transferencia: true,
+  Tarjeta: false,
+  'Crédito': false
+};
 
 export default function Clientes() {
   const [clientes, setClientes] = useState([]);
@@ -21,6 +28,8 @@ export default function Clientes() {
     limite_credito: 0,
     credito_habilitado: false,
     descuento_fijo: 0,
+    descuento_metodos: { ...defaultMetodosDescuento },
+    regalia_observacion: '',
     tipo_cliente: 'Regular'
   });
 
@@ -51,6 +60,8 @@ export default function Clientes() {
         limite_credito: item.limite_credito || 0,
         credito_habilitado: !!item.credito_habilitado,
         descuento_fijo: item.descuento_fijo || 0,
+        descuento_metodos: item.descuento_metodos || { ...defaultMetodosDescuento },
+        regalia_observacion: item.regalia_observacion || '',
         tipo_cliente: item.tipo_cliente || 'Regular'
       });
     } else {
@@ -64,6 +75,8 @@ export default function Clientes() {
         limite_credito: 0,
         credito_habilitado: false,
         descuento_fijo: 0,
+        descuento_metodos: { ...defaultMetodosDescuento },
+        regalia_observacion: '',
         tipo_cliente: 'Regular'
       });
     }
@@ -86,6 +99,8 @@ export default function Clientes() {
         limite_credito: Number(formData.limite_credito) || 0,
         credito_habilitado: Boolean(formData.credito_habilitado),
         descuento_fijo: Number(formData.descuento_fijo) || 0,
+        descuento_metodos: formData.descuento_metodos || { ...defaultMetodosDescuento },
+        regalia_observacion: formData.regalia_observacion.trim(),
         tipo_cliente: formData.tipo_cliente,
         fecha_registro: editingId ? undefined : new Date().toISOString()
       };
@@ -99,7 +114,7 @@ export default function Clientes() {
         await set(itemRef, { ...clientObj, ...payload });
       }
 
-      toast.success(editingId ? 'Privilegios y datos del cliente actualizados' : 'Cliente registrado exitosamente');
+      toast.success(editingId ? 'Privilegios y condiciones actualizados' : 'Cliente registrado exitosamente');
       setIsModalOpen(false);
     } catch (error) {
       toast.error('Error al guardar: ' + error.message);
@@ -127,9 +142,9 @@ export default function Clientes() {
         <div>
           <h1 className="text-2xl font-black text-gray-800 flex items-center gap-2">
             <Users className="text-blue-600" /> 
-            Cartera de Clientes y Privilegios (Gerencia)
+            Cartera de Clientes y Condiciones Comerciales (Gerencia)
           </h1>
-          <p className="text-gray-500 text-sm">Administra información, líneas de crédito autorizadas y descuentos preferenciales.</p>
+          <p className="text-gray-500 text-sm">Gestiona líneas de crédito, condiciones de pago para descuentos y regalías.</p>
         </div>
         <button 
           onClick={() => handleOpenModal()}
@@ -161,7 +176,7 @@ export default function Clientes() {
                 <th className="p-4">Cliente</th>
                 <th className="p-4">Tipo</th>
                 <th className="p-4">Contacto</th>
-                <th className="p-4 text-center">Descuento VIP</th>
+                <th className="p-4">Condición Descuento</th>
                 <th className="p-4 text-right">Línea de Crédito</th>
                 <th className="p-4 text-center">Acciones</th>
               </tr>
@@ -172,70 +187,85 @@ export default function Clientes() {
               ) : filtered.length === 0 ? (
                 <tr><td colSpan="6" className="p-8 text-center text-gray-400">No se encontraron clientes.</td></tr>
               ) : (
-                filtered.map(cliente => (
-                  <tr key={cliente.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="p-4">
-                      <div className="font-bold text-gray-800">{cliente.nombre}</div>
-                      <div className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
-                        <FileText size={12} /> {cliente.cedula || 'Sin cédula'}
-                      </div>
-                    </td>
-                    <td className="p-4">
-                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${cliente.tipo_cliente === 'VIP' ? 'bg-purple-100 text-purple-700' : cliente.tipo_cliente === 'Mayorista' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
-                        {cliente.tipo_cliente || 'Regular'}
-                      </span>
-                    </td>
-                    <td className="p-4">
-                      <div className="flex items-center gap-1 text-gray-700 text-xs">
-                        <Phone size={13} className="text-gray-400" /> 
-                        {cliente.telefono1 || 'Sin teléfono'}
-                      </div>
-                      <div className="text-xs text-gray-400 mt-0.5 truncate max-w-[180px]">
-                        {cliente.direccion || 'Sin dirección'}
-                      </div>
-                    </td>
-                    <td className="p-4 text-center">
-                      {(cliente.descuento_fijo || 0) > 0 ? (
-                        <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-0.5 rounded-full font-black text-xs">
-                          <Percent size={12} /> {cliente.descuento_fijo}% Fijo
-                        </span>
-                      ) : (
-                        <span className="text-xs text-gray-400">0%</span>
-                      )}
-                    </td>
-                    <td className="p-4 text-right">
-                      {cliente.credito_habilitado && (cliente.limite_credito || 0) > 0 ? (
-                        <div>
-                          <div className="font-black text-emerald-600 flex items-center justify-end gap-1">
-                            <ShieldCheck size={14} className="text-emerald-500" />
-                            C$ {Number(cliente.limite_credito).toFixed(2)}
-                          </div>
-                          <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-1.5 py-0.5 rounded">Autorizado</span>
+                filtered.map(cliente => {
+                  const metodosActivos = Object.keys(cliente.descuento_metodos || defaultMetodosDescuento)
+                    .filter(k => (cliente.descuento_metodos || defaultMetodosDescuento)[k]);
+
+                  return (
+                    <tr key={cliente.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="p-4">
+                        <div className="font-bold text-gray-800">{cliente.nombre}</div>
+                        <div className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+                          <FileText size={12} /> {cliente.cedula || 'Sin cédula'}
                         </div>
-                      ) : (
-                        <span className="text-xs text-gray-400 italic">Sin Crédito</span>
-                      )}
-                    </td>
-                    <td className="p-4 text-center">
-                      <div className="flex justify-center gap-1">
-                        <button 
-                          onClick={() => handleOpenModal(cliente)} 
-                          className="text-blue-500 hover:bg-blue-50 p-2 rounded-lg transition-colors"
-                          title="Editar privilegios"
-                        >
-                          <Edit2 size={18} />
-                        </button>
-                        <button 
-                          onClick={() => handleDelete(cliente.id, cliente.nombre)} 
-                          className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors"
-                          title="Eliminar cliente"
-                        >
-                          <Trash2 size={18} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                      <td className="p-4">
+                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${cliente.tipo_cliente === 'VIP' ? 'bg-purple-100 text-purple-700' : cliente.tipo_cliente === 'Mayorista' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
+                          {cliente.tipo_cliente || 'Regular'}
+                        </span>
+                      </td>
+                      <td className="p-4">
+                        <div className="flex items-center gap-1 text-gray-700 text-xs">
+                          <Phone size={13} className="text-gray-400" /> 
+                          {cliente.telefono1 || 'Sin teléfono'}
+                        </div>
+                        <div className="text-xs text-gray-400 mt-0.5 truncate max-w-[180px]">
+                          {cliente.direccion || 'Sin dirección'}
+                        </div>
+                      </td>
+                      <td className="p-4">
+                        {(cliente.descuento_fijo || 0) > 0 ? (
+                          <div className="space-y-1">
+                            <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full font-black text-xs">
+                              <Percent size={11} /> {cliente.descuento_fijo}% VIP
+                            </span>
+                            <div className="text-[10px] text-gray-500 flex items-center gap-1">
+                              <span>En: {metodosActivos.join(', ')}</span>
+                            </div>
+                            {cliente.regalia_observacion && (
+                              <div className="text-[10px] text-purple-600 font-bold flex items-center gap-1">
+                                <Gift size={11} /> Regalía: {cliente.regalia_observacion}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-400">Sin descuento</span>
+                        )}
+                      </td>
+                      <td className="p-4 text-right">
+                        {cliente.credito_habilitado && (cliente.limite_credito || 0) > 0 ? (
+                          <div>
+                            <div className="font-black text-emerald-600 flex items-center justify-end gap-1">
+                              <ShieldCheck size={14} className="text-emerald-500" />
+                              C$ {Number(cliente.limite_credito).toFixed(2)}
+                            </div>
+                            <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-1.5 py-0.5 rounded">Autorizado</span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-400 italic">Sin Crédito</span>
+                        )}
+                      </td>
+                      <td className="p-4 text-center">
+                        <div className="flex justify-center gap-1">
+                          <button 
+                            onClick={() => handleOpenModal(cliente)} 
+                            className="text-blue-500 hover:bg-blue-50 p-2 rounded-lg transition-colors"
+                            title="Editar privilegios y condiciones"
+                          >
+                            <Edit2 size={18} />
+                          </button>
+                          <button 
+                            onClick={() => handleDelete(cliente.id, cliente.nombre)} 
+                            className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors"
+                            title="Eliminar cliente"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -257,7 +287,7 @@ export default function Clientes() {
               <div className="space-y-4">
                 <div>
                   <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Nombre Completo *</label>
-                  <input required type="text" value={formData.nombre} onChange={e => setFormData({...formData, nombre: e.target.value})} className="w-full border p-2.5 rounded-lg outline-none focus:border-blue-500 text-sm" placeholder="Ej: Juan Pérez" />
+                  <input required type="text" value={formData.nombre} onChange={e => setFormData({...formData, nombre: e.target.value})} className="w-full border p-2.5 rounded-lg outline-none focus:border-blue-500 text-sm" placeholder="Ej: Santos Rayo" />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -337,6 +367,49 @@ export default function Clientes() {
                       Habilitar compras a crédito en Caja POS para este cliente
                     </label>
                   </div>
+
+                  {/* CONDICIONES DE PAGO PARA EL DESCUENTO */}
+                  <div className="pt-3 border-t border-blue-200/60 space-y-2">
+                    <label className="block text-xs font-bold text-gray-700">
+                      ¿En qué métodos de pago aplica el descuento del {formData.descuento_fijo || 0}%?
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {['Efectivo', 'Transferencia', 'Tarjeta', 'Crédito'].map((metodo) => (
+                        <label key={metodo} className="flex items-center gap-2 p-2 bg-white rounded-lg border border-gray-200 cursor-pointer text-xs font-medium hover:border-blue-300 transition-colors">
+                          <input
+                            type="checkbox"
+                            checked={!!formData.descuento_metodos?.[metodo]}
+                            onChange={(e) => setFormData({
+                              ...formData,
+                              descuento_metodos: {
+                                ...formData.descuento_metodos,
+                                [metodo]: e.target.checked
+                              }
+                            })}
+                            className="w-4 h-4 text-blue-600 rounded"
+                          />
+                          <span>{metodo}</span>
+                        </label>
+                      ))}
+                    </div>
+
+                    <div className="pt-1">
+                      <label className="block text-xs font-bold text-gray-700 mb-1 flex items-center gap-1">
+                        <Gift size={13} className="text-purple-600" /> Regalía o Beneficio Alternativo (Opcional):
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.regalia_observacion}
+                        onChange={(e) => setFormData({ ...formData, regalia_observacion: e.target.value })}
+                        placeholder="Ej: Revisión preventiva gratis con tarjeta, 1/4 aceite de cortesía..."
+                        className="w-full border p-2 rounded-lg text-xs outline-none bg-white focus:border-blue-500"
+                      />
+                      <span className="text-[10px] text-gray-500 mt-0.5 block">
+                        Se mostrará al cajero cuando el cliente pague con métodos sin descuento.
+                      </span>
+                    </div>
+                  </div>
+
                 </div>
 
               </div>

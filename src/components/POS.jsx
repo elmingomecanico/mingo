@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingCart, Trash2, Search, Save, Loader, Printer, Plus, X, UserPlus, Minus, Percent, FileDown, ShieldAlert, Sparkles, RefreshCw } from 'lucide-react';
+import { ShoppingCart, Trash2, Search, Save, Loader, Printer, Plus, X, UserPlus, Minus, Percent, FileDown, ShieldAlert, Sparkles, RefreshCw, Gift } from 'lucide-react';
 import { ref, onValue, push, set, runTransaction } from 'firebase/database';
 import { rtdb } from '../firebase';
 import toast from 'react-hot-toast';
@@ -205,6 +205,62 @@ export default function POS() {
   // Buscar objeto del cliente actual desde la base de datos
   const clienteActualObj = clientes.find(c => c.id === selectedCliente?.value);
 
+  // Función para evaluar si el descuento aplica según el método de pago configurado
+  const evalClienteDescuento = (cliente, metodo) => {
+    if (!cliente || !(cliente.descuento_fijo > 0)) {
+      return { aplica: false, porcentaje: 0, metodosPermitidos: [], regalia: cliente?.regalia_observacion || null };
+    }
+    const metodosConfig = cliente.descuento_metodos || { Efectivo: true, Transferencia: true, Tarjeta: false, 'Crédito': false };
+    const metodoNorm = metodo?.includes('Tarjeta') ? 'Tarjeta' : (metodo?.includes('Crédito') ? 'Crédito' : metodo);
+    const aplica = !!metodosConfig[metodoNorm];
+    const metodosPermitidos = Object.keys(metodosConfig).filter(k => metodosConfig[k]);
+    return {
+      aplica,
+      porcentaje: aplica ? cliente.descuento_fijo : 0,
+      metodosPermitidos,
+      regalia: cliente.regalia_observacion || null
+    };
+  };
+
+  const descuentoEval = evalClienteDescuento(clienteActualObj, metodoPago);
+
+  const handleMetodoPagoChange = (newMetodo) => {
+    const prevEval = evalClienteDescuento(clienteActualObj, metodoPago);
+    const newEval = evalClienteDescuento(clienteActualObj, newMetodo);
+
+    let updatedCart = cart;
+    if (clienteActualObj && clienteActualObj.descuento_fijo > 0) {
+      if (newEval.aplica && !prevEval.aplica) {
+        // Se activa el descuento para este método
+        updatedCart = cart.map(item => {
+          const itemTotal = item.price * item.qty;
+          const autoDesc = (itemTotal * newEval.porcentaje) / 100;
+          return {
+            ...item,
+            discount: autoDesc,
+            discountPercent: newEval.porcentaje,
+            discountMode: '%'
+          };
+        });
+        toast(`✨ Descuento VIP de ${newEval.porcentaje}% aplicado para pago con ${newMetodo}`, { icon: '✨' });
+      } else if (!newEval.aplica && prevEval.aplica) {
+        // Se desactiva el descuento porque este método no califica
+        updatedCart = cart.map(item => ({
+          ...item,
+          discount: 0,
+          discountPercent: 0,
+          discountMode: 'C$'
+        }));
+        toast(`ℹ️ El descuento preferencial no aplica para pago con ${newMetodo} (Solo en: ${newEval.metodosPermitidos.join(', ')})`, { icon: '⚠️' });
+        if (newEval.regalia) {
+          toast(`🎁 Regalía aplicable con ${newMetodo}: ${newEval.regalia}`, { duration: 5000, icon: '🎁' });
+        }
+      }
+    }
+
+    updateActiveTab({ metodoPago: newMetodo, cart: updatedCart });
+  };
+
   const handleSelectCliente = (val) => {
     const isMostrador = !val || val.value === 'MOSTRADOR';
     const cid = isMostrador ? 'MOSTRADOR' : val.value;
@@ -224,21 +280,36 @@ export default function POS() {
       newName = `Factura ${idx > 0 ? idx : 1}`;
     }
 
-    // Comprobar privilegios del cliente
-    const clientDescPct = clientData?.descuento_fijo || 0;
+    // Comprobar privilegios y condiciones de método de pago
+    const { aplica, porcentaje, metodosPermitidos, regalia } = evalClienteDescuento(clientData, metodoPago);
     let updatedCart = cart;
-    if (clientDescPct > 0) {
-      updatedCart = cart.map(item => {
-        const itemTotal = item.price * item.qty;
-        const autoDesc = (itemTotal * clientDescPct) / 100;
-        return {
+
+    if (clientData && clientData.descuento_fijo > 0) {
+      if (aplica) {
+        updatedCart = cart.map(item => {
+          const itemTotal = item.price * item.qty;
+          const autoDesc = (itemTotal * porcentaje) / 100;
+          return {
+            ...item,
+            discount: autoDesc,
+            discountPercent: porcentaje,
+            discountMode: '%'
+          };
+        });
+        toast(`Descuento VIP aplicado: ${porcentaje}% (${metodoPago})`, { icon: '✨' });
+      } else {
+        // Método no califica
+        updatedCart = cart.map(item => ({
           ...item,
-          discount: autoDesc,
-          discountPercent: clientDescPct,
-          discountMode: '%'
-        };
-      });
-      toast(`Descuento VIP aplicado: ${clientDescPct}% en los artículos`, { icon: '✨' });
+          discount: 0,
+          discountPercent: 0,
+          discountMode: 'C$'
+        }));
+        toast(`ℹ️ ${clientName} tiene ${clientData.descuento_fijo}% VIP pero solo aplica en: ${metodosPermitidos.join(', ')}`, { icon: '⚠️' });
+        if (regalia) {
+          toast(`🎁 Regalía registrada para este cliente: ${regalia}`, { duration: 5000, icon: '🎁' });
+        }
+      }
     }
 
     updateActiveTab({ selectedCliente: clientSelection, name: newName, cart: updatedCart });
@@ -254,7 +325,7 @@ export default function POS() {
       return;
     }
 
-    const clientDescPct = clienteActualObj?.descuento_fijo || 0;
+    const { aplica, porcentaje } = evalClienteDescuento(clienteActualObj, metodoPago);
 
     if (existing) {
       const newQty = existing.qty + 1;
@@ -263,11 +334,11 @@ export default function POS() {
       let finalPercent = existing.discountPercent || 0;
 
       if (existing.discountMode === '%') {
-        finalPercent = existing.discountPercent || clientDescPct;
+        finalPercent = existing.discountPercent || (aplica ? porcentaje : 0);
         finalDiscount = (itemTotal * finalPercent) / 100;
-      } else if (clientDescPct > 0 && !existing.discount) {
-        finalPercent = clientDescPct;
-        finalDiscount = (itemTotal * clientDescPct) / 100;
+      } else if (aplica && !existing.discount) {
+        finalPercent = porcentaje;
+        finalDiscount = (itemTotal * porcentaje) / 100;
       }
 
       setCart(cart.map(item => item.id === product.id ? { 
@@ -278,15 +349,15 @@ export default function POS() {
       } : item));
     } else {
       const itemTotal = product.price * 1;
-      const initialPercent = clientDescPct > 0 ? clientDescPct : 0;
-      const initialDiscount = clientDescPct > 0 ? (itemTotal * clientDescPct) / 100 : 0;
+      const initialPercent = aplica ? porcentaje : 0;
+      const initialDiscount = aplica ? (itemTotal * porcentaje) / 100 : 0;
       
       setCart([...cart, { 
         ...product, 
         qty: 1, 
         discount: initialDiscount,
         discountPercent: initialPercent,
-        discountMode: clientDescPct > 0 ? '%' : 'C$'
+        discountMode: aplica ? '%' : 'C$'
       }]);
     }
   };
@@ -492,6 +563,7 @@ export default function POS() {
         subtotal_bruto: subtotalBruto,
         descuento_total: totalDescuentos,
         total,
+        regalia: (!descuentoEval.aplica && descuentoEval.regalia) ? descuentoEval.regalia : null,
         estado: 'Completado',
         items: cart.map(item => ({
           id_producto: item.id,
@@ -669,12 +741,25 @@ export default function POS() {
             {/* Cliente y Método de Pago */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <div className="flex justify-between items-center mb-1">
+                <div className="flex justify-between items-center mb-1 flex-wrap gap-1">
                   <label className="block text-xs font-bold text-gray-500 uppercase">Cliente</label>
                   {clienteActualObj && (clienteActualObj.descuento_fijo || 0) > 0 && (
-                    <span className="text-[11px] font-black text-amber-600 flex items-center gap-1 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
-                      <Sparkles size={12} /> {clienteActualObj.descuento_fijo}% Descuento VIP
-                    </span>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {descuentoEval.aplica ? (
+                        <span className="text-[11px] font-black text-amber-700 flex items-center gap-1 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                          <Sparkles size={12} /> {clienteActualObj.descuento_fijo}% VIP ({metodoPago})
+                        </span>
+                      ) : (
+                        <span className="text-[11px] font-semibold text-gray-600 bg-gray-100 px-2 py-0.5 rounded-full" title={`Válido solo en: ${descuentoEval.metodosPermitidos.join(', ')}`}>
+                          ⚠️ Sin descuento con {metodoPago}
+                        </span>
+                      )}
+                      {!descuentoEval.aplica && descuentoEval.regalia && (
+                        <span className="text-[11px] font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200 flex items-center gap-1" title="Beneficio especial para este método de pago">
+                          <Gift size={12} /> Regalía: {descuentoEval.regalia}
+                        </span>
+                      )}
+                    </div>
                   )}
                 </div>
                 <div className="flex gap-2 items-center">
@@ -740,7 +825,7 @@ export default function POS() {
                 <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Método de Pago</label>
                 <select 
                   value={metodoPago} 
-                  onChange={e => setMetodoPago(e.target.value)}
+                  onChange={e => handleMetodoPagoChange(e.target.value)}
                   className="w-full border border-gray-200 p-2 rounded-lg bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none text-sm h-[38px] font-medium"
                 >
                   <option value="Efectivo">Efectivo</option>

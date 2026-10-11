@@ -45,6 +45,12 @@ const TicketPrinter = forwardRef(({ sale, isPreview = false }, ref) => {
           <span>PAGO:</span>
           <span className="font-bold">{sale.metodo_pago || 'Efectivo'}</span>
         </div>
+        {sale.regalia && (
+          <div className="flex justify-between text-purple-950 font-bold border-t border-black border-dotted pt-1 mt-1">
+            <span>REGALÍA:</span>
+            <span className="truncate max-w-[170px] text-right">{sale.regalia}</span>
+          </div>
+        )}
       </div>
 
       {/* DETALLE ITEMS */}
