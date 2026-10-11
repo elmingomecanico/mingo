@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingCart, Trash2, Search, Save, Loader, Printer, Plus, X, UserPlus, Minus, Percent, FileDown, ShieldAlert, Sparkles, RefreshCw, Gift } from 'lucide-react';
+import { ShoppingCart, Trash2, Search, Save, Loader, Printer, Plus, X, UserPlus, Minus, Percent, FileDown, ShieldAlert, Sparkles, RefreshCw, Gift, Lock } from 'lucide-react';
 import { ref, onValue, push, set, runTransaction } from 'firebase/database';
 import { rtdb } from '../firebase';
 import toast from 'react-hot-toast';
@@ -204,8 +204,11 @@ export default function POS() {
 
   // Buscar objeto del cliente actual desde la base de datos
   const clienteActualObj = clientes.find(c => c.id === selectedCliente?.value);
+  const isMostrador = !selectedCliente || selectedCliente.value === 'MOSTRADOR';
+  const isClienteRegistrado = !isMostrador && !!clienteActualObj;
+  const hasPrivilegios = isClienteRegistrado && (clienteActualObj.descuento_fijo || 0) > 0;
 
-  // Función para evaluar si el descuento aplica según el método de pago configurado
+  // Función para evaluar si el descuento aplica según el método de pago configurado por gerencia
   const evalClienteDescuento = (cliente, metodo) => {
     if (!cliente || !(cliente.descuento_fijo > 0)) {
       return { aplica: false, porcentaje: 0, metodosPermitidos: [], regalia: cliente?.regalia_observacion || null };
@@ -224,17 +227,45 @@ export default function POS() {
 
   const descuentoEval = evalClienteDescuento(clienteActualObj, metodoPago);
 
+  // Determinación estricta y blindada del descuento de un ítem según los 3 niveles:
+  // 1. Cliente con Privilegios: descuento automático fijado por gerencia (o 0 si el método no califica). Cajero bloqueado.
+  // 2. Cliente Registrado sin Privilegios: 0.00 siempre. Cajero bloqueado.
+  // 3. Cliente de Mostrador: descuento manual/promoción editable por el cajero.
+  const getItemDiscount = (item) => {
+    const itemTotal = (item.price || 0) * (item.qty || 1);
+    if (!isMostrador) {
+      if (hasPrivilegios && descuentoEval.aplica) {
+        return Number(((itemTotal * (clienteActualObj.descuento_fijo || 0)) / 100).toFixed(2));
+      }
+      return 0;
+    }
+    return Math.min(itemTotal, Math.max(0, Number((item.discount || 0).toFixed(2))));
+  };
+
+  const getItemDiscountPercent = (item) => {
+    const itemTotal = (item.price || 0) * (item.qty || 1);
+    if (!isMostrador) {
+      if (hasPrivilegios && descuentoEval.aplica) {
+        return clienteActualObj.descuento_fijo || 0;
+      }
+      return 0;
+    }
+    if (itemTotal <= 0) return 0;
+    const disc = getItemDiscount(item);
+    return Number(((disc / itemTotal) * 100).toFixed(1));
+  };
+
   const handleMetodoPagoChange = (newMetodo) => {
     const prevEval = evalClienteDescuento(clienteActualObj, metodoPago);
     const newEval = evalClienteDescuento(clienteActualObj, newMetodo);
 
     let updatedCart = cart;
-    if (clienteActualObj && clienteActualObj.descuento_fijo > 0) {
-      if (newEval.aplica && !prevEval.aplica) {
+    if (clienteActualObj && (clienteActualObj.descuento_fijo || 0) > 0) {
+      if (newEval.aplica) {
         // Se activa el descuento para este método
         updatedCart = cart.map(item => {
           const itemTotal = item.price * item.qty;
-          const autoDesc = (itemTotal * newEval.porcentaje) / 100;
+          const autoDesc = Number(((itemTotal * newEval.porcentaje) / 100).toFixed(2));
           return {
             ...item,
             discount: autoDesc,
@@ -242,8 +273,10 @@ export default function POS() {
             discountMode: '%'
           };
         });
-        toast(`✨ Descuento VIP de ${newEval.porcentaje}% aplicado para pago con ${newMetodo}`, { icon: '✨' });
-      } else if (!newEval.aplica && prevEval.aplica) {
+        if (!prevEval.aplica) {
+          toast(`✨ Descuento VIP de ${newEval.porcentaje}% aplicado para pago con ${newMetodo}`, { icon: '✨' });
+        }
+      } else {
         // Se desactiva el descuento porque este método no califica
         updatedCart = cart.map(item => ({
           ...item,
@@ -251,27 +284,37 @@ export default function POS() {
           discountPercent: 0,
           discountMode: 'C$'
         }));
-        toast(`ℹ️ El descuento preferencial no aplica para pago con ${newMetodo} (Solo en: ${newEval.metodosPermitidos.join(', ')})`, { icon: '⚠️' });
+        if (prevEval.aplica) {
+          toast(`ℹ️ El descuento preferencial no aplica para pago con ${newMetodo} (Solo en: ${newEval.metodosPermitidos.join(', ')})`, { icon: '⚠️' });
+        }
         if (newEval.regalia) {
           toast(`🎁 Regalía aplicable con ${newMetodo}: ${newEval.regalia}`, { duration: 5000, icon: '🎁' });
         }
       }
+    } else if (!isMostrador) {
+      // Cliente registrado sin privilegios de descuento: siempre 0
+      updatedCart = cart.map(item => ({
+        ...item,
+        discount: 0,
+        discountPercent: 0,
+        discountMode: 'C$'
+      }));
     }
 
     updateActiveTab({ metodoPago: newMetodo, cart: updatedCart });
   };
 
   const handleSelectCliente = (val) => {
-    const isMostrador = !val || val.value === 'MOSTRADOR';
-    const cid = isMostrador ? 'MOSTRADOR' : val.value;
+    const isNewMostrador = !val || val.value === 'MOSTRADOR';
+    const cid = isNewMostrador ? 'MOSTRADOR' : val.value;
     const clientData = clientes.find(c => c.id === cid);
-    const clientName = isMostrador ? 'CLIENTE DE MOSTRADOR' : (clientData?.nombre || val.label);
+    const clientName = isNewMostrador ? 'CLIENTE DE MOSTRADOR' : (clientData?.nombre || val.label);
 
     const clientSelection = { value: cid, label: clientName };
 
     let newName = activeTab.name;
     const isGenericName = !activeTab.name || activeTab.name.startsWith('Factura') || activeTab.name.startsWith('Borrador');
-    if (!isMostrador) {
+    if (!isNewMostrador) {
       if (isGenericName) {
         newName = clientName;
       }
@@ -281,34 +324,45 @@ export default function POS() {
     }
 
     // Comprobar privilegios y condiciones de método de pago
-    const { aplica, porcentaje, metodosPermitidos, regalia } = evalClienteDescuento(clientData, metodoPago);
     let updatedCart = cart;
 
-    if (clientData && clientData.descuento_fijo > 0) {
-      if (aplica) {
-        updatedCart = cart.map(item => {
-          const itemTotal = item.price * item.qty;
-          const autoDesc = (itemTotal * porcentaje) / 100;
-          return {
+    if (!isNewMostrador) {
+      const { aplica, porcentaje, metodosPermitidos, regalia } = evalClienteDescuento(clientData, metodoPago);
+      if (clientData && (clientData.descuento_fijo || 0) > 0) {
+        if (aplica) {
+          updatedCart = cart.map(item => {
+            const itemTotal = item.price * item.qty;
+            const autoDesc = Number(((itemTotal * porcentaje) / 100).toFixed(2));
+            return {
+              ...item,
+              discount: autoDesc,
+              discountPercent: porcentaje,
+              discountMode: '%'
+            };
+          });
+          toast(`✨ Descuento VIP de ${porcentaje}% aplicado (${metodoPago})`, { icon: '✨' });
+        } else {
+          // Método no califica
+          updatedCart = cart.map(item => ({
             ...item,
-            discount: autoDesc,
-            discountPercent: porcentaje,
-            discountMode: '%'
-          };
-        });
-        toast(`Descuento VIP aplicado: ${porcentaje}% (${metodoPago})`, { icon: '✨' });
+            discount: 0,
+            discountPercent: 0,
+            discountMode: 'C$'
+          }));
+          toast(`ℹ️ ${clientName} tiene ${clientData.descuento_fijo}% VIP pero no aplica con ${metodoPago} (Válido en: ${metodosPermitidos.join(', ')})`, { icon: '⚠️' });
+          if (regalia) {
+            toast(`🎁 Regalía registrada para este cliente: ${regalia}`, { duration: 5000, icon: '🎁' });
+          }
+        }
       } else {
-        // Método no califica
+        // Cliente registrado sin privilegios: bloqueo a 0
         updatedCart = cart.map(item => ({
           ...item,
           discount: 0,
           discountPercent: 0,
           discountMode: 'C$'
         }));
-        toast(`ℹ️ ${clientName} tiene ${clientData.descuento_fijo}% VIP pero solo aplica en: ${metodosPermitidos.join(', ')}`, { icon: '⚠️' });
-        if (regalia) {
-          toast(`🎁 Regalía registrada para este cliente: ${regalia}`, { duration: 5000, icon: '🎁' });
-        }
+        toast(`👤 ${clientName}: Cliente sin privilegios de descuento otorgados por gerencia.`, { icon: 'ℹ️' });
       }
     }
 
@@ -333,31 +387,47 @@ export default function POS() {
       let finalDiscount = existing.discount;
       let finalPercent = existing.discountPercent || 0;
 
-      if (existing.discountMode === '%') {
-        finalPercent = existing.discountPercent || (aplica ? porcentaje : 0);
-        finalDiscount = (itemTotal * finalPercent) / 100;
-      } else if (aplica && !existing.discount) {
-        finalPercent = porcentaje;
-        finalDiscount = (itemTotal * porcentaje) / 100;
+      if (!isMostrador) {
+        if (hasPrivilegios && aplica) {
+          finalPercent = porcentaje;
+          finalDiscount = Number(((itemTotal * finalPercent) / 100).toFixed(2));
+        } else {
+          finalPercent = 0;
+          finalDiscount = 0;
+        }
+      } else {
+        if (existing.discountMode === '%') {
+          finalPercent = existing.discountPercent || 0;
+          finalDiscount = Number(((itemTotal * finalPercent) / 100).toFixed(2));
+        } else {
+          finalDiscount = Math.min(itemTotal, existing.discount || 0);
+          finalPercent = itemTotal > 0 ? Number(((finalDiscount / itemTotal) * 100).toFixed(1)) : 0;
+        }
       }
 
       setCart(cart.map(item => item.id === product.id ? { 
         ...item, 
         qty: newQty, 
         discount: finalDiscount,
-        discountPercent: finalPercent
+        discountPercent: finalPercent,
+        discountMode: isMostrador ? (item.discountMode || 'C$') : '%'
       } : item));
     } else {
       const itemTotal = product.price * 1;
-      const initialPercent = aplica ? porcentaje : 0;
-      const initialDiscount = aplica ? (itemTotal * porcentaje) / 100 : 0;
-      
+      let initialPercent = 0;
+      let initialDiscount = 0;
+
+      if (!isMostrador && hasPrivilegios && aplica) {
+        initialPercent = porcentaje;
+        initialDiscount = Number(((itemTotal * porcentaje) / 100).toFixed(2));
+      }
+
       setCart([...cart, { 
         ...product, 
         qty: 1, 
         discount: initialDiscount,
         discountPercent: initialPercent,
-        discountMode: aplica ? '%' : 'C$'
+        discountMode: (!isMostrador && hasPrivilegios && aplica) ? '%' : 'C$'
       }]);
     }
   };
@@ -383,11 +453,22 @@ export default function POS() {
     let finalDiscount = item.discount || 0;
     let finalPercent = item.discountPercent || 0;
 
-    if (item.discountMode === '%') {
-      finalDiscount = (itemTotal * (item.discountPercent || 0)) / 100;
+    if (!isMostrador) {
+      if (hasPrivilegios && descuentoEval.aplica) {
+        finalPercent = clienteActualObj.descuento_fijo || 0;
+        finalDiscount = Number(((itemTotal * finalPercent) / 100).toFixed(2));
+      } else {
+        finalPercent = 0;
+        finalDiscount = 0;
+      }
     } else {
-      finalDiscount = Math.min(itemTotal, item.discount || 0);
-      finalPercent = itemTotal > 0 ? ((finalDiscount / itemTotal) * 100) : 0;
+      if (item.discountMode === '%') {
+        finalPercent = item.discountPercent || 0;
+        finalDiscount = Number(((itemTotal * finalPercent) / 100).toFixed(2));
+      } else {
+        finalDiscount = Math.min(itemTotal, item.discount || 0);
+        finalPercent = itemTotal > 0 ? Number(((finalDiscount / itemTotal) * 100).toFixed(1)) : 0;
+      }
     }
 
     setCart(cart.map(c => c.id === productId ? { 
@@ -398,8 +479,9 @@ export default function POS() {
     } : c));
   };
 
-  // Manejador inteligente de Descuentos (Conversión bidireccional C$ <-> %)
+  // Manejador inteligente de Descuentos para Mostrador (Conversión bidireccional C$ <-> %)
   const handleDiscountChange = (productId, rawVal, currentMode) => {
+    if (!isMostrador) return; // Solo permitido para clientes de mostrador
     const val = Math.max(0, parseFloat(rawVal) || 0);
     setCart(cart.map(c => {
       if (c.id === productId) {
@@ -409,10 +491,10 @@ export default function POS() {
 
         if (currentMode === '%') {
           finalPercent = Math.min(100, val);
-          finalDiscount = (itemTotal * finalPercent) / 100;
+          finalDiscount = Number(((itemTotal * finalPercent) / 100).toFixed(2));
         } else {
           finalDiscount = Math.min(itemTotal, val);
-          finalPercent = itemTotal > 0 ? ((finalDiscount / itemTotal) * 100) : 0;
+          finalPercent = itemTotal > 0 ? Number(((finalDiscount / itemTotal) * 100).toFixed(1)) : 0;
         }
 
         return {
@@ -428,6 +510,7 @@ export default function POS() {
 
   // Alternar entre modo Porcentaje (%) y Córdobas (C$)
   const toggleDiscountMode = (productId) => {
+    if (!isMostrador) return;
     setCart(cart.map(c => {
       if (c.id === productId) {
         const currentMode = c.discountMode || 'C$';
@@ -457,7 +540,7 @@ export default function POS() {
   };
 
   const subtotalBruto = cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
-  const totalDescuentos = cart.reduce((sum, item) => sum + (item.discount || 0), 0);
+  const totalDescuentos = cart.reduce((sum, item) => sum + getItemDiscount(item), 0);
   const total = Math.max(0, subtotalBruto - totalDescuentos);
   
   // Variables para la impresión
@@ -565,16 +648,20 @@ export default function POS() {
         total,
         regalia: (!descuentoEval.aplica && descuentoEval.regalia) ? descuentoEval.regalia : null,
         estado: 'Completado',
-        items: cart.map(item => ({
-          id_producto: item.id,
-          type: item.type || 'producto',
-          name: item.name,
-          cantidad: item.qty,
-          precio_unitario: item.price,
-          descuento: item.discount || 0,
-          descuento_porcentaje: item.discountPercent || 0,
-          subtotal: (item.price * item.qty) - (item.discount || 0)
-        }))
+        items: cart.map(item => {
+          const finalDesc = getItemDiscount(item);
+          const finalPercent = getItemDiscountPercent(item);
+          return {
+            id_producto: item.id,
+            type: item.type || 'producto',
+            name: item.name,
+            cantidad: item.qty,
+            precio_unitario: item.price,
+            descuento: finalDesc,
+            descuento_porcentaje: finalPercent,
+            subtotal: (item.price * item.qty) - finalDesc
+          };
+        })
       };
 
       await set(saleRef, newSale);
@@ -743,20 +830,28 @@ export default function POS() {
               <div>
                 <div className="flex justify-between items-center mb-1 flex-wrap gap-1">
                   <label className="block text-xs font-bold text-gray-500 uppercase">Cliente</label>
-                  {clienteActualObj && (clienteActualObj.descuento_fijo || 0) > 0 && (
+                  {clienteActualObj && (
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      {descuentoEval.aplica ? (
-                        <span className="text-[11px] font-black text-amber-700 flex items-center gap-1 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
-                          <Sparkles size={12} /> {clienteActualObj.descuento_fijo}% VIP ({metodoPago})
-                        </span>
+                      {(clienteActualObj.descuento_fijo || 0) > 0 ? (
+                        <>
+                          {descuentoEval.aplica ? (
+                            <span className="text-[11px] font-black text-amber-700 flex items-center gap-1 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                              <Sparkles size={12} /> {clienteActualObj.descuento_fijo}% VIP Automático ({metodoPago})
+                            </span>
+                          ) : (
+                            <span className="text-[11px] font-semibold text-gray-600 bg-gray-100 px-2 py-0.5 rounded-full" title={`Válido solo en: ${descuentoEval.metodosPermitidos.join(', ')}`}>
+                              ⚠️ Sin descuento con {metodoPago}
+                            </span>
+                          )}
+                          {!descuentoEval.aplica && descuentoEval.regalia && (
+                            <span className="text-[11px] font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200 flex items-center gap-1" title="Beneficio especial para este método de pago">
+                              <Gift size={12} /> Regalía: {descuentoEval.regalia}
+                            </span>
+                          )}
+                        </>
                       ) : (
-                        <span className="text-[11px] font-semibold text-gray-600 bg-gray-100 px-2 py-0.5 rounded-full" title={`Válido solo en: ${descuentoEval.metodosPermitidos.join(', ')}`}>
-                          ⚠️ Sin descuento con {metodoPago}
-                        </span>
-                      )}
-                      {!descuentoEval.aplica && descuentoEval.regalia && (
-                        <span className="text-[11px] font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200 flex items-center gap-1" title="Beneficio especial para este método de pago">
-                          <Gift size={12} /> Regalía: {descuentoEval.regalia}
+                        <span className="text-[11px] font-semibold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full flex items-center gap-1" title="Cliente registrado sin privilegios de descuento otorgados por gerencia">
+                          <Lock size={10} /> Sin descuento asignado
                         </span>
                       )}
                     </div>
@@ -1015,7 +1110,9 @@ export default function POS() {
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {cart.map((item) => {
-                      const itemSubtotal = (item.price * item.qty) - (item.discount || 0);
+                      const effectiveDiscount = getItemDiscount(item);
+                      const effectivePercent = getItemDiscountPercent(item);
+                      const itemSubtotal = (item.price * item.qty) - effectiveDiscount;
                       const isPercentMode = item.discountMode === '%';
                       return (
                         <tr key={item.id} className="hover:bg-gray-50 transition-colors">
@@ -1053,35 +1150,73 @@ export default function POS() {
                           </td>
                           <td className="p-3 text-right text-gray-600 font-medium">C$ {item.price.toFixed(0)}</td>
                           
-                          {/* CAMPO DE DESCUENTO BIDIRECCIONAL (C$ <-> %) */}
-                          <td className="p-3">
-                            <div className="flex flex-col items-center gap-0.5">
-                              <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white shadow-sm focus-within:ring-2 focus-within:ring-blue-400">
-                                <input 
-                                  type="number"
-                                  min="0"
-                                  step={isPercentMode ? "1" : "5"}
-                                  value={isPercentMode ? (item.discountPercent || 0) : (item.discount || 0)}
-                                  onChange={(e) => handleDiscountChange(item.id, e.target.value, isPercentMode ? '%' : 'C$')}
-                                  className="w-16 text-center py-1 text-xs text-red-600 font-bold outline-none"
-                                  title={isPercentMode ? "Porcentaje de descuento" : "Descuento en Córdobas"}
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => toggleDiscountMode(item.id)}
-                                  className={`px-1.5 py-1 text-[11px] font-black border-l transition-colors flex items-center gap-0.5 ${isPercentMode ? 'bg-purple-100 text-purple-700 hover:bg-purple-200' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'}`}
-                                  title="Clic para cambiar entre Porcentaje (%) y Córdobas (C$)"
-                                >
-                                  {isPercentMode ? '%' : 'C$'}
-                                  <RefreshCw size={9} className="opacity-60" />
-                                </button>
+                          {/* CAMPO DE DESCUENTO: 3 TIERS BLINDADOS */}
+                          <td className="p-3 text-center">
+                            {isMostrador ? (
+                              /* TIER 3: CLIENTE DE MOSTRADOR -> Descuento manual interactivo (C$ <-> %) */
+                              <div className="flex flex-col items-center gap-0.5">
+                                <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white shadow-sm focus-within:ring-2 focus-within:ring-blue-400">
+                                  <input 
+                                    type="number" 
+                                    min="0" 
+                                    step={isPercentMode ? "1" : "5"}
+                                    value={isPercentMode ? (item.discountPercent || 0) : (item.discount || 0)}
+                                    onChange={(e) => handleDiscountChange(item.id, e.target.value, isPercentMode ? '%' : 'C$')}
+                                    className="w-16 text-center py-1 text-xs text-red-600 font-bold outline-none"
+                                    title={isPercentMode ? "Porcentaje de descuento de mostrador" : "Descuento en Córdobas de mostrador"}
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleDiscountMode(item.id)}
+                                    className={`px-1.5 py-1 text-[11px] font-black border-l transition-colors flex items-center gap-0.5 ${isPercentMode ? 'bg-purple-100 text-purple-700 hover:bg-purple-200' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'}`}
+                                    title="Clic para cambiar entre Porcentaje (%) y Córdobas (C$)"
+                                  >
+                                    {isPercentMode ? '%' : 'C$'}
+                                    <RefreshCw size={9} className="opacity-60" />
+                                  </button>
+                                </div>
+                                <span className="text-[10px] text-gray-400 font-semibold">
+                                  {isPercentMode 
+                                    ? `≈ C$ ${effectiveDiscount.toFixed(2)}` 
+                                    : `≈ ${effectivePercent.toFixed(1)}%`}
+                                </span>
                               </div>
-                              <span className="text-[10px] text-gray-400 font-semibold">
-                                {isPercentMode 
-                                  ? `≈ C$ ${(item.discount || 0).toFixed(2)}` 
-                                  : `≈ ${(item.discountPercent || 0).toFixed(1)}%`}
-                              </span>
-                            </div>
+                            ) : hasPrivilegios ? (
+                              /* TIER 1: CLIENTE CON PRIVILEGIOS VIP -> Automático y Bloqueado */
+                              descuentoEval.aplica ? (
+                                <div className="flex flex-col items-center gap-0.5">
+                                  <div className="inline-flex items-center gap-1 bg-amber-50 border border-amber-300 text-amber-800 px-2.5 py-1 rounded-lg text-xs font-black shadow-xs">
+                                    <Sparkles size={11} className="text-amber-600" />
+                                    <span>VIP {clienteActualObj.descuento_fijo}%</span>
+                                    <Lock size={10} className="text-amber-500 opacity-70" title="Fijado por gerencia (Bloqueado)" />
+                                  </div>
+                                  <span className="text-[10px] font-bold text-amber-700">
+                                    - C$ {effectiveDiscount.toFixed(2)}
+                                  </span>
+                                </div>
+                              ) : (
+                                <div className="flex flex-col items-center gap-0.5">
+                                  <div className="inline-flex items-center gap-1 bg-gray-100 border border-gray-200 text-gray-500 px-2.5 py-1 rounded-lg text-xs font-bold" title={`No califica para descuento con pago en ${metodoPago}`}>
+                                    <Lock size={11} className="text-gray-400" />
+                                    <span>0.00</span>
+                                  </div>
+                                  <span className="text-[9px] font-bold text-red-500">
+                                    Sin desc. ({metodoPago})
+                                  </span>
+                                </div>
+                              )
+                            ) : (
+                              /* TIER 2: CLIENTE REGISTRADO SIN PRIVILEGIOS -> Bloqueado a 0.00 */
+                              <div className="flex flex-col items-center gap-0.5">
+                                <div className="inline-flex items-center gap-1 bg-gray-100 border border-gray-200 text-gray-400 px-2.5 py-1 rounded-lg text-xs font-bold" title="Cliente sin privilegios de descuento autorizados por gerencia">
+                                  <Lock size={11} />
+                                  <span>0.00</span>
+                                </div>
+                                <span className="text-[9px] font-medium text-gray-400">
+                                  Sin privilegio
+                                </span>
+                              </div>
+                            )}
                           </td>
 
                           <td className="p-3 text-right font-black text-blue-800 text-sm">
