@@ -10,24 +10,53 @@ export default function Layout({ children }) {
   const { user, logout } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
   
-  const menu = [
-    { name: 'Dashboard', path: '/', icon: <Home size={20} />, perm: 'VER_REPORTES' },
-    { name: 'Portal Empleado', path: '/mi-portal', icon: <UserCheck size={20} />, perm: 'PUBLICO' },
-    { name: 'Caja POS', path: '/pos', icon: <ShoppingCart size={20} />, perm: 'VER_POS' },
-    { name: 'Órdenes (Taller)', path: '/taller', icon: <Wrench size={20} />, perm: 'VER_TALLER' },
-    { name: 'Recursos Humanos', path: '/rrhh', icon: <Users size={20} />, perm: 'VER_USUARIOS' },
-    { name: 'Inventario', path: '/inventario', icon: <Package size={20} />, perm: 'VER_INVENTARIO' },
-    { name: 'Servicios', path: '/servicios', icon: <Wrench size={20} />, perm: 'VER_INVENTARIO' },
-    { name: 'Compras', path: '/compras', icon: <ShoppingBag size={20} />, perm: 'VER_COMPRAS' },
-    { name: 'Contabilidad', path: '/contabilidad', icon: <Landmark size={20} />, perm: 'VER_CONTABILIDAD' },
-    { name: 'Clientes', path: '/clientes', icon: <Users size={20} />, perm: 'VER_CLIENTES' },
-    { name: 'CxC', path: '/cxc', icon: <Wallet size={20} />, perm: 'VER_CXC' },
-    { name: 'Proveedores', path: '/proveedores', icon: <Truck size={20} />, perm: 'VER_PROVEEDORES' },
-    { name: 'CxP', path: '/cxp', icon: <Wallet size={20} />, perm: 'VER_CXP' },
-    { name: 'Kardex', path: '/kardex', icon: <Activity size={20} />, perm: 'VER_REPORTES' },
-    { name: 'Reportes', path: '/reportes', icon: <BarChart2 size={20} />, perm: 'VER_REPORTES' },
-    { name: 'Ajustes', path: '/catalogos', icon: <Settings size={20} />, perm: 'VER_CATALOGOS' },
-    { name: 'Usuarios', path: '/usuarios', icon: <ShieldCheck size={20} />, perm: 'VER_USUARIOS' },
+  const menuSections = [
+    {
+      title: 'Operaciones',
+      items: [
+        { name: 'Dashboard', path: '/', icon: <Home size={18} />, perm: 'VER_REPORTES' },
+        { name: 'Caja POS', path: '/pos', icon: <ShoppingCart size={18} />, perm: 'VER_POS' },
+        { name: 'Órdenes (Taller)', path: '/taller', icon: <Wrench size={18} />, perm: 'VER_TALLER' },
+      ]
+    },
+    {
+      title: 'Inventario & Compras',
+      items: [
+        { name: 'Inventario', path: '/inventario', icon: <Package size={18} />, perm: 'VER_INVENTARIO' },
+        { name: 'Servicios', path: '/servicios', icon: <Wrench size={18} />, perm: 'VER_INVENTARIO' },
+        { name: 'Compras', path: '/compras', icon: <ShoppingBag size={18} />, perm: 'VER_COMPRAS' },
+        { name: 'Kardex', path: '/kardex', icon: <Activity size={18} />, perm: 'VER_REPORTES' },
+      ]
+    },
+    {
+      title: 'Comercial',
+      items: [
+        { name: 'Clientes', path: '/clientes', icon: <Users size={18} />, perm: 'VER_CLIENTES' },
+        { name: 'Cuentas por Cobrar (CxC)', path: '/cxc', icon: <Wallet size={18} />, perm: 'VER_CXC' },
+        { name: 'Proveedores', path: '/proveedores', icon: <Truck size={18} />, perm: 'VER_PROVEEDORES' },
+      ]
+    },
+    {
+      title: 'Finanzas',
+      items: [
+        { name: 'Contabilidad & CxP', path: '/contabilidad', icon: <Landmark size={18} />, perm: 'VER_CONTABILIDAD' },
+        { name: 'Reportes y Ventas', path: '/reportes', icon: <BarChart2 size={18} />, perm: 'VER_REPORTES' },
+      ]
+    },
+    {
+      title: 'Recursos Humanos',
+      items: [
+        { name: 'Gestión RRHH', path: '/rrhh', icon: <Users size={18} />, perm: 'VER_USUARIOS' },
+        { name: 'Portal Empleado', path: '/mi-portal', icon: <UserCheck size={18} />, perm: 'PUBLICO' },
+      ]
+    },
+    {
+      title: 'Administración',
+      items: [
+        { name: 'Ajustes y Catálogos', path: '/catalogos', icon: <Settings size={18} />, perm: 'VER_CATALOGOS' },
+        { name: 'Usuarios', path: '/usuarios', icon: <ShieldCheck size={18} />, perm: 'VER_USUARIOS' },
+      ]
+    }
   ];
 
   // Función para verificar permiso
@@ -37,16 +66,8 @@ export default function Layout({ children }) {
     if (user.rol === 'SuperAdmin') return true;
     if (perm === 'VER_TALLER' && user.funcion === 'Mecánico') return true;
     if (perm === 'VER_CONTABILIDAD' && (user.permisos?.includes('VER_CONTABILIDAD') || user.permisos?.includes('VER_CXP') || user.permisos?.includes('VER_REPORTES'))) return true;
-    // Si no es SuperAdmin, debe tener el permiso explícito en su array
     return user.permisos && user.permisos.includes(perm);
   };
-
-  // Filtrar menú por permisos
-  const filteredMenu = menu.filter(item => {
-    // Si es Dashboard o Portal Empleado, dejarlo pasar para todos los usuarios autenticados
-    if (item.name === 'Dashboard' || item.path === '/mi-portal') return true; 
-    return hasPermission(item.perm);
-  });
 
   return (
     <div className="flex h-screen bg-gray-100 font-sans text-gray-800 overflow-hidden">
@@ -86,24 +107,40 @@ export default function Layout({ children }) {
           </div>
         </div>
         
-        <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
-          {filteredMenu.map((item) => {
-            const isActive = location.pathname === item.path;
+        <nav className="flex-1 overflow-y-auto py-3 px-3 space-y-4">
+          {menuSections.map((sec, secIdx) => {
+            const visibleItems = sec.items.filter(item => {
+              if (item.name === 'Dashboard' || item.path === '/mi-portal') return true;
+              return hasPermission(item.perm);
+            });
+
+            if (visibleItems.length === 0) return null;
+
             return (
-              <Link 
-                key={item.name} 
-                to={item.path}
-                onClick={() => setIsMobileMenuOpen(false)}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 font-medium
-                  ${isActive 
-                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' 
-                    : 'text-blue-100 hover:bg-blue-800 hover:text-white'
-                  }`}
-              >
-                {item.icon}
-                {item.name}
-              </Link>
-            )
+              <div key={secIdx} className="space-y-1">
+                <p className="text-[10px] uppercase font-bold text-blue-300/70 tracking-wider px-3 mb-1">
+                  {sec.title}
+                </p>
+                {visibleItems.map(item => {
+                  const isActive = location.pathname === item.path;
+                  return (
+                    <Link 
+                      key={item.name} 
+                      to={item.path}
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className={`flex items-center gap-2.5 px-3 py-2 rounded-xl transition-all duration-200 text-xs font-semibold
+                        ${isActive 
+                          ? 'bg-blue-600 text-white shadow-md shadow-blue-950' 
+                          : 'text-blue-100 hover:bg-blue-800 hover:text-white'
+                        }`}
+                    >
+                      {item.icon}
+                      <span className="truncate">{item.name}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            );
           })}
         </nav>
 
