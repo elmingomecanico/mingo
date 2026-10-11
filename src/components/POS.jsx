@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingCart, Trash2, Search, Save, Loader, Printer, Plus, X, UserPlus, Minus } from 'lucide-react';
+import { ShoppingCart, Trash2, Search, Save, Loader, Printer, Plus, X, UserPlus, Minus, Percent, FileDown, ShieldAlert, Sparkles } from 'lucide-react';
 import { ref, onValue, push, set, runTransaction } from 'firebase/database';
 import { rtdb } from '../firebase';
 import toast from 'react-hot-toast';
@@ -52,24 +52,10 @@ export default function POS() {
   };
 
   // State proxies
-  const cart = activeTab.cart;
+  const cart = activeTab.cart || [];
   const setCart = (newCartVal) => updateActiveTab({ cart: typeof newCartVal === 'function' ? newCartVal(cart) : newCartVal });
 
   const selectedCliente = activeTab.selectedCliente;
-  const handleSelectCliente = (val) => {
-    const isGenericName = !activeTab.name || activeTab.name.startsWith('Factura') || activeTab.name.startsWith('Borrador');
-    let newName = activeTab.name;
-    if (val && val.value !== 'MOSTRADOR') {
-      if (isGenericName) {
-        newName = val.label;
-      }
-    } else if (isGenericName) {
-      const idx = tabs.findIndex(t => t.id === activeTabId) + 1;
-      newName = `Factura ${idx > 0 ? idx : 1}`;
-    }
-    updateActiveTab({ selectedCliente: val, name: newName });
-  };
-
   const metodoPago = activeTab.metodoPago;
   const setMetodoPago = (val) => updateActiveTab({ metodoPago: val });
 
@@ -87,7 +73,7 @@ export default function POS() {
   };
 
   const closeTab = (idToClose, e) => {
-    e.stopPropagation();
+    if (e && e.stopPropagation) e.stopPropagation();
     if (tabs.length === 1) {
       const freshTab = getDefaultTab(1);
       setTabs([freshTab]);
@@ -111,14 +97,13 @@ export default function POS() {
   const [mecanicos, setMecanicos] = useState([]);
   const [empleados, setEmpleados] = useState([]);
 
-  // Modal para creación rápida de clientes
+  // Modal para creación rápida de clientes por cajero
   const [isNewClientModalOpen, setIsNewClientModalOpen] = useState(false);
   const [newClientForm, setNewClientForm] = useState({
     nombre: '',
     telefono1: '',
     cedula: '',
-    direccion: '',
-    limite_credito: ''
+    direccion: ''
   });
 
   useEffect(() => {
@@ -217,6 +202,35 @@ export default function POS() {
     return searchTerms.every(term => textToSearch.includes(term));
   });
 
+  const clienteActualObj = clientes.find(c => c.id === selectedCliente?.value);
+
+  const handleSelectCliente = (val) => {
+    const isGenericName = !activeTab.name || activeTab.name.startsWith('Factura') || activeTab.name.startsWith('Borrador');
+    let newName = activeTab.name;
+    if (val && val.value !== 'MOSTRADOR') {
+      if (isGenericName) {
+        newName = val.label;
+      }
+    } else if (isGenericName) {
+      const idx = tabs.findIndex(t => t.id === activeTabId) + 1;
+      newName = `Factura ${idx > 0 ? idx : 1}`;
+    }
+
+    // Comprobar privilegios del cliente
+    const clientData = clientes.find(c => c.id === val?.value);
+    const clientDescPct = clientData?.descuento_fijo || 0;
+    let updatedCart = cart;
+    if (clientDescPct > 0) {
+      updatedCart = cart.map(item => ({
+        ...item,
+        discount: (item.price * item.qty * (clientDescPct / 100))
+      }));
+      toast(`Descuento VIP aplicado: ${clientDescPct}% en los artículos`, { icon: '✨' });
+    }
+
+    updateActiveTab({ selectedCliente: val, name: newName, cart: updatedCart });
+  };
+
   const addToCart = (product) => {
     const stockActual = inventory[product.id]?.stock_actual || 0;
     const existing = cart.find(item => item.id === product.id);
@@ -227,10 +241,15 @@ export default function POS() {
       return;
     }
 
+    const clientDescPct = clienteActualObj?.descuento_fijo || 0;
+
     if (existing) {
-      setCart(cart.map(item => item.id === product.id ? { ...item, qty: item.qty + 1 } : item));
+      const newQty = existing.qty + 1;
+      const autoDesc = clientDescPct > 0 ? (existing.price * newQty * (clientDescPct / 100)) : existing.discount;
+      setCart(cart.map(item => item.id === product.id ? { ...item, qty: newQty, discount: autoDesc } : item));
     } else {
-      setCart([...cart, { ...product, qty: 1, discount: 0 }]);
+      const autoDesc = clientDescPct > 0 ? (product.price * (clientDescPct / 100)) : 0;
+      setCart([...cart, { ...product, qty: 1, discount: autoDesc }]);
     }
   };
 
@@ -251,18 +270,35 @@ export default function POS() {
       }
     }
 
-    setCart(cart.map(c => c.id === productId ? { ...c, qty: newQty } : c));
+    const clientDescPct = clienteActualObj?.descuento_fijo || 0;
+    const autoDesc = clientDescPct > 0 ? (item.price * newQty * (clientDescPct / 100)) : item.discount;
+
+    setCart(cart.map(c => c.id === productId ? { ...c, qty: newQty, discount: autoDesc } : c));
   };
 
-  const total = cart.reduce((sum, item) => sum + (item.price * item.qty) - item.discount, 0);
+  const updateCartDiscount = (productId, newDiscount) => {
+    const val = Math.max(0, parseFloat(newDiscount) || 0);
+    setCart(cart.map(c => {
+      if (c.id === productId) {
+        const itemSub = c.price * c.qty;
+        const finalDiscount = Math.min(val, itemSub);
+        return { ...c, discount: finalDiscount };
+      }
+      return c;
+    }));
+  };
+
+  const subtotalBruto = cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
+  const totalDescuentos = cart.reduce((sum, item) => sum + (item.discount || 0), 0);
+  const total = Math.max(0, subtotalBruto - totalDescuentos);
   
   // Variables para la impresión
   const [completedSale, setCompletedSale] = useState(null);
   const printRef = React.useRef();
   const handlePrint = useReactToPrint({
     contentRef: printRef,
-    documentTitle: `Factura_${completedSale?.id || 'POS'}`,
-    onAfterPrint: () => setCompletedSale(null),
+    documentTitle: `Ticket_${completedSale?.numero_factura || 'POS'}`,
+    pageStyle: `@page { size: 80mm auto; margin: 0; } @media print { body { -webkit-print-color-adjust: exact; } }`
   });
 
   const handleCreateQuickClient = async (e) => {
@@ -276,15 +312,18 @@ export default function POS() {
         telefono1: newClientForm.telefono1.trim(),
         cedula: newClientForm.cedula.trim(),
         direccion: newClientForm.direccion.trim(),
-        limite_credito: Number(newClientForm.limite_credito) || 0,
+        limite_credito: 0,
+        credito_habilitado: false,
+        descuento_fijo: 0,
+        tipo_cliente: 'Regular',
         fecha_registro: new Date().toISOString()
       };
       await set(cliRef, newCli);
-      toast.success('Cliente creado con éxito');
+      toast.success('Cliente registrado (Sin crédito hasta aprobación de gerencia)');
       const option = { value: cliRef.key, label: newCli.nombre };
       handleSelectCliente(option);
       setIsNewClientModalOpen(false);
-      setNewClientForm({ nombre: '', telefono1: '', cedula: '', direccion: '', limite_credito: '' });
+      setNewClientForm({ nombre: '', telefono1: '', cedula: '', direccion: '' });
     } catch (err) {
       toast.error('Error al guardar cliente: ' + err.message);
     }
@@ -302,13 +341,22 @@ export default function POS() {
       return toast.error('Debe seleccionar al empleado al que se le otorga el crédito');
     }
     
-    // Si es crédito a cliente, verificar si hay límite disponible
+    // Si es crédito a cliente, VALIDAR PRIVILEGIOS DE GERENCIA
     if (metodoPago === 'Crédito' && selectedCliente.value !== 'MOSTRADOR') {
       const clienteData = clientes.find(c => c.id === selectedCliente.value);
       if (!clienteData) return toast.error('Cliente no encontrado');
       
-      if (clienteData.limite_credito > 0 && total > clienteData.limite_credito) {
-        return toast.error(`El monto supera el límite de crédito del cliente (C$ ${clienteData.limite_credito})`);
+      if (!clienteData.credito_habilitado) {
+        return toast.error('Este cliente NO tiene crédito autorizado por gerencia.');
+      }
+
+      const limite = Number(clienteData.limite_credito) || 0;
+      if (limite <= 0) {
+        return toast.error('El cliente tiene un límite de crédito de C$ 0.00. Solicite autorización de gerencia.');
+      }
+
+      if (total > limite) {
+        return toast.error(`El monto supera el límite de crédito autorizado por gerencia (Límite: C$ ${limite.toFixed(2)})`);
       }
     }
 
@@ -337,6 +385,8 @@ export default function POS() {
         id_mecanico: selectedMecanico ? selectedMecanico.value : null,
         nombre_mecanico: selectedMecanico ? selectedMecanico.label : null,
         empleado_deudor: selectedEmpleadoDeudor ? selectedEmpleadoDeudor.value : null,
+        subtotal_bruto: subtotalBruto,
+        descuento_total: totalDescuentos,
         total,
         estado: 'Completado',
         items: cart.map(item => ({
@@ -345,7 +395,8 @@ export default function POS() {
           name: item.name,
           cantidad: item.qty,
           precio_unitario: item.price,
-          subtotal: (item.price * item.qty) - item.discount
+          descuento: item.discount || 0,
+          subtotal: (item.price * item.qty) - (item.discount || 0)
         }))
       };
 
@@ -388,7 +439,7 @@ export default function POS() {
       const serviciosEnCarrito = cart.filter(item => item.type === 'servicio');
       if (serviciosEnCarrito.length > 0 && selectedMecanico) {
         const otRef = push(ref(rtdb, 'ordenes_trabajo'));
-        const totalServicios = serviciosEnCarrito.reduce((sum, item) => sum + ((item.price * item.qty) - item.discount), 0);
+        const totalServicios = serviciosEnCarrito.reduce((sum, item) => sum + ((item.price * item.qty) - (item.discount || 0)), 0);
         
         await set(otRef, {
           id_factura: saleId,
@@ -403,7 +454,7 @@ export default function POS() {
             id_servicio: s.id,
             nombre: s.name,
             cantidad: s.qty,
-            subtotal: (s.price * s.qty) - s.discount
+            subtotal: (s.price * s.qty) - (s.discount || 0)
           })),
           total_servicios: totalServicios,
           comision_mecanico_porcentaje: selectedMecanico.comision || 50,
@@ -436,8 +487,6 @@ export default function POS() {
 
       toast.success(`Factura ${humanId} procesada exitosamente`);
       setCompletedSale(newSale);
-      
-      // Cerrar la pestaña procesada
       closeTab(activeTabId, { stopPropagation: () => {} });
 
     } catch (error) {
@@ -514,13 +563,23 @@ export default function POS() {
             {/* Cliente y Método de Pago */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Cliente</label>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block text-xs font-bold text-gray-500 uppercase">Cliente</label>
+                  {clienteActualObj && (clienteActualObj.descuento_fijo || 0) > 0 && (
+                    <span className="text-[11px] font-black text-amber-600 flex items-center gap-1 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                      <Sparkles size={12} /> {clienteActualObj.descuento_fijo}% Descuento VIP
+                    </span>
+                  )}
+                </div>
                 <div className="flex gap-2 items-center">
                   <div className="flex-1">
                     <Select
                       options={[
-                        { value: 'MOSTRADOR', label: 'CLIENTE DE MOSTRADOR' },
-                        ...clientes.map(c => ({ value: c.id, label: c.nombre }))
+                        { value: 'MOSTRADOR', label: 'Cliente Mostrador (Contado)' },
+                        ...clientes.map(c => ({ 
+                          value: c.id, 
+                          label: `${c.nombre} ${c.credito_habilitado ? '💳' : ''}` 
+                        }))
                       ]}
                       filterOption={(candidate, input) => {
                         if (!input) return true;
@@ -539,7 +598,7 @@ export default function POS() {
                     type="button"
                     onClick={() => setIsNewClientModalOpen(true)}
                     className="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-lg flex items-center justify-center shadow-sm h-[38px] w-[38px] transition-colors"
-                    title="Crear Nuevo Cliente"
+                    title="Crear Nuevo Cliente Rápido"
                   >
                     <Plus size={20} />
                   </button>
@@ -556,10 +615,29 @@ export default function POS() {
                   <option value="Efectivo">Efectivo</option>
                   <option value="Tarjeta">Tarjeta / POS</option>
                   <option value="Transferencia">Transferencia</option>
-                  {selectedCliente?.value !== 'MOSTRADOR' && <option value="Crédito">Crédito (CxC)</option>}
+                  {selectedCliente?.value !== 'MOSTRADOR' && (
+                    <option value="Crédito">
+                      Crédito (CxC) {clienteActualObj?.credito_habilitado ? '✅ Autorizado' : '⚠️ Sin autorizar'}
+                    </option>
+                  )}
                   <option value="Crédito Empleado">Crédito a Empleado</option>
                 </select>
               </div>
+
+              {metodoPago === 'Crédito' && selectedCliente?.value !== 'MOSTRADOR' && (
+                <div className="col-span-1 md:col-span-2">
+                  <div className={`p-3 rounded-lg border text-xs flex items-center justify-between ${clienteActualObj?.credito_habilitado && (clienteActualObj?.limite_credito || 0) > 0 ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
+                    <div className="flex items-center gap-2">
+                      <ShieldAlert size={16} />
+                      {clienteActualObj?.credito_habilitado ? (
+                        <span>Línea de crédito autorizada por gerencia: <strong>C$ {Number(clienteActualObj.limite_credito).toFixed(2)}</strong></span>
+                      ) : (
+                        <span>Este cliente <strong>NO tiene crédito autorizado</strong> por gerencia. Requiere aprobación antes de facturar.</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {metodoPago === 'Crédito Empleado' && (
                 <div className="col-span-1 md:col-span-2">
@@ -683,7 +761,7 @@ export default function POS() {
 
           </div>
 
-          {/* LISTA DE PRODUCTOS QUE SE ESTÁN FACTURANDO (CARRITO SIEMPRE VISIBLE) */}
+          {/* LISTA DE PRODUCTOS QUE SE ESTÁN FACTURANDO */}
           <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
             <div className="flex justify-between items-center mb-3">
               <h2 className="font-bold text-base text-gray-800 flex items-center gap-2">
@@ -712,63 +790,78 @@ export default function POS() {
                   <thead className="bg-gray-50 text-gray-500 font-bold border-b border-gray-100">
                     <tr>
                       <th className="p-3">Descripción</th>
-                      <th className="p-3 text-center w-32">Cantidad</th>
-                      <th className="p-3 text-right">Precio Unit.</th>
+                      <th className="p-3 text-center w-28">Cant.</th>
+                      <th className="p-3 text-right">P. Unit</th>
+                      <th className="p-3 text-center w-28">Desc (C$)</th>
                       <th className="p-3 text-right font-black text-blue-900">Subtotal</th>
-                      <th className="p-3 text-center w-12"></th>
+                      <th className="p-3 text-center w-10"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {cart.map((item) => (
-                      <tr key={item.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="p-3">
-                          <div className="flex items-center gap-2">
-                            {item.type === 'servicio' && <span className="text-purple-600 font-bold text-xs bg-purple-50 px-1.5 py-0.5 rounded">Servicio</span>}
-                            <span className="font-bold text-gray-800">{item.name}</span>
-                          </div>
-                          <span className="font-mono text-[11px] text-gray-400">{item.id}</span>
-                        </td>
-                        <td className="p-3">
-                          <div className="flex items-center justify-center gap-1">
-                            <button 
-                              type="button"
-                              onClick={() => updateCartQty(item.id, item.qty - 1)}
-                              className="w-7 h-7 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg flex items-center justify-center font-bold"
-                            >
-                              <Minus size={14} />
-                            </button>
+                    {cart.map((item) => {
+                      const itemSubtotal = (item.price * item.qty) - (item.discount || 0);
+                      return (
+                        <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+                          <td className="p-3">
+                            <div className="flex items-center gap-2">
+                              {item.type === 'servicio' && <span className="text-purple-600 font-bold text-xs bg-purple-50 px-1.5 py-0.5 rounded">Servicio</span>}
+                              <span className="font-bold text-gray-800">{item.name}</span>
+                            </div>
+                            <span className="font-mono text-[11px] text-gray-400">{item.id}</span>
+                          </td>
+                          <td className="p-3">
+                            <div className="flex items-center justify-center gap-1">
+                              <button 
+                                type="button"
+                                onClick={() => updateCartQty(item.id, item.qty - 1)}
+                                className="w-6 h-6 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded flex items-center justify-center font-bold"
+                              >
+                                <Minus size={12} />
+                              </button>
+                              <input 
+                                type="number" 
+                                min="1" 
+                                value={item.qty} 
+                                onChange={(e) => updateCartQty(item.id, parseInt(e.target.value) || 1)}
+                                className="w-10 text-center font-bold border rounded py-0.5 outline-none text-xs" 
+                              />
+                              <button 
+                                type="button"
+                                onClick={() => updateCartQty(item.id, item.qty + 1)}
+                                className="w-6 h-6 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded flex items-center justify-center font-bold"
+                              >
+                                <Plus size={12} />
+                              </button>
+                            </div>
+                          </td>
+                          <td className="p-3 text-right text-gray-600 font-medium">C$ {item.price.toFixed(0)}</td>
+                          <td className="p-3 text-center">
                             <input 
-                              type="number" 
-                              min="1" 
-                              value={item.qty} 
-                              onChange={(e) => updateCartQty(item.id, parseInt(e.target.value) || 1)}
-                              className="w-12 text-center font-bold border rounded-lg py-1 outline-none text-sm" 
+                              type="number"
+                              min="0"
+                              step="1"
+                              value={item.discount || 0}
+                              onChange={(e) => updateCartDiscount(item.id, e.target.value)}
+                              className="w-16 border rounded text-center py-0.5 text-xs text-red-600 font-bold outline-none focus:border-red-400"
+                              title="Descuento en Córdobas para este ítem"
                             />
+                          </td>
+                          <td className="p-3 text-right font-black text-blue-800 text-sm">
+                            C$ {itemSubtotal.toFixed(2)}
+                          </td>
+                          <td className="p-3 text-center">
                             <button 
                               type="button"
-                              onClick={() => updateCartQty(item.id, item.qty + 1)}
-                              className="w-7 h-7 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg flex items-center justify-center font-bold"
+                              onClick={() => setCart(cart.filter(c => c.id !== item.id))}
+                              className="text-gray-400 hover:text-red-500 p-1 rounded transition-colors"
+                              title="Eliminar de la lista"
                             >
-                              <Plus size={14} />
+                              <Trash2 size={16} />
                             </button>
-                          </div>
-                        </td>
-                        <td className="p-3 text-right text-gray-600 font-medium">C$ {item.price.toFixed(2)}</td>
-                        <td className="p-3 text-right font-black text-blue-800 text-base">
-                          C$ {((item.price * item.qty) - item.discount).toFixed(2)}
-                        </td>
-                        <td className="p-3 text-center">
-                          <button 
-                            type="button"
-                            onClick={() => setCart(cart.filter(c => c.id !== item.id))}
-                            className="text-gray-400 hover:text-red-500 p-1.5 rounded-lg transition-colors"
-                            title="Eliminar de la lista"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -778,21 +871,38 @@ export default function POS() {
 
         {/* Lado Derecho (Resumen y Cobro) */}
         <div className="space-y-4">
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 border-t-4 border-t-blue-600">
-            <h2 className="font-black text-gray-400 uppercase tracking-wider text-xs mb-3">Resumen de Factura</h2>
-            <div className="flex justify-between text-base text-gray-600 mb-2">
-              <span>Cliente:</span>
-              <span className="font-bold text-gray-800 truncate max-w-[150px]">{selectedCliente?.label}</span>
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 border-t-4 border-t-blue-600 space-y-3">
+            <h2 className="font-black text-gray-400 uppercase tracking-wider text-xs">Resumen de Factura</h2>
+            
+            <div className="space-y-2 text-sm text-gray-600 border-b border-gray-100 pb-3">
+              <div className="flex justify-between">
+                <span>Cliente:</span>
+                <span className="font-bold text-gray-800 truncate max-w-[150px]">{selectedCliente?.label}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Método:</span>
+                <span className="font-bold text-gray-800">{metodoPago}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Total Artículos:</span>
+                <span className="font-bold text-gray-800">{cart.reduce((sum, i) => sum + i.qty, 0)}</span>
+              </div>
             </div>
-            <div className="flex justify-between text-base text-gray-600 mb-2">
-              <span>Método:</span>
-              <span className="font-bold text-gray-800">{metodoPago}</span>
+
+            <div className="space-y-1.5 text-sm">
+              <div className="flex justify-between text-gray-500">
+                <span>Subtotal Bruto:</span>
+                <span className="font-semibold text-gray-700">C$ {subtotalBruto.toFixed(2)}</span>
+              </div>
+              {totalDescuentos > 0 && (
+                <div className="flex justify-between text-red-600 font-bold">
+                  <span>Descuentos:</span>
+                  <span>- C$ {totalDescuentos.toFixed(2)}</span>
+                </div>
+              )}
             </div>
-            <div className="flex justify-between text-base text-gray-600 mb-2">
-              <span>Ítems:</span>
-              <span className="font-bold text-gray-800">{cart.reduce((sum, i) => sum + i.qty, 0)}</span>
-            </div>
-            <div className="flex justify-between text-3xl font-black mt-4 pt-4 border-t border-gray-100 text-blue-900">
+
+            <div className="flex justify-between text-3xl font-black pt-3 border-t border-gray-100 text-blue-900">
               <span>TOTAL:</span>
               <span>C$ {total.toFixed(2)}</span>
             </div>
@@ -810,15 +920,18 @@ export default function POS() {
 
       </div>
 
-      {/* Modal Creación Rápida de Cliente */}
+      {/* Modal Creación Rápida de Cliente por Cajero (SIN PRIVILEGIOS DE CRÉDITO) */}
       {isNewClientModalOpen && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col">
             <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-              <h2 className="text-lg font-black text-gray-800 flex items-center gap-2">
-                <UserPlus className="text-blue-600" size={20} />
-                Nuevo Cliente Rápido
-              </h2>
+              <div>
+                <h2 className="text-lg font-black text-gray-800 flex items-center gap-2">
+                  <UserPlus className="text-blue-600" size={20} />
+                  Nuevo Cliente Rápido
+                </h2>
+                <p className="text-[11px] text-gray-400">Datos básicos. Privilegios de crédito son otorgados por gerencia.</p>
+              </div>
               <button onClick={() => setIsNewClientModalOpen(false)} className="text-gray-400 hover:text-gray-600 font-bold text-xl">&times;</button>
             </div>
             
@@ -859,18 +972,6 @@ export default function POS() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Límite de Crédito (C$)</label>
-                <input 
-                  type="number" 
-                  step="0.01"
-                  value={newClientForm.limite_credito} 
-                  onChange={e => setNewClientForm({...newClientForm, limite_credito: e.target.value})} 
-                  placeholder="0.00" 
-                  className="w-full border p-2.5 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm" 
-                />
-              </div>
-
-              <div>
                 <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Dirección</label>
                 <input 
                   type="text" 
@@ -901,35 +1002,52 @@ export default function POS() {
         </div>
       )}
 
-      {/* Modal de Impresión */}
+      {/* MODAL DE FINALIZACIÓN CON TICKET TÉRMICO POS-80 Y PDF */}
       {completedSale && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl overflow-hidden flex flex-col">
-            <div className="p-6 text-center border-b border-gray-100 bg-gray-50/50">
-              <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-3">
-                <Printer size={32} />
-              </div>
-              <h2 className="text-xl font-bold text-gray-800">¡Venta Completada!</h2>
-              <p className="text-gray-500 text-sm mt-1">¿Deseas imprimir el ticket?</p>
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[95vh]">
+            <div className="p-4 text-center border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
+              <span className="text-xs font-bold text-green-600 bg-green-50 px-2.5 py-1 rounded-full">
+                ✓ Venta Guardada con Éxito
+              </span>
+              <button onClick={() => setCompletedSale(null)} className="text-gray-400 hover:text-gray-600 font-bold text-xl">&times;</button>
             </div>
             
-            <div className="p-6 flex flex-col gap-3">
-              <button 
-                onClick={handlePrint}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-bold shadow-sm transition-colors flex justify-center items-center gap-2"
-              >
-                <Printer size={20} />
-                Imprimir Ticket
-              </button>
+            {/* VISTA PREVIA DEL TICKET EN PANTALLA */}
+            <div className="p-4 overflow-y-auto bg-gray-100 flex-1 flex justify-center">
+              <TicketPrinter sale={completedSale} isPreview={true} />
+            </div>
+
+            {/* BOTONES DE IMPRESIÓN Y ACCIONES */}
+            <div className="p-4 bg-white border-t border-gray-100 space-y-2">
+              <div className="grid grid-cols-2 gap-3">
+                <button 
+                  onClick={handlePrint}
+                  className="bg-blue-600 hover:bg-blue-700 text-white py-3 px-4 rounded-xl font-bold text-sm shadow-lg shadow-blue-200 transition-all flex items-center justify-center gap-2 active:scale-95"
+                >
+                  <Printer size={18} />
+                  Imprimir POS-80
+                </button>
+                <button 
+                  onClick={handlePrint}
+                  className="bg-gray-800 hover:bg-gray-900 text-white py-3 px-4 rounded-xl font-bold text-sm shadow-lg shadow-gray-200 transition-all flex items-center justify-center gap-2 active:scale-95"
+                >
+                  <FileDown size={18} />
+                  Descargar PDF
+                </button>
+              </div>
               <button 
                 onClick={() => setCompletedSale(null)}
-                className="w-full text-gray-500 font-bold hover:bg-gray-100 px-6 py-3 rounded-lg transition-colors"
+                className="w-full text-gray-500 font-bold hover:bg-gray-100 py-2.5 rounded-xl text-sm transition-colors"
               >
-                Cerrar (Sin imprimir)
+                Cerrar y Nueva Factura
               </button>
             </div>
             
-            <TicketPrinter ref={printRef} sale={completedSale} />
+            {/* ELEMENTO OCULTO PARA LA IMPRESORA REAL */}
+            <div className="hidden">
+              <TicketPrinter ref={printRef} sale={completedSale} isPreview={false} />
+            </div>
           </div>
         </div>
       )}

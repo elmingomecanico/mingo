@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ref, onValue, set, push, remove } from 'firebase/database';
 import { rtdb } from '../firebase';
-import { Users, Plus, Edit2, Trash2, Search, Phone, FileText, CreditCard } from 'lucide-react';
+import { Users, Plus, Edit2, Trash2, Search, Phone, FileText, CreditCard, Percent, ShieldCheck } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function Clientes() {
@@ -13,7 +13,15 @@ export default function Clientes() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [formData, setFormData] = useState({
-    nombre: '', cedula: '', telefono1: '', telefono2: '', direccion: '', limite_credito: 0
+    nombre: '', 
+    cedula: '', 
+    telefono1: '', 
+    telefono2: '', 
+    direccion: '', 
+    limite_credito: 0,
+    credito_habilitado: false,
+    descuento_fijo: 0,
+    tipo_cliente: 'Regular'
   });
 
   useEffect(() => {
@@ -40,11 +48,24 @@ export default function Clientes() {
         telefono1: item.telefono1 || '',
         telefono2: item.telefono2 || '',
         direccion: item.direccion || '',
-        limite_credito: item.limite_credito || 0
+        limite_credito: item.limite_credito || 0,
+        credito_habilitado: !!item.credito_habilitado,
+        descuento_fijo: item.descuento_fijo || 0,
+        tipo_cliente: item.tipo_cliente || 'Regular'
       });
     } else {
       setEditingId(null);
-      setFormData({ nombre: '', cedula: '', telefono1: '', telefono2: '', direccion: '', limite_credito: 0 });
+      setFormData({ 
+        nombre: '', 
+        cedula: '', 
+        telefono1: '', 
+        telefono2: '', 
+        direccion: '', 
+        limite_credito: 0,
+        credito_habilitado: false,
+        descuento_fijo: 0,
+        tipo_cliente: 'Regular'
+      });
     }
     setIsModalOpen(true);
   };
@@ -63,22 +84,22 @@ export default function Clientes() {
         telefono2: formData.telefono2.trim(),
         direccion: formData.direccion.trim(),
         limite_credito: Number(formData.limite_credito) || 0,
+        credito_habilitado: Boolean(formData.credito_habilitado),
+        descuento_fijo: Number(formData.descuento_fijo) || 0,
+        tipo_cliente: formData.tipo_cliente,
         fecha_registro: editingId ? undefined : new Date().toISOString()
       };
 
-      // Si estamos editando, mantenemos la fecha de registro original
       if (editingId) delete payload.fecha_registro;
 
-      // Si es nuevo, usamos set directamente con el push ref
       if (!editingId) {
         await set(itemRef, payload);
       } else {
-        // Actualizamos manteniendo las propiedades que ya existieran
         const clientObj = clientes.find(c => c.id === editingId);
         await set(itemRef, { ...clientObj, ...payload });
       }
 
-      toast.success(editingId ? 'Cliente actualizado' : 'Cliente registrado');
+      toast.success(editingId ? 'Privilegios y datos del cliente actualizados' : 'Cliente registrado exitosamente');
       setIsModalOpen(false);
     } catch (error) {
       toast.error('Error al guardar: ' + error.message);
@@ -106,9 +127,9 @@ export default function Clientes() {
         <div>
           <h1 className="text-2xl font-black text-gray-800 flex items-center gap-2">
             <Users className="text-blue-600" /> 
-            Cartera de Clientes
+            Cartera de Clientes y Privilegios (Gerencia)
           </h1>
-          <p className="text-gray-500 text-sm">Gestiona la información y límites de crédito de tus clientes.</p>
+          <p className="text-gray-500 text-sm">Administra información, líneas de crédito autorizadas y descuentos preferenciales.</p>
         </div>
         <button 
           onClick={() => handleOpenModal()}
@@ -127,9 +148,9 @@ export default function Clientes() {
               placeholder="Buscar por nombre o cédula..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm"
             />
-            <Search size={18} className="absolute left-3 top-3 text-gray-400" />
+            <Search size={18} className="absolute left-3 top-2.5 text-gray-400" />
           </div>
         </div>
 
@@ -138,16 +159,18 @@ export default function Clientes() {
             <thead className="bg-gray-50 text-gray-600 font-medium border-b border-gray-100">
               <tr>
                 <th className="p-4">Cliente</th>
+                <th className="p-4">Tipo</th>
                 <th className="p-4">Contacto</th>
-                <th className="p-4 text-right">Límite Crédito</th>
+                <th className="p-4 text-center">Descuento VIP</th>
+                <th className="p-4 text-right">Línea de Crédito</th>
                 <th className="p-4 text-center">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {loading ? (
-                <tr><td colSpan="4" className="p-8 text-center text-gray-400">Cargando clientes...</td></tr>
+                <tr><td colSpan="6" className="p-8 text-center text-gray-400">Cargando clientes...</td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td colSpan="4" className="p-8 text-center text-gray-400">No se encontraron clientes.</td></tr>
+                <tr><td colSpan="6" className="p-8 text-center text-gray-400">No se encontraron clientes.</td></tr>
               ) : (
                 filtered.map(cliente => (
                   <tr key={cliente.id} className="hover:bg-gray-50 transition-colors">
@@ -158,27 +181,58 @@ export default function Clientes() {
                       </div>
                     </td>
                     <td className="p-4">
-                      <div className="flex items-center gap-1 text-gray-700">
-                        <Phone size={14} className="text-gray-400" /> 
+                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${cliente.tipo_cliente === 'VIP' ? 'bg-purple-100 text-purple-700' : cliente.tipo_cliente === 'Mayorista' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
+                        {cliente.tipo_cliente || 'Regular'}
+                      </span>
+                    </td>
+                    <td className="p-4">
+                      <div className="flex items-center gap-1 text-gray-700 text-xs">
+                        <Phone size={13} className="text-gray-400" /> 
                         {cliente.telefono1 || 'Sin teléfono'}
                       </div>
-                      <div className="text-xs text-gray-500 mt-0.5 truncate max-w-[200px]">
+                      <div className="text-xs text-gray-400 mt-0.5 truncate max-w-[180px]">
                         {cliente.direccion || 'Sin dirección'}
                       </div>
                     </td>
-                    <td className="p-4 text-right">
-                      <div className="font-bold text-emerald-600 flex items-center justify-end gap-1">
-                        <CreditCard size={14} />
-                        C$ {cliente.limite_credito?.toFixed(2) || '0.00'}
-                      </div>
+                    <td className="p-4 text-center">
+                      {(cliente.descuento_fijo || 0) > 0 ? (
+                        <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-0.5 rounded-full font-black text-xs">
+                          <Percent size={12} /> {cliente.descuento_fijo}% Fijo
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-400">0%</span>
+                      )}
                     </td>
-                    <td className="p-4 text-center flex justify-center gap-2">
-                      <button onClick={() => handleOpenModal(cliente)} className="text-blue-500 hover:bg-blue-50 p-2 rounded-lg transition-colors">
-                        <Edit2 size={18} />
-                      </button>
-                      <button onClick={() => handleDelete(cliente.id, cliente.nombre)} className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors">
-                        <Trash2 size={18} />
-                      </button>
+                    <td className="p-4 text-right">
+                      {cliente.credito_habilitado && (cliente.limite_credito || 0) > 0 ? (
+                        <div>
+                          <div className="font-black text-emerald-600 flex items-center justify-end gap-1">
+                            <ShieldCheck size={14} className="text-emerald-500" />
+                            C$ {Number(cliente.limite_credito).toFixed(2)}
+                          </div>
+                          <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-1.5 py-0.5 rounded">Autorizado</span>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-400 italic">Sin Crédito</span>
+                      )}
+                    </td>
+                    <td className="p-4 text-center">
+                      <div className="flex justify-center gap-1">
+                        <button 
+                          onClick={() => handleOpenModal(cliente)} 
+                          className="text-blue-500 hover:bg-blue-50 p-2 rounded-lg transition-colors"
+                          title="Editar privilegios"
+                        >
+                          <Edit2 size={18} />
+                        </button>
+                        <button 
+                          onClick={() => handleDelete(cliente.id, cliente.nombre)} 
+                          className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors"
+                          title="Eliminar cliente"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -188,47 +242,108 @@ export default function Clientes() {
         </div>
       </div>
 
+      {/* MODAL CONFIGURACIÓN GERENCIA */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-2xl w-full max-w-lg shadow-xl overflow-hidden flex flex-col">
+          <div className="bg-white rounded-2xl w-full max-w-lg shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
             <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
               <h2 className="text-lg font-bold text-gray-800">
-                {editingId ? 'Editar Cliente' : 'Nuevo Cliente'}
+                {editingId ? 'Editar Cliente y Privilegios' : 'Nuevo Cliente (Gerencia)'}
               </h2>
               <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600 font-bold text-xl">&times;</button>
             </div>
             
-            <form onSubmit={handleSave} className="p-6 space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Nombre Completo *</label>
-                  <input required type="text" value={formData.nombre} onChange={e => setFormData({...formData, nombre: e.target.value})} className="w-full border p-2.5 rounded-lg outline-none focus:border-blue-500" placeholder="Ej: Juan Pérez" />
-                </div>
+            <form onSubmit={handleSave} className="p-6 space-y-4 overflow-y-auto">
+              <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Cédula / RUC</label>
-                  <input type="text" value={formData.cedula} onChange={e => setFormData({...formData, cedula: e.target.value})} className="w-full border p-2.5 rounded-lg outline-none focus:border-blue-500" placeholder="Ej: 001-000000-0000A" />
+                  <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Nombre Completo *</label>
+                  <input required type="text" value={formData.nombre} onChange={e => setFormData({...formData, nombre: e.target.value})} className="w-full border p-2.5 rounded-lg outline-none focus:border-blue-500 text-sm" placeholder="Ej: Juan Pérez" />
                 </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Cédula / RUC</label>
+                    <input type="text" value={formData.cedula} onChange={e => setFormData({...formData, cedula: e.target.value})} className="w-full border p-2.5 rounded-lg outline-none focus:border-blue-500 text-sm" placeholder="Ej: 001-000000-0000A" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Tipo de Cliente</label>
+                    <select value={formData.tipo_cliente} onChange={e => setFormData({...formData, tipo_cliente: e.target.value})} className="w-full border p-2.5 rounded-lg outline-none focus:border-blue-500 text-sm">
+                      <option value="Regular">Regular</option>
+                      <option value="Taller Aliado">Taller / Mecánico Aliado</option>
+                      <option value="Mayorista">Mayorista</option>
+                      <option value="VIP">VIP</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Teléfono Principal</label>
+                    <input type="tel" value={formData.telefono1} onChange={e => setFormData({...formData, telefono1: e.target.value})} className="w-full border p-2.5 rounded-lg outline-none focus:border-blue-500 text-sm" placeholder="Ej: 8888-8888" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Teléfono Secundario</label>
+                    <input type="tel" value={formData.telefono2} onChange={e => setFormData({...formData, telefono2: e.target.value})} className="w-full border p-2.5 rounded-lg outline-none focus:border-blue-500 text-sm" placeholder="Opcional" />
+                  </div>
+                </div>
+
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Límite de Crédito (C$)</label>
-                  <input type="number" step="0.01" min="0" value={formData.limite_credito} onChange={e => setFormData({...formData, limite_credito: e.target.value})} className="w-full border p-2.5 rounded-lg outline-none focus:border-blue-500" />
+                  <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Dirección</label>
+                  <textarea value={formData.direccion} onChange={e => setFormData({...formData, direccion: e.target.value})} rows="2" className="w-full border p-2.5 rounded-lg outline-none focus:border-blue-500 resize-none text-sm" placeholder="Dirección completa..."></textarea>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Teléfono Principal</label>
-                  <input type="tel" value={formData.telefono1} onChange={e => setFormData({...formData, telefono1: e.target.value})} className="w-full border p-2.5 rounded-lg outline-none focus:border-blue-500" placeholder="Ej: 8888-8888" />
+
+                {/* SECCIÓN PRIVILEGIOS Y CRÉDITO (GERENCIA) */}
+                <div className="p-4 bg-blue-50/60 rounded-xl border border-blue-100 space-y-3">
+                  <h3 className="text-xs font-black text-blue-900 uppercase flex items-center gap-1.5">
+                    <ShieldCheck size={16} className="text-blue-600" /> Privilegios y Crédito (Exclusivo Gerencia)
+                  </h3>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1">Descuento Preferencial (%)</label>
+                      <input 
+                        type="number" 
+                        min="0" 
+                        max="100" 
+                        value={formData.descuento_fijo} 
+                        onChange={e => setFormData({...formData, descuento_fijo: e.target.value})} 
+                        className="w-full border p-2 rounded-lg outline-none focus:border-blue-500 text-sm font-bold bg-white" 
+                        placeholder="Ej: 5 para 5%" 
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1">Límite de Crédito (C$)</label>
+                      <input 
+                        type="number" 
+                        step="0.01" 
+                        min="0" 
+                        value={formData.limite_credito} 
+                        onChange={e => setFormData({...formData, limite_credito: e.target.value})} 
+                        className="w-full border p-2 rounded-lg outline-none focus:border-blue-500 text-sm font-bold bg-white" 
+                        placeholder="0.00" 
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-1">
+                    <input 
+                      type="checkbox" 
+                      id="credito_habilitado" 
+                      checked={formData.credito_habilitado} 
+                      onChange={e => setFormData({...formData, credito_habilitado: e.target.checked})} 
+                      className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500" 
+                    />
+                    <label htmlFor="credito_habilitado" className="text-xs font-bold text-gray-700 cursor-pointer">
+                      Habilitar compras a crédito en Caja POS para este cliente
+                    </label>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Teléfono Secundario</label>
-                  <input type="tel" value={formData.telefono2} onChange={e => setFormData({...formData, telefono2: e.target.value})} className="w-full border p-2.5 rounded-lg outline-none focus:border-blue-500" placeholder="Opcional" />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Dirección</label>
-                  <textarea value={formData.direccion} onChange={e => setFormData({...formData, direccion: e.target.value})} rows="2" className="w-full border p-2.5 rounded-lg outline-none focus:border-blue-500 resize-none" placeholder="Dirección completa..."></textarea>
-                </div>
+
               </div>
 
               <div className="pt-4 flex justify-end gap-3 border-t border-gray-100 mt-6">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2.5 rounded-lg text-gray-600 font-medium hover:bg-gray-100 transition-colors">Cancelar</button>
-                <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-bold shadow-md shadow-blue-200 transition-all active:scale-95">Guardar Cliente</button>
+                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2.5 rounded-lg text-gray-600 font-medium hover:bg-gray-100 text-sm transition-colors">Cancelar</button>
+                <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-bold shadow-md shadow-blue-200 transition-all active:scale-95 text-sm">Guardar Privilegios</button>
               </div>
             </form>
           </div>
