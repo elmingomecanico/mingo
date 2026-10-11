@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingCart, Trash2, Search, Save, Loader, Printer, Plus, X, UserPlus, Minus, Percent, FileDown, ShieldAlert, Sparkles, RefreshCw, Gift, Lock, Camera, Maximize2, Package, ScanBarcode, LockOpen, ArrowUpRight, Calculator, CheckCircle2, AlertTriangle, Coins, DollarSign } from 'lucide-react';
+import { ShoppingCart, Trash2, Search, Save, Loader, Printer, Plus, X, UserPlus, Minus, Percent, FileDown, ShieldAlert, Sparkles, RefreshCw, Gift, Lock, Camera, Maximize2, Package, ScanBarcode, LockOpen, ArrowUpRight, Calculator, CheckCircle2, AlertTriangle, Coins, DollarSign, User, Wrench } from 'lucide-react';
 import { ref, onValue, push, set, runTransaction } from 'firebase/database';
 import { rtdb } from '../firebase';
 import { useAuth } from '../context/AuthContext';
@@ -13,6 +13,7 @@ import CashOpenModal from './CashOpenModal';
 import CashCloseModal from './CashCloseModal';
 import CashMovementModal from './CashMovementModal';
 import MoneyCounterModal from './MoneyCounterModal';
+import TokenizedSearchSelect from './TokenizedSearchSelect';
 
 export default function POS() {
   const { user } = useAuth();
@@ -255,6 +256,64 @@ export default function POS() {
     const textToSearch = `${p.name} ${p.id} ${p.cat || ''} ${compatText}`.toLowerCase();
     return searchTerms.every(term => textToSearch.includes(term));
   });
+
+  // Opciones con búsqueda tokenizada inteligente para Clientes
+  const clientOptions = [
+    {
+      id: 'MOSTRADOR',
+      value: 'MOSTRADOR',
+      label: 'CLIENTE DE MOSTRADOR',
+      sublabel: 'Venta rápida sin registro • Contado',
+      badge: 'Mostrador',
+      badgeColor: 'emerald',
+      searchFields: ['cliente', 'mostrador', 'rapido', 'publico', 'anonimo', 'general']
+    },
+    ...clientes.map(c => {
+      const parts = [];
+      if (c.telefono1) parts.push(`Tel: ${c.telefono1}`);
+      if (c.cedula) parts.push(`Céd: ${c.cedula}`);
+      if (c.direccion) parts.push(c.direccion);
+
+      let badge = null;
+      let badgeColor = null;
+      if ((c.descuento_fijo || 0) > 0) {
+        badge = `${c.descuento_fijo}% VIP`;
+        badgeColor = 'amber';
+      } else if (c.credito_habilitado) {
+        badge = `Crédito (C$ ${Number(c.limite_credito || 0).toFixed(0)})`;
+        badgeColor = 'emerald';
+      }
+
+      return {
+        id: c.id,
+        value: c.id,
+        label: c.nombre,
+        sublabel: parts.join(' • '),
+        badge,
+        badgeColor,
+        searchFields: [c.nombre, c.telefono1, c.telefono2, c.cedula, c.direccion, c.tipo_cliente]
+      };
+    })
+  ];
+
+  // Opciones con búsqueda tokenizada inteligente para Mecánicos
+  const mecanicoOptions = mecanicos.map(m => ({
+    id: m.id,
+    value: m.id,
+    label: m.nombre_completo,
+    sublabel: [m.telefono ? `Tel: ${m.telefono}` : '', `Comisión: ${m.porcentaje_comision || 50}%`].filter(Boolean).join(' • '),
+    comision: m.porcentaje_comision || 50,
+    searchFields: [m.nombre_completo, m.usuario, m.telefono, m.funcion]
+  }));
+
+  // Opciones con búsqueda tokenizada inteligente para Empleados Deudores
+  const empleadoDeudorOptions = empleados.map(e => ({
+    id: e.id,
+    value: e.id,
+    label: e.nombre_completo,
+    sublabel: [e.funcion, e.cedula ? `Céd: ${e.cedula}` : '', e.telefono ? `Tel: ${e.telefono}` : ''].filter(Boolean).join(' • '),
+    searchFields: [e.nombre_completo, e.funcion, e.cedula, e.telefono]
+  }));
 
   // Buscar objeto del cliente actual desde la base de datos
   const clienteActualObj = clientes.find(c => c.id === selectedCliente?.value);
@@ -1051,56 +1110,18 @@ export default function POS() {
                 </div>
                 <div className="flex gap-2 items-center">
                   <div className="flex-1">
-                    <Select
-                      options={[
-                        { value: 'MOSTRADOR', label: 'CLIENTE DE MOSTRADOR' },
-                        ...clientes.map(c => ({ 
-                          value: c.id, 
-                          label: c.nombre
-                        }))
-                      ]}
-                      formatOptionLabel={(option) => (
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium">{option.label}</span>
-                          {option.value !== 'MOSTRADOR' && (
-                            <div className="flex gap-1 items-center">
-                              {clientes.find(c => c.id === option.value)?.credito_habilitado && (
-                                <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded">
-                                  Crédito
-                                </span>
-                              )}
-                              {(clientes.find(c => c.id === option.value)?.descuento_fijo || 0) > 0 && (
-                                <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.5 rounded">
-                                  {clientes.find(c => c.id === option.value).descuento_fijo}% VIP
-                                </span>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      filterOption={(candidate, input) => {
-                        if (!input) return true;
-                        const tokens = input.toLowerCase().split(/\s+/).filter(Boolean);
-                        const target = candidate.label.toLowerCase();
-                        return tokens.every(token => target.includes(token));
-                      }}
-                      value={
-                        selectedCliente?.value === 'MOSTRADOR'
-                          ? { value: 'MOSTRADOR', label: 'CLIENTE DE MOSTRADOR' }
-                          : (clienteActualObj 
-                              ? { value: clienteActualObj.id, label: clienteActualObj.nombre } 
-                              : selectedCliente)
-                      }
+                    <TokenizedSearchSelect
+                      options={clientOptions}
+                      value={selectedCliente?.value || 'MOSTRADOR'}
                       onChange={handleSelectCliente}
-                      placeholder="Buscar cliente..."
-                      className="react-select-container text-sm"
-                      classNamePrefix="react-select"
+                      placeholder="Buscar por nombre, teléfono, cédula..."
+                      icon={User}
                     />
                   </div>
                   <button 
                     type="button"
                     onClick={() => setIsNewClientModalOpen(true)}
-                    className="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-lg flex items-center justify-center shadow-sm h-[38px] w-[38px] transition-colors"
+                    className="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-xl flex items-center justify-center shadow-sm h-[42px] w-[42px] transition-colors shrink-0"
                     title="Crear Nuevo Cliente Rápido"
                   >
                     <Plus size={20} />
@@ -1113,7 +1134,7 @@ export default function POS() {
                 <select 
                   value={metodoPago} 
                   onChange={e => handleMetodoPagoChange(e.target.value)}
-                  className="w-full border border-gray-200 p-2 rounded-lg bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none text-sm h-[38px] font-medium"
+                  className="w-full border border-gray-200 p-2.5 rounded-xl bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none text-sm h-[42px] font-bold text-gray-700"
                 >
                   <option value="Efectivo">Efectivo</option>
                   <option value="Tarjeta">Tarjeta / POS</option>
@@ -1129,7 +1150,7 @@ export default function POS() {
 
               {metodoPago === 'Crédito' && selectedCliente?.value !== 'MOSTRADOR' && (
                 <div className="col-span-1 md:col-span-2">
-                  <div className={`p-3 rounded-lg border text-xs flex items-center justify-between ${clienteActualObj?.credito_habilitado && (clienteActualObj?.limite_credito || 0) > 0 ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
+                  <div className={`p-3 rounded-xl border text-xs flex items-center justify-between ${clienteActualObj?.credito_habilitado && (clienteActualObj?.limite_credito || 0) > 0 ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
                     <div className="flex items-center gap-2">
                       <ShieldAlert size={16} />
                       {clienteActualObj?.credito_habilitado ? (
@@ -1145,14 +1166,12 @@ export default function POS() {
               {metodoPago === 'Crédito Empleado' && (
                 <div className="col-span-1 md:col-span-2">
                   <label className="block text-xs font-bold text-purple-600 mb-1 uppercase">Empleado deudor (Deducción RRHH)</label>
-                  <Select
-                    options={empleados.map(e => ({ value: e.id, label: e.nombre_completo }))}
-                    value={selectedEmpleadoDeudor}
-                    onChange={setSelectedEmpleadoDeudor}
-                    placeholder="Seleccionar empleado..."
-                    isClearable
-                    className="react-select-container text-sm"
-                    classNamePrefix="react-select"
+                  <TokenizedSearchSelect
+                    options={empleadoDeudorOptions}
+                    value={selectedEmpleadoDeudor?.value || selectedEmpleadoDeudor?.id}
+                    onChange={(sel) => setSelectedEmpleadoDeudor(sel ? { value: sel.id, label: sel.label } : null)}
+                    placeholder="Buscar empleado por nombre, cédula o cargo..."
+                    icon={User}
                   />
                 </div>
               )}
@@ -1160,18 +1179,12 @@ export default function POS() {
               {cart.some(item => item.type === 'servicio') && (
                 <div className="col-span-1 md:col-span-2">
                   <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Mecánico Asignado a los Servicios</label>
-                  <Select
-                    options={mecanicos.map(m => ({ 
-                      value: m.id, 
-                      label: m.nombre_completo,
-                      comision: m.porcentaje_comision || 50
-                    }))}
-                    value={selectedMecanico}
-                    onChange={setSelectedMecanico}
-                    placeholder="Seleccionar mecánico responsable..."
-                    isClearable
-                    className="react-select-container text-sm"
-                    classNamePrefix="react-select"
+                  <TokenizedSearchSelect
+                    options={mecanicoOptions}
+                    value={selectedMecanico?.value || selectedMecanico?.id}
+                    onChange={(sel) => setSelectedMecanico(sel ? { value: sel.id, label: sel.label, comision: sel.comision } : null)}
+                    placeholder="Buscar mecánico por nombre o teléfono..."
+                    icon={Wrench}
                   />
                 </div>
               )}

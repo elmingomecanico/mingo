@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Select from 'react-select';
+import TokenizedSearchSelect from '../components/TokenizedSearchSelect';
 
 const CATEGORIAS_GASTOS_DEFAULT = [
   'Servicios Básicos (Luz, Agua, Internet)',
@@ -1278,15 +1279,18 @@ export default function Contabilidad() {
             <form onSubmit={handleSaveNewCxp} className="p-5 space-y-4">
               <div>
                 <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Proveedor *</label>
-                <Select
-                  options={proveedoresList.map(p => ({ value: p.id, label: p.nombre }))}
-                  value={proveedoresList.find(p => p.id === newCxpForm.id_proveedor) ? {
-                    value: newCxpForm.id_proveedor,
-                    label: proveedoresMap[newCxpForm.id_proveedor]
-                  } : null}
-                  onChange={sel => setNewCxpForm({ ...newCxpForm, id_proveedor: sel ? sel.value : '' })}
-                  placeholder="Seleccionar proveedor..."
-                  className="text-sm"
+                <TokenizedSearchSelect
+                  options={proveedoresList.map(p => ({
+                    id: p.id,
+                    value: p.id,
+                    label: p.nombre,
+                    sublabel: [p.telefono1, p.contacto ? `Contacto: ${p.contacto}` : '', p.ruc ? `RUC: ${p.ruc}` : ''].filter(Boolean).join(' • '),
+                    searchFields: [p.nombre, p.telefono1, p.telefono2, p.contacto, p.ruc, p.direccion]
+                  }))}
+                  value={newCxpForm.id_proveedor}
+                  onChange={sel => setNewCxpForm({ ...newCxpForm, id_proveedor: sel ? (sel.id || sel.value) : '' })}
+                  placeholder="Buscar proveedor por nombre, RUC o teléfono..."
+                  icon={Building}
                 />
               </div>
 

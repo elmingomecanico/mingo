@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { ref, onValue, set, push, runTransaction } from 'firebase/database';
 import { rtdb } from '../firebase';
-import { CreditCard, Search, DollarSign, CheckCircle2, AlertCircle, Plus } from 'lucide-react';
+import { CreditCard, Search, DollarSign, CheckCircle2, AlertCircle, Plus, Building } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Select from 'react-select';
+import TokenizedSearchSelect from '../components/TokenizedSearchSelect';
 
 export default function CxP() {
   const [cxpList, setCxpList] = useState([]);
@@ -269,14 +270,18 @@ export default function CxP() {
             <form onSubmit={handleSaveBill} className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Proveedor *</label>
-                <Select
-                  options={proveedoresList.map(p => ({ value: p.id, label: p.nombre }))}
-                  value={formData.id_proveedor ? { value: formData.id_proveedor, label: proveedoresMap[formData.id_proveedor] } : null}
-                  onChange={selected => setFormData({...formData, id_proveedor: selected ? selected.value : ''})}
-                  placeholder="Seleccione un proveedor..."
-                  isClearable
-                  className="react-select-container"
-                  classNamePrefix="react-select"
+                <TokenizedSearchSelect
+                  options={proveedoresList.map(p => ({
+                    id: p.id,
+                    value: p.id,
+                    label: p.nombre,
+                    sublabel: [p.telefono1, p.contacto ? `Contacto: ${p.contacto}` : '', p.ruc ? `RUC: ${p.ruc}` : ''].filter(Boolean).join(' • '),
+                    searchFields: [p.nombre, p.telefono1, p.telefono2, p.contacto, p.ruc, p.direccion]
+                  }))}
+                  value={formData.id_proveedor}
+                  onChange={selected => setFormData({...formData, id_proveedor: selected ? (selected.id || selected.value) : ''})}
+                  placeholder="Buscar proveedor por nombre, RUC o teléfono..."
+                  icon={Building}
                 />
               </div>
 

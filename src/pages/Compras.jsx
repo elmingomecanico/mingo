@@ -11,6 +11,7 @@ import Select from 'react-select';
 import ConfirmModal from '../components/ConfirmModal';
 import BarcodeScannerModal from '../components/BarcodeScannerModal';
 import ImagePreviewModal from '../components/ImagePreviewModal';
+import TokenizedSearchSelect from '../components/TokenizedSearchSelect';
 
 export default function Compras() {
   const [activeTab, setActiveTab] = useState('nueva'); // 'nueva' | 'historial' | 'sugerencias'
@@ -684,19 +685,24 @@ export default function Compras() {
                   <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Proveedor *</label>
                   <div className="flex gap-2 items-center">
                     <div className="flex-1">
-                      <Select
-                        options={proveedores.map(p => ({ value: p.id, label: p.nombre }))}
-                        value={selectedProveedor}
-                        onChange={setSelectedProveedor}
-                        placeholder="Buscar o seleccionar proveedor..."
-                        className="text-sm"
-                        classNamePrefix="react-select"
+                      <TokenizedSearchSelect
+                        options={proveedores.map(p => ({
+                          id: p.id,
+                          value: p.id,
+                          label: p.nombre,
+                          sublabel: [p.telefono1, p.contacto ? `Contacto: ${p.contacto}` : '', p.ruc ? `RUC: ${p.ruc}` : ''].filter(Boolean).join(' • '),
+                          searchFields: [p.nombre, p.telefono1, p.telefono2, p.contacto, p.ruc, p.direccion]
+                        }))}
+                        value={selectedProveedor?.value || selectedProveedor?.id}
+                        onChange={(sel) => setSelectedProveedor(sel ? { value: sel.id, label: sel.label } : null)}
+                        placeholder="Buscar proveedor por nombre, RUC, teléfono o contacto..."
+                        icon={Building}
                       />
                     </div>
                     <button 
                       type="button"
                       onClick={() => setIsNewProvModalOpen(true)}
-                      className="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-xl flex items-center justify-center shadow-sm h-[38px] w-[38px] transition-colors shrink-0"
+                      className="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-xl flex items-center justify-center shadow-sm h-[42px] w-[42px] transition-colors shrink-0"
                       title="Registrar Nuevo Proveedor Rápido"
                     >
                       <Plus size={20} />

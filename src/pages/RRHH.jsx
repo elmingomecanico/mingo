@@ -7,9 +7,10 @@ import {
   Palmtree, Clock, FileText, Check, X, AlertCircle, Plus, Eye, Edit3, 
   Search, ShieldAlert, Award, Briefcase, Phone, Mail, MapPin, 
   Calendar, CreditCard, ChevronRight, Sparkles, Filter, CheckCheck,
-  Trash2, CalendarPlus, XCircle
+  Trash2, CalendarPlus, XCircle, User
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import TokenizedSearchSelect from '../components/TokenizedSearchSelect';
 
 export default function RRHH() {
   const { user } = useAuth();
@@ -1656,13 +1657,20 @@ export default function RRHH() {
             </div>
             <form onSubmit={guardarDeudaManual} className="p-5 space-y-4">
               <div>
-                <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Empleado</label>
-                <select required value={deudaForm.id_empleado} onChange={e => setDeudaForm({...deudaForm, id_empleado: e.target.value})} className="w-full border p-2.5 rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-sm">
-                  <option value="">Seleccione un empleado...</option>
-                  {usuarios.map(u => (
-                    <option key={u.id} value={u.id}>{u.nombre_completo}</option>
-                  ))}
-                </select>
+                <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Empleado *</label>
+                <TokenizedSearchSelect
+                  options={usuarios.map(u => ({
+                    id: u.id,
+                    value: u.id,
+                    label: u.nombre_completo,
+                    sublabel: [u.funcion, u.cedula ? `Céd: ${u.cedula}` : '', u.telefono ? `Tel: ${u.telefono}` : ''].filter(Boolean).join(' • '),
+                    searchFields: [u.nombre_completo, u.usuario, u.funcion, u.cedula, u.telefono]
+                  }))}
+                  value={deudaForm.id_empleado}
+                  onChange={sel => setDeudaForm({ ...deudaForm, id_empleado: sel ? (sel.id || sel.value) : '' })}
+                  placeholder="Buscar empleado por nombre, cargo o cédula..."
+                  icon={User}
+                />
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Tipo</label>
