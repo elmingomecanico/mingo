@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingCart, Trash2, Search, Save, Loader, Printer, Plus, X, UserPlus, Minus, Percent, FileDown, ShieldAlert, Sparkles } from 'lucide-react';
+import { ShoppingCart, Trash2, Search, Save, Loader, Printer, Plus, X, UserPlus, Minus, Percent, FileDown, ShieldAlert, Sparkles, RefreshCw } from 'lucide-react';
 import { ref, onValue, push, set, runTransaction } from 'firebase/database';
 import { rtdb } from '../firebase';
 import toast from 'react-hot-toast';
@@ -55,8 +55,8 @@ export default function POS() {
   const cart = activeTab.cart || [];
   const setCart = (newCartVal) => updateActiveTab({ cart: typeof newCartVal === 'function' ? newCartVal(cart) : newCartVal });
 
-  const selectedCliente = activeTab.selectedCliente;
-  const metodoPago = activeTab.metodoPago;
+  const selectedCliente = activeTab.selectedCliente || { value: 'MOSTRADOR', label: 'CLIENTE DE MOSTRADOR' };
+  const metodoPago = activeTab.metodoPago || 'Efectivo';
   const setMetodoPago = (val) => updateActiveTab({ metodoPago: val });
 
   const selectedMecanico = activeTab.selectedMecanico;
@@ -202,14 +202,22 @@ export default function POS() {
     return searchTerms.every(term => textToSearch.includes(term));
   });
 
+  // Buscar objeto del cliente actual desde la base de datos
   const clienteActualObj = clientes.find(c => c.id === selectedCliente?.value);
 
   const handleSelectCliente = (val) => {
-    const isGenericName = !activeTab.name || activeTab.name.startsWith('Factura') || activeTab.name.startsWith('Borrador');
+    const isMostrador = !val || val.value === 'MOSTRADOR';
+    const cid = isMostrador ? 'MOSTRADOR' : val.value;
+    const clientData = clientes.find(c => c.id === cid);
+    const clientName = isMostrador ? 'CLIENTE DE MOSTRADOR' : (clientData?.nombre || val.label);
+
+    const clientSelection = { value: cid, label: clientName };
+
     let newName = activeTab.name;
-    if (val && val.value !== 'MOSTRADOR') {
+    const isGenericName = !activeTab.name || activeTab.name.startsWith('Factura') || activeTab.name.startsWith('Borrador');
+    if (!isMostrador) {
       if (isGenericName) {
-        newName = val.label;
+        newName = clientName;
       }
     } else if (isGenericName) {
       const idx = tabs.findIndex(t => t.id === activeTabId) + 1;
@@ -217,18 +225,23 @@ export default function POS() {
     }
 
     // Comprobar privilegios del cliente
-    const clientData = clientes.find(c => c.id === val?.value);
     const clientDescPct = clientData?.descuento_fijo || 0;
     let updatedCart = cart;
     if (clientDescPct > 0) {
-      updatedCart = cart.map(item => ({
-        ...item,
-        discount: (item.price * item.qty * (clientDescPct / 100))
-      }));
+      updatedCart = cart.map(item => {
+        const itemTotal = item.price * item.qty;
+        const autoDesc = (itemTotal * clientDescPct) / 100;
+        return {
+          ...item,
+          discount: autoDesc,
+          discountPercent: clientDescPct,
+          discountMode: '%'
+        };
+      });
       toast(`Descuento VIP aplicado: ${clientDescPct}% en los artículos`, { icon: '✨' });
     }
 
-    updateActiveTab({ selectedCliente: val, name: newName, cart: updatedCart });
+    updateActiveTab({ selectedCliente: clientSelection, name: newName, cart: updatedCart });
   };
 
   const addToCart = (product) => {
@@ -245,11 +258,36 @@ export default function POS() {
 
     if (existing) {
       const newQty = existing.qty + 1;
-      const autoDesc = clientDescPct > 0 ? (existing.price * newQty * (clientDescPct / 100)) : existing.discount;
-      setCart(cart.map(item => item.id === product.id ? { ...item, qty: newQty, discount: autoDesc } : item));
+      const itemTotal = existing.price * newQty;
+      let finalDiscount = existing.discount;
+      let finalPercent = existing.discountPercent || 0;
+
+      if (existing.discountMode === '%') {
+        finalPercent = existing.discountPercent || clientDescPct;
+        finalDiscount = (itemTotal * finalPercent) / 100;
+      } else if (clientDescPct > 0 && !existing.discount) {
+        finalPercent = clientDescPct;
+        finalDiscount = (itemTotal * clientDescPct) / 100;
+      }
+
+      setCart(cart.map(item => item.id === product.id ? { 
+        ...item, 
+        qty: newQty, 
+        discount: finalDiscount,
+        discountPercent: finalPercent
+      } : item));
     } else {
-      const autoDesc = clientDescPct > 0 ? (product.price * (clientDescPct / 100)) : 0;
-      setCart([...cart, { ...product, qty: 1, discount: autoDesc }]);
+      const itemTotal = product.price * 1;
+      const initialPercent = clientDescPct > 0 ? clientDescPct : 0;
+      const initialDiscount = clientDescPct > 0 ? (itemTotal * clientDescPct) / 100 : 0;
+      
+      setCart([...cart, { 
+        ...product, 
+        qty: 1, 
+        discount: initialDiscount,
+        discountPercent: initialPercent,
+        discountMode: clientDescPct > 0 ? '%' : 'C$'
+      }]);
     }
   };
 
@@ -270,19 +308,78 @@ export default function POS() {
       }
     }
 
-    const clientDescPct = clienteActualObj?.descuento_fijo || 0;
-    const autoDesc = clientDescPct > 0 ? (item.price * newQty * (clientDescPct / 100)) : item.discount;
+    const itemTotal = item.price * newQty;
+    let finalDiscount = item.discount || 0;
+    let finalPercent = item.discountPercent || 0;
 
-    setCart(cart.map(c => c.id === productId ? { ...c, qty: newQty, discount: autoDesc } : c));
+    if (item.discountMode === '%') {
+      finalDiscount = (itemTotal * (item.discountPercent || 0)) / 100;
+    } else {
+      finalDiscount = Math.min(itemTotal, item.discount || 0);
+      finalPercent = itemTotal > 0 ? ((finalDiscount / itemTotal) * 100) : 0;
+    }
+
+    setCart(cart.map(c => c.id === productId ? { 
+      ...c, 
+      qty: newQty, 
+      discount: finalDiscount,
+      discountPercent: finalPercent
+    } : c));
   };
 
-  const updateCartDiscount = (productId, newDiscount) => {
-    const val = Math.max(0, parseFloat(newDiscount) || 0);
+  // Manejador inteligente de Descuentos (Conversión bidireccional C$ <-> %)
+  const handleDiscountChange = (productId, rawVal, currentMode) => {
+    const val = Math.max(0, parseFloat(rawVal) || 0);
     setCart(cart.map(c => {
       if (c.id === productId) {
-        const itemSub = c.price * c.qty;
-        const finalDiscount = Math.min(val, itemSub);
-        return { ...c, discount: finalDiscount };
+        const itemTotal = c.price * c.qty;
+        let finalDiscount = 0;
+        let finalPercent = 0;
+
+        if (currentMode === '%') {
+          finalPercent = Math.min(100, val);
+          finalDiscount = (itemTotal * finalPercent) / 100;
+        } else {
+          finalDiscount = Math.min(itemTotal, val);
+          finalPercent = itemTotal > 0 ? ((finalDiscount / itemTotal) * 100) : 0;
+        }
+
+        return {
+          ...c,
+          discount: finalDiscount,
+          discountPercent: finalPercent,
+          discountMode: currentMode
+        };
+      }
+      return c;
+    }));
+  };
+
+  // Alternar entre modo Porcentaje (%) y Córdobas (C$)
+  const toggleDiscountMode = (productId) => {
+    setCart(cart.map(c => {
+      if (c.id === productId) {
+        const currentMode = c.discountMode || 'C$';
+        const newMode = currentMode === '%' ? 'C$' : '%';
+        const itemTotal = c.price * c.qty;
+        
+        let finalPercent = c.discountPercent || 0;
+        let finalDiscount = c.discount || 0;
+
+        if (itemTotal > 0) {
+          if (newMode === '%') {
+            finalPercent = Number(((finalDiscount / itemTotal) * 100).toFixed(1));
+          } else {
+            finalDiscount = Number(((itemTotal * finalPercent) / 100).toFixed(2));
+          }
+        }
+
+        return {
+          ...c,
+          discountMode: newMode,
+          discount: finalDiscount,
+          discountPercent: finalPercent
+        };
       }
       return c;
     }));
@@ -342,15 +439,17 @@ export default function POS() {
     }
     
     // Si es crédito a cliente, VALIDAR PRIVILEGIOS DE GERENCIA
-    if (metodoPago === 'Crédito' && selectedCliente.value !== 'MOSTRADOR') {
-      const clienteData = clientes.find(c => c.id === selectedCliente.value);
-      if (!clienteData) return toast.error('Cliente no encontrado');
+    const targetClienteId = selectedCliente.value || 'MOSTRADOR';
+    const clienteDataObj = clientes.find(c => c.id === targetClienteId);
+
+    if (metodoPago === 'Crédito' && targetClienteId !== 'MOSTRADOR') {
+      if (!clienteDataObj) return toast.error('Cliente no encontrado');
       
-      if (!clienteData.credito_habilitado) {
+      if (!clienteDataObj.credito_habilitado) {
         return toast.error('Este cliente NO tiene crédito autorizado por gerencia.');
       }
 
-      const limite = Number(clienteData.limite_credito) || 0;
+      const limite = Number(clienteDataObj.limite_credito) || 0;
       if (limite <= 0) {
         return toast.error('El cliente tiene un límite de crédito de C$ 0.00. Solicite autorización de gerencia.');
       }
@@ -374,13 +473,18 @@ export default function POS() {
       const saleRef = push(ref(rtdb, 'ventas'));
       const saleId = saleRef.key;
       
+      // Nombre exacto y limpio del cliente
+      const nombreFinalCliente = (targetClienteId !== 'MOSTRADOR' && clienteDataObj)
+        ? clienteDataObj.nombre
+        : (selectedCliente.label && targetClienteId !== 'MOSTRADOR' ? selectedCliente.label : 'CLIENTE DE MOSTRADOR');
+
       const newSale = {
         id: saleId,
         numero_factura: humanId,
         fecha: new Date().toISOString(),
         sucursal,
-        id_cliente: selectedCliente.value,
-        nombre_cliente: selectedCliente.label,
+        id_cliente: targetClienteId,
+        nombre_cliente: nombreFinalCliente,
         metodo_pago: metodoPago,
         id_mecanico: selectedMecanico ? selectedMecanico.value : null,
         nombre_mecanico: selectedMecanico ? selectedMecanico.label : null,
@@ -396,6 +500,7 @@ export default function POS() {
           cantidad: item.qty,
           precio_unitario: item.price,
           descuento: item.discount || 0,
+          descuento_porcentaje: item.discountPercent || 0,
           subtotal: (item.price * item.qty) - (item.discount || 0)
         }))
       };
@@ -403,13 +508,14 @@ export default function POS() {
       await set(saleRef, newSale);
 
       // Si es crédito a cliente, generar cuenta por cobrar
-      if (metodoPago === 'Crédito' && selectedCliente.value !== 'MOSTRADOR') {
+      if (metodoPago === 'Crédito' && targetClienteId !== 'MOSTRADOR') {
         const cxcRecord = push(ref(rtdb, 'cxc'));
         const fechaVence = new Date();
         fechaVence.setDate(fechaVence.getDate() + 30);
         
         await set(cxcRecord, {
-          id_cliente: selectedCliente.value,
+          id_cliente: targetClienteId,
+          nombre_cliente: nombreFinalCliente,
           id_factura: saleId,
           numero_factura: humanId,
           fecha_emision: newSale.fecha,
@@ -445,8 +551,8 @@ export default function POS() {
           id_factura: saleId,
           numero_factura: humanId,
           fecha_creacion: newSale.fecha,
-          id_cliente: selectedCliente.value,
-          nombre_cliente: selectedCliente.label,
+          id_cliente: targetClienteId,
+          nombre_cliente: nombreFinalCliente,
           id_mecanico: selectedMecanico.value,
           nombre_mecanico: selectedMecanico.label,
           estado: 'Pendiente',
@@ -575,19 +681,44 @@ export default function POS() {
                   <div className="flex-1">
                     <Select
                       options={[
-                        { value: 'MOSTRADOR', label: 'Cliente Mostrador (Contado)' },
+                        { value: 'MOSTRADOR', label: 'CLIENTE DE MOSTRADOR' },
                         ...clientes.map(c => ({ 
                           value: c.id, 
-                          label: `${c.nombre} ${c.credito_habilitado ? '💳' : ''}` 
+                          label: c.nombre
                         }))
                       ]}
+                      formatOptionLabel={(option) => (
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium">{option.label}</span>
+                          {option.value !== 'MOSTRADOR' && (
+                            <div className="flex gap-1 items-center">
+                              {clientes.find(c => c.id === option.value)?.credito_habilitado && (
+                                <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded">
+                                  Crédito
+                                </span>
+                              )}
+                              {(clientes.find(c => c.id === option.value)?.descuento_fijo || 0) > 0 && (
+                                <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.5 rounded">
+                                  {clientes.find(c => c.id === option.value).descuento_fijo}% VIP
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
                       filterOption={(candidate, input) => {
                         if (!input) return true;
                         const tokens = input.toLowerCase().split(/\s+/).filter(Boolean);
                         const target = candidate.label.toLowerCase();
                         return tokens.every(token => target.includes(token));
                       }}
-                      value={selectedCliente}
+                      value={
+                        selectedCliente?.value === 'MOSTRADOR'
+                          ? { value: 'MOSTRADOR', label: 'CLIENTE DE MOSTRADOR' }
+                          : (clienteActualObj 
+                              ? { value: clienteActualObj.id, label: clienteActualObj.nombre } 
+                              : selectedCliente)
+                      }
                       onChange={handleSelectCliente}
                       placeholder="Buscar cliente..."
                       className="react-select-container text-sm"
@@ -696,7 +827,7 @@ export default function POS() {
                 )}
               </div>
 
-              {/* LISTA DESPLEGABLE DE RESULTADOS FILTRADOS (SOLO APARECE AL BUSCAR) */}
+              {/* LISTA DESPLEGABLE DE RESULTADOS FILTRADOS */}
               {searchCode.trim().length > 0 && (
                 <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-blue-200 rounded-xl shadow-2xl z-30 max-h-80 overflow-y-auto divide-y divide-gray-100 animate-in fade-in">
                   {loading && <div className="p-4 text-center text-gray-400 text-sm">Buscando...</div>}
@@ -792,7 +923,7 @@ export default function POS() {
                       <th className="p-3">Descripción</th>
                       <th className="p-3 text-center w-28">Cant.</th>
                       <th className="p-3 text-right">P. Unit</th>
-                      <th className="p-3 text-center w-28">Desc (C$)</th>
+                      <th className="p-3 text-center w-36">Descuento</th>
                       <th className="p-3 text-right font-black text-blue-900">Subtotal</th>
                       <th className="p-3 text-center w-10"></th>
                     </tr>
@@ -800,6 +931,7 @@ export default function POS() {
                   <tbody className="divide-y divide-gray-100">
                     {cart.map((item) => {
                       const itemSubtotal = (item.price * item.qty) - (item.discount || 0);
+                      const isPercentMode = item.discountMode === '%';
                       return (
                         <tr key={item.id} className="hover:bg-gray-50 transition-colors">
                           <td className="p-3">
@@ -835,17 +967,38 @@ export default function POS() {
                             </div>
                           </td>
                           <td className="p-3 text-right text-gray-600 font-medium">C$ {item.price.toFixed(0)}</td>
-                          <td className="p-3 text-center">
-                            <input 
-                              type="number"
-                              min="0"
-                              step="1"
-                              value={item.discount || 0}
-                              onChange={(e) => updateCartDiscount(item.id, e.target.value)}
-                              className="w-16 border rounded text-center py-0.5 text-xs text-red-600 font-bold outline-none focus:border-red-400"
-                              title="Descuento en Córdobas para este ítem"
-                            />
+                          
+                          {/* CAMPO DE DESCUENTO BIDIRECCIONAL (C$ <-> %) */}
+                          <td className="p-3">
+                            <div className="flex flex-col items-center gap-0.5">
+                              <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white shadow-sm focus-within:ring-2 focus-within:ring-blue-400">
+                                <input 
+                                  type="number"
+                                  min="0"
+                                  step={isPercentMode ? "1" : "5"}
+                                  value={isPercentMode ? (item.discountPercent || 0) : (item.discount || 0)}
+                                  onChange={(e) => handleDiscountChange(item.id, e.target.value, isPercentMode ? '%' : 'C$')}
+                                  className="w-16 text-center py-1 text-xs text-red-600 font-bold outline-none"
+                                  title={isPercentMode ? "Porcentaje de descuento" : "Descuento en Córdobas"}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => toggleDiscountMode(item.id)}
+                                  className={`px-1.5 py-1 text-[11px] font-black border-l transition-colors flex items-center gap-0.5 ${isPercentMode ? 'bg-purple-100 text-purple-700 hover:bg-purple-200' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'}`}
+                                  title="Clic para cambiar entre Porcentaje (%) y Córdobas (C$)"
+                                >
+                                  {isPercentMode ? '%' : 'C$'}
+                                  <RefreshCw size={9} className="opacity-60" />
+                                </button>
+                              </div>
+                              <span className="text-[10px] text-gray-400 font-semibold">
+                                {isPercentMode 
+                                  ? `≈ C$ ${(item.discount || 0).toFixed(2)}` 
+                                  : `≈ ${(item.discountPercent || 0).toFixed(1)}%`}
+                              </span>
+                            </div>
                           </td>
+
                           <td className="p-3 text-right font-black text-blue-800 text-sm">
                             C$ {itemSubtotal.toFixed(2)}
                           </td>
@@ -877,7 +1030,9 @@ export default function POS() {
             <div className="space-y-2 text-sm text-gray-600 border-b border-gray-100 pb-3">
               <div className="flex justify-between">
                 <span>Cliente:</span>
-                <span className="font-bold text-gray-800 truncate max-w-[150px]">{selectedCliente?.label}</span>
+                <span className="font-bold text-gray-800 truncate max-w-[150px]">
+                  {clienteActualObj?.nombre || selectedCliente?.label || 'CLIENTE DE MOSTRADOR'}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span>Método:</span>
@@ -896,7 +1051,7 @@ export default function POS() {
               </div>
               {totalDescuentos > 0 && (
                 <div className="flex justify-between text-red-600 font-bold">
-                  <span>Descuentos:</span>
+                  <span>Descuentos Totales:</span>
                   <span>- C$ {totalDescuentos.toFixed(2)}</span>
                 </div>
               )}
@@ -920,7 +1075,7 @@ export default function POS() {
 
       </div>
 
-      {/* Modal Creación Rápida de Cliente por Cajero (SIN PRIVILEGIOS DE CRÉDITO) */}
+      {/* Modal Creación Rápida de Cliente por Cajero */}
       {isNewClientModalOpen && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col">
@@ -1008,7 +1163,7 @@ export default function POS() {
           <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[95vh]">
             <div className="p-4 text-center border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
               <span className="text-xs font-bold text-green-600 bg-green-50 px-2.5 py-1 rounded-full">
-                ✓ Venta Guardada con Éxito
+                ✓ Factura Generada: {completedSale.numero_factura}
               </span>
               <button onClick={() => setCompletedSale(null)} className="text-gray-400 hover:text-gray-600 font-bold text-xl">&times;</button>
             </div>
