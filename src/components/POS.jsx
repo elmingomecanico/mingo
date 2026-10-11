@@ -736,16 +736,19 @@ export default function POS() {
           });
 
           // Registrar en Kardex
-          const kardexRef = push(ref(rtdb, `kardex/${sucursal}/${item.id}`));
+          const kardexRef = push(ref(rtdb, 'kardex'));
           const currentStock = inventory[item.id]?.stock_actual || 0;
           await set(kardexRef, {
             fecha: new Date().toISOString(),
-            tipo: 'SALIDA',
-            motivo: `Venta POS (${humanId})`,
+            id_sucursal: sucursal,
+            id_producto: item.id,
+            nombre_producto: item.name,
+            tipo_movimiento: 'Salida por Venta',
             cantidad: item.qty,
+            id_referencia: humanId,
             stock_anterior: currentStock,
             stock_nuevo: currentStock - item.qty,
-            usuario: 'Cajero POS'
+            usuario: 'Caja POS'
           });
         }
       }

@@ -225,7 +225,22 @@ export default function Inventario() {
         usuario: currentUser.nombre_completo || 'Sistema'
       });
 
-      // 2. Actualizar inventario
+      // 2. Registrar en Kardex
+      const kardexRef = push(ref(rtdb, 'kardex'));
+      await set(kardexRef, {
+        fecha: new Date().toISOString(),
+        id_sucursal: sucursal,
+        id_producto: pid,
+        nombre_producto: pname,
+        tipo_movimiento: diff > 0 ? 'Entrada por Ajuste' : 'Salida por Ajuste',
+        cantidad: Math.abs(diff),
+        id_referencia: `Ajuste (${ajusteForm.motivo})`,
+        stock_anterior: anterior,
+        stock_nuevo: nuevo,
+        usuario: currentUser.nombre_completo || 'Sistema'
+      });
+
+      // 3. Actualizar inventario
       const invRef = ref(rtdb, `inventario/${sucursal}/${pid}`);
       const invData = inventory[pid] || {};
       await set(invRef, {
