@@ -131,6 +131,7 @@ export default function PortalEmpleado() {
     })).sort((a, b) => new Date(b.fecha_inicio) - new Date(a.fecha_inicio));
   };
 
+  const hoy = new Date();
   const periodosVacaciones = getPeriodosVacaciones(empleadoData);
   const fechaIngresoStr = empleadoData?.fecha_ingreso;
   let antiguedadTexto = 'Pendiente de registrar por RRHH';
@@ -141,7 +142,7 @@ export default function PortalEmpleado() {
     const inicio = new Date(fechaIngresoStr + (fechaIngresoStr.length === 10 ? 'T00:00:00' : ''));
     if (!isNaN(inicio.getTime())) {
       tieneFechaIngreso = true;
-      const fin = new Date();
+      const fin = hoy;
       let anos = fin.getFullYear() - inicio.getFullYear();
       let meses = fin.getMonth() - inicio.getMonth();
       let dias = fin.getDate() - inicio.getDate();

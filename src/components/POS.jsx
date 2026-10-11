@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingCart, Trash2, Search, Save, Loader, Printer, Plus, X, UserPlus, Minus, Percent, FileDown, ShieldAlert, Sparkles, RefreshCw, Gift, Lock } from 'lucide-react';
+import { ShoppingCart, Trash2, Search, Save, Loader, Printer, Plus, X, UserPlus, Minus, Percent, FileDown, ShieldAlert, Sparkles, RefreshCw, Gift, Lock, Camera, Maximize2, Package, ScanBarcode } from 'lucide-react';
 import { ref, onValue, push, set, runTransaction } from 'firebase/database';
 import { rtdb } from '../firebase';
 import toast from 'react-hot-toast';
 import { useReactToPrint } from 'react-to-print';
 import Select from 'react-select';
 import TicketPrinter from './TicketPrinter';
+import BarcodeScannerModal from './BarcodeScannerModal';
+import ImagePreviewModal from './ImagePreviewModal';
 
 export default function POS() {
   const [sucursal, setSucursal] = useState('SUC-01');
@@ -105,6 +107,10 @@ export default function POS() {
     cedula: '',
     direccion: ''
   });
+
+  // Modal para escáner de código de barras por cámara y vista previa de imagen
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [previewProduct, setPreviewProduct] = useState(null);
 
   useEffect(() => {
     const prodRef = ref(rtdb, 'productos');
@@ -429,6 +435,46 @@ export default function POS() {
         discountPercent: initialPercent,
         discountMode: (!isMostrador && hasPrivilegios && aplica) ? '%' : 'C$'
       }]);
+    }
+  };
+
+  const handleBarcodeInput = (code) => {
+    if (!code || !code.trim()) return;
+    const cleanCode = code.trim().toLowerCase();
+    
+    // 1. Buscar coincidencia exacta por ID o código de barras
+    let match = allItems.find(p => 
+      p.id?.toLowerCase() === cleanCode || 
+      (p.barcode && p.barcode.toString().toLowerCase() === cleanCode) ||
+      (p.codigo_barra && p.codigo_barra.toString().toLowerCase() === cleanCode)
+    );
+
+    // 2. Si no es exacto, buscar si hay una coincidencia parcial única
+    if (!match) {
+      const candidates = allItems.filter(p => {
+        const textToSearch = `${p.name} ${p.id} ${p.cat || ''}`.toLowerCase();
+        return textToSearch.includes(cleanCode);
+      });
+      if (candidates.length === 1) {
+        match = candidates[0];
+      }
+    }
+
+    if (match) {
+      if (match.type !== 'servicio') {
+        const stockActual = inventory[match.id]?.stock_actual || 0;
+        const inCart = cart.find(i => i.id === match.id);
+        const nextQty = inCart ? inCart.qty + 1 : 1;
+        if (nextQty > stockActual) {
+          toast.error(`⚠️ Stock insuficiente para ${match.name}. Disponible: ${stockActual}`);
+          return;
+        }
+      }
+      addToCart(match);
+      setSearchCode('');
+      toast.success(`⚡ Escaneado: ${match.name}`, { icon: '📦' });
+    } else {
+      toast.error(`No se encontró ningún producto con código: "${code.trim()}"`);
     }
   };
 
@@ -988,26 +1034,45 @@ export default function POS() {
               )}
             </div>
 
-            {/* BUSCADOR INTELIGENTE CON RESULTADOS FLOTANTES */}
+            {/* BUSCADOR INTELIGENTE CON LECTOR DE BARRAS Y CÁMARA */}
             <div className="relative pt-1">
               <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Buscar y Agregar Productos o Servicios</label>
-              <div className="relative">
-                <input 
-                  type="text" 
-                  value={searchCode}
-                  onChange={(e) => setSearchCode(e.target.value)}
-                  placeholder="Escribe código, nombre o modelo compatible para agregar..." 
-                  className="w-full border border-gray-200 p-3 pl-10 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none shadow-inner"
-                />
-                <Search className="absolute left-3 top-3.5 text-gray-400" size={18} />
-                {searchCode && (
-                  <button 
-                    onClick={() => setSearchCode('')} 
-                    className="absolute right-3 top-3 text-gray-400 hover:text-gray-600 text-sm font-bold"
-                  >
-                    &times;
-                  </button>
-                )}
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <input 
+                    type="text" 
+                    value={searchCode}
+                    onChange={(e) => setSearchCode(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (searchCode.trim()) {
+                          handleBarcodeInput(searchCode);
+                        }
+                      }
+                    }}
+                    placeholder="Escribe o escanea código con lector USB/Bluetooth..." 
+                    className="w-full border border-gray-200 p-3 pl-10 pr-10 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none shadow-inner"
+                  />
+                  <Search className="absolute left-3 top-3.5 text-gray-400" size={18} />
+                  {searchCode && (
+                    <button 
+                      onClick={() => setSearchCode('')} 
+                      className="absolute right-3 top-3 text-gray-400 hover:text-gray-600 text-sm font-bold"
+                    >
+                      &times;
+                    </button>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsScannerOpen(true)}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 sm:px-4 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-md shadow-indigo-100 transition-all active:scale-95 whitespace-nowrap"
+                  title="Abrir cámara del celular para escanear código de barras"
+                >
+                  <ScanBarcode size={18} />
+                  <span className="hidden sm:inline">Cámara</span>
+                </button>
               </div>
 
               {/* LISTA DESPLEGABLE DE RESULTADOS FILTRADOS */}
@@ -1035,23 +1100,50 @@ export default function POS() {
                         }}
                         className={`p-3 flex items-center justify-between cursor-pointer hover:bg-blue-50 transition-colors ${!hasStock ? 'opacity-50 bg-gray-50 cursor-not-allowed' : ''}`}
                       >
-                        <div className="flex items-center gap-3">
-                          <span className="font-mono text-xs font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
-                            {p.id}
-                          </span>
-                          <div>
-                            <p className="font-bold text-gray-800 text-sm">
-                              {isService ? '🔧 ' : ''}{p.name}
-                            </p>
+                        <div className="flex items-center gap-3 min-w-0">
+                          {/* Miniatura con visualizador */}
+                          {p.image ? (
+                            <div 
+                              className="relative group shrink-0"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setPreviewProduct(p);
+                              }}
+                              title="Click para ver foto en grande"
+                            >
+                              <img 
+                                src={p.image} 
+                                alt={p.name} 
+                                className="w-10 h-10 rounded-lg object-cover border border-gray-200 shadow-xs cursor-zoom-in group-hover:opacity-85 transition-opacity" 
+                              />
+                              <div className="absolute inset-0 bg-black/30 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Maximize2 size={14} className="text-white" />
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="w-10 h-10 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-400 shrink-0">
+                              <Package size={18} />
+                            </div>
+                          )}
+
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-xs font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded shrink-0">
+                                {p.id}
+                              </span>
+                              <p className="font-bold text-gray-800 text-sm truncate">
+                                {isService ? '🔧 ' : ''}{p.name}
+                              </p>
+                            </div>
                             {p.compatibilidad && p.compatibilidad.length > 0 && (
-                              <p className="text-[11px] text-blue-600 font-medium">
+                              <p className="text-[11px] text-blue-600 font-medium truncate">
                                 Compat: {p.compatibilidad.join(', ')}
                               </p>
                             )}
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 shrink-0 ml-2">
                           <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${isService ? 'bg-purple-100 text-purple-700' : (stock > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700')}`}>
                             {isService ? 'Servicio' : `${stock} disp.`}
                           </span>
@@ -1120,11 +1212,35 @@ export default function POS() {
                       return (
                         <tr key={item.id} className="hover:bg-gray-50 transition-colors">
                           <td className="p-3">
-                            <div className="flex items-center gap-2">
-                              {item.type === 'servicio' && <span className="text-purple-600 font-bold text-xs bg-purple-50 px-1.5 py-0.5 rounded">Servicio</span>}
-                              <span className="font-bold text-gray-800">{item.name}</span>
+                            <div className="flex items-center gap-2.5">
+                              {item.image ? (
+                                <div 
+                                  className="relative group shrink-0 cursor-pointer"
+                                  onClick={() => setPreviewProduct(item)}
+                                  title="Ver foto ampliada"
+                                >
+                                  <img 
+                                    src={item.image} 
+                                    alt={item.name} 
+                                    className="w-9 h-9 rounded-lg object-cover border border-gray-200 shadow-xs cursor-zoom-in group-hover:opacity-85 transition-opacity" 
+                                  />
+                                  <div className="absolute inset-0 bg-black/25 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <Maximize2 size={12} className="text-white" />
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="w-9 h-9 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-400 shrink-0">
+                                  {item.type === 'servicio' ? <span className="text-xs">🔧</span> : <Package size={16} />}
+                                </div>
+                              )}
+                              <div>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  {item.type === 'servicio' && <span className="text-purple-600 font-bold text-xs bg-purple-50 px-1.5 py-0.5 rounded">Servicio</span>}
+                                  <span className="font-bold text-gray-800">{item.name}</span>
+                                </div>
+                                <span className="font-mono text-[11px] text-gray-400">{item.id}</span>
+                              </div>
                             </div>
-                            <span className="font-mono text-[11px] text-gray-400">{item.id}</span>
                           </td>
                           <td className="p-3">
                             <div className="flex items-center justify-center gap-1">
@@ -1429,6 +1545,20 @@ export default function POS() {
           </div>
         </div>
       )}
+
+      {/* MODAL ESCÁNER DE CÓDIGO DE BARRAS POR CÁMARA */}
+      <BarcodeScannerModal 
+        isOpen={isScannerOpen} 
+        onClose={() => setIsScannerOpen(false)} 
+        onScanSuccess={(code) => handleBarcodeInput(code)} 
+      />
+
+      {/* MODAL VISUALIZADOR DE FOTO DE PRODUCTO */}
+      <ImagePreviewModal 
+        isOpen={!!previewProduct} 
+        onClose={() => setPreviewProduct(null)} 
+        product={previewProduct} 
+      />
 
     </div>
   );

@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { ref, onValue, set, push } from 'firebase/database';
 import { rtdb } from '../firebase';
-import { Search, Plus, Edit2, Package, History, Maximize2 } from 'lucide-react';
+import { Search, Plus, Edit2, Package, History, Maximize2, ScanBarcode } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Select from 'react-select';
+import BarcodeScannerModal from '../components/BarcodeScannerModal';
+import ImagePreviewModal from '../components/ImagePreviewModal';
 
 export default function Inventario() {
   const [activeTab, setActiveTab] = useState('catalogo'); // 'catalogo' | 'ajustes'
@@ -19,8 +21,9 @@ export default function Inventario() {
   const [ubicaciones, setUbicaciones] = useState([]);
   const [modelosMoto, setModelosMoto] = useState([]);
   
-  // Imagen Ampliada
-  const [enlargedImage, setEnlargedImage] = useState(null);
+  // Imagen Ampliada y Escáner de Código de Barras
+  const [selectedPreviewProduct, setSelectedPreviewProduct] = useState(null);
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
 
   // Modal State para Producto
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -87,6 +90,20 @@ export default function Inventario() {
     const textToSearch = `${p.name} ${p.id} ${p.cat || ''}`.toLowerCase();
     return searchTerms.every(term => textToSearch.includes(term));
   });
+
+  const handleBarcodeInput = (code) => {
+    if (!code || !code.trim()) return;
+    const clean = code.trim().toLowerCase();
+    setSearch(code.trim());
+    const match = products.find(p => 
+      p.id?.toLowerCase() === clean || 
+      (p.barcode && p.barcode.toString().toLowerCase() === clean) ||
+      (p.codigo_barra && p.codigo_barra.toString().toLowerCase() === clean)
+    );
+    if (match) {
+      toast.success(`Producto encontrado: ${match.name}`, { icon: '📦' });
+    }
+  };
 
   const handleOpenModal = (prod = null) => {
     if (prod) {
@@ -291,15 +308,40 @@ export default function Inventario() {
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           
           <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex flex-col sm:flex-row justify-between gap-4">
-            <div className="relative max-w-md flex-1">
-              <input 
-                type="text" 
-                placeholder="Buscar por código, nombre o categoría..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              />
-              <Search size={18} className="absolute left-3 top-3 text-gray-400" />
+            <div className="flex gap-2 flex-1 max-w-lg">
+              <div className="relative flex-1">
+                <input 
+                  type="text" 
+                  placeholder="Buscar por código, nombre o categoría..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      if (search.trim()) handleBarcodeInput(search);
+                    }
+                  }}
+                  className="w-full pl-10 pr-10 py-2 border border-gray-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm"
+                />
+                <Search size={18} className="absolute left-3 top-2.5 text-gray-400" />
+                {search && (
+                  <button 
+                    onClick={() => setSearch('')} 
+                    className="absolute right-3 top-2 text-gray-400 hover:text-gray-600 text-sm font-bold"
+                  >
+                    &times;
+                  </button>
+                )}
+              </div>
+              <button 
+                type="button"
+                onClick={() => setIsScannerOpen(true)}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all active:scale-95 whitespace-nowrap"
+                title="Escanear código de barras con la cámara"
+              >
+                <ScanBarcode size={16} />
+                <span className="hidden sm:inline">Cámara</span>
+              </button>
             </div>
             <button 
               onClick={() => handleOpenModal()}
@@ -337,7 +379,7 @@ export default function Inventario() {
                         <td className="p-4">
                           <div className="flex items-center gap-3">
                             {prod.image ? (
-                              <div className="relative group cursor-pointer" onClick={() => setEnlargedImage(prod.image)}>
+                              <div className="relative group cursor-pointer" onClick={() => setSelectedPreviewProduct(prod)} title="Ver foto en grande">
                                 <img src={prod.image} alt={prod.name} className="w-10 h-10 rounded-lg object-cover border border-gray-200 shadow-sm transition-opacity group-hover:opacity-80" />
                                 <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/20 rounded-lg transition-opacity">
                                   <Maximize2 size={16} className="text-white drop-shadow" />
@@ -650,6 +692,20 @@ export default function Inventario() {
           </div>
         </div>
       )}
+
+      {/* MODAL VISUALIZADOR DE FOTO DE PRODUCTO EN GRANDE */}
+      <ImagePreviewModal
+        isOpen={!!selectedPreviewProduct}
+        onClose={() => setSelectedPreviewProduct(null)}
+        product={selectedPreviewProduct}
+      />
+
+      {/* MODAL ESCÁNER DE CÓDIGO DE BARRAS POR CÁMARA */}
+      <BarcodeScannerModal
+        isOpen={isScannerOpen}
+        onClose={() => setIsScannerOpen(false)}
+        onScanSuccess={(code) => handleBarcodeInput(code)}
+      />
 
     </div>
   );
