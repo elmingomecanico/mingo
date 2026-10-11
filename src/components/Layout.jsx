@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, ShoppingCart, Package, BarChart2, Settings, LogOut, Activity, Users, Wallet, Menu, X, ShieldCheck, Truck, Wrench, ShoppingBag } from 'lucide-react';
+import { Home, ShoppingCart, Package, BarChart2, Settings, LogOut, Activity, Users, Wallet, Menu, X, ShieldCheck, Truck, Wrench, ShoppingBag, UserCheck } from 'lucide-react';
 import { Toaster } from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import logoIcon from '../assets/logo-icon.jpg';
@@ -12,6 +12,7 @@ export default function Layout({ children }) {
   
   const menu = [
     { name: 'Dashboard', path: '/', icon: <Home size={20} />, perm: 'VER_REPORTES' },
+    { name: 'Portal Empleado', path: '/mi-portal', icon: <UserCheck size={20} />, perm: 'PUBLICO' },
     { name: 'Caja POS', path: '/pos', icon: <ShoppingCart size={20} />, perm: 'VER_POS' },
     { name: 'Órdenes (Taller)', path: '/taller', icon: <Wrench size={20} />, perm: 'VER_TALLER' },
     { name: 'Recursos Humanos', path: '/rrhh', icon: <Users size={20} />, perm: 'VER_USUARIOS' },
@@ -31,6 +32,7 @@ export default function Layout({ children }) {
   // Función para verificar permiso
   const hasPermission = (perm) => {
     if (!user) return false;
+    if (perm === 'PUBLICO') return true;
     if (user.rol === 'SuperAdmin') return true;
     if (perm === 'VER_TALLER' && user.funcion === 'Mecánico') return true;
     // Si no es SuperAdmin, debe tener el permiso explícito en su array
@@ -39,8 +41,8 @@ export default function Layout({ children }) {
 
   // Filtrar menú por permisos
   const filteredMenu = menu.filter(item => {
-    // Si es Dashboard, dejarlo pasar si tiene VER_REPORTES o VER_POS o es SuperAdmin (o darle uno por defecto)
-    if (item.name === 'Dashboard') return true; 
+    // Si es Dashboard o Portal Empleado, dejarlo pasar para todos los usuarios autenticados
+    if (item.name === 'Dashboard' || item.path === '/mi-portal') return true; 
     return hasPermission(item.perm);
   });
 
