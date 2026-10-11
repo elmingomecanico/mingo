@@ -5,7 +5,8 @@ import { useAuth } from '../context/AuthContext';
 import { 
   UserCheck, Palmtree, HandCoins, DollarSign, Package, Calendar, 
   Clock, CheckCircle2, AlertCircle, XCircle, Plus, FileText, 
-  HelpCircle, ChevronRight, ShieldCheck, CreditCard, Sparkles, AlertTriangle
+  HelpCircle, ChevronRight, ShieldCheck, CreditCard, Sparkles, AlertTriangle,
+  Briefcase, History
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -120,14 +121,53 @@ export default function PortalEmpleado() {
     };
   }, [user]);
 
-  // Cálculo de Vacaciones según Código del Trabajo de Nicaragua:
-  // 15 días continuos por cada 6 meses de trabajo continuo (2.5 días por mes laborado)
-  const fechaIngreso = empleadoData?.fecha_ingreso ? new Date(empleadoData.fecha_ingreso) : new Date(2025, 0, 1);
-  const hoy = new Date();
-  const mesesLaborados = Math.max(0, ((hoy.getFullYear() - fechaIngreso.getFullYear()) * 12) + (hoy.getMonth() - fechaIngreso.getMonth()));
-  const diasVacacionesAcumulados = Number((mesesLaborados * 2.5).toFixed(1));
-  const diasTomados = Number(empleadoData?.dias_vacaciones_tomados || 0);
-  const diasVacacionesDisponibles = Math.max(0, Number((diasVacacionesAcumulados - diasTomados).toFixed(1)));
+  // Helper para normalizar períodos de vacaciones del empleado
+  const getPeriodosVacaciones = (emp) => {
+    if (!emp || !emp.periodos_vacaciones) return [];
+    if (Array.isArray(emp.periodos_vacaciones)) return emp.periodos_vacaciones;
+    return Object.keys(emp.periodos_vacaciones).map(k => ({
+      id: k,
+      ...emp.periodos_vacaciones[k]
+    })).sort((a, b) => new Date(b.fecha_inicio) - new Date(a.fecha_inicio));
+  };
+
+  const periodosVacaciones = getPeriodosVacaciones(empleadoData);
+  const fechaIngresoStr = empleadoData?.fecha_ingreso;
+  let antiguedadTexto = 'Pendiente de registrar por RRHH';
+  let mesesLaborados = 0;
+  let tieneFechaIngreso = false;
+
+  if (fechaIngresoStr) {
+    const inicio = new Date(fechaIngresoStr + (fechaIngresoStr.length === 10 ? 'T00:00:00' : ''));
+    if (!isNaN(inicio.getTime())) {
+      tieneFechaIngreso = true;
+      const fin = new Date();
+      let anos = fin.getFullYear() - inicio.getFullYear();
+      let meses = fin.getMonth() - inicio.getMonth();
+      let dias = fin.getDate() - inicio.getDate();
+      if (dias < 0) {
+        meses -= 1;
+        dias += new Date(fin.getFullYear(), fin.getMonth(), 0).getDate();
+      }
+      if (meses < 0) {
+        anos -= 1;
+        meses += 12;
+      }
+      mesesLaborados = Math.max(0, (anos * 12) + meses + (dias / 30));
+      antiguedadTexto = anos > 0 ? `${anos} a, ${meses} m` : `${meses} m, ${dias} d`;
+    }
+  }
+
+  // Cálculo de Vacaciones según Art. 76 Código del Trabajo de Nicaragua:
+  // 15 días continuos por cada 6 meses continuos de servicio (2.5 días por mes trabajado)
+  const diasVacacionesAcumulados = tieneFechaIngreso ? Number((mesesLaborados * 2.5).toFixed(1)) : 0;
+  const diasTomadosPeriodos = periodosVacaciones.reduce((sum, p) => sum + Number(p.dias || 0), 0);
+  const diasTomados = periodosVacaciones.length > 0
+    ? Number(diasTomadosPeriodos.toFixed(1))
+    : Number(empleadoData?.dias_vacaciones_tomados || 0);
+
+  const saldoVacaciones = Number((diasVacacionesAcumulados - diasTomados).toFixed(1));
+  const diasVacacionesDisponibles = Math.max(0, saldoVacaciones);
 
   // Deudas activas
   const deudasActivas = deudas.filter(d => d.estado === 'Activo' && d.saldo_pendiente > 0);
@@ -296,7 +336,7 @@ export default function PortalEmpleado() {
         <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm relative overflow-hidden flex flex-col justify-between">
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Vacaciones por Ley</p>
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Vacaciones por Ley (Art. 76)</p>
               <h3 className="text-3xl font-black text-amber-600 mt-1">
                 {diasVacacionesDisponibles} <span className="text-xs font-bold text-gray-500">días disp.</span>
               </h3>
@@ -305,9 +345,14 @@ export default function PortalEmpleado() {
               <Palmtree size={22} />
             </div>
           </div>
-          <div className="mt-4 pt-3 border-t border-gray-100 text-[11px] text-gray-500 flex justify-between">
-            <span>Acumulados: <strong>{diasVacacionesAcumulados} d</strong></span>
-            <span>Gozados: <strong>{diasTomados} d</strong></span>
+          <div className="mt-4 pt-3 border-t border-gray-100 text-[11px] text-gray-500 space-y-1">
+            <div className="flex justify-between">
+              <span>Acumulados: <strong>{diasVacacionesAcumulados} d</strong></span>
+              <span>Gozados: <strong>{diasTomados} d</strong></span>
+            </div>
+            <div className="text-[10px] text-gray-400">
+              {tieneFechaIngreso ? `Antigüedad: ${antiguedadTexto}` : '⚠️ Sin fecha de ingreso registrada'}
+            </div>
           </div>
         </div>
 
@@ -573,6 +618,80 @@ export default function PortalEmpleado() {
           )}
         </div>
 
+      </div>
+
+      {/* BITÁCORA DE PERÍODOS DE VACACIONES GOZADAS DEL EMPLEADO */}
+      <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+          <div>
+            <h3 className="font-bold text-base text-gray-800 flex items-center gap-2">
+              <History className="text-amber-600" size={18} />
+              Bitácora de Mis Vacaciones Gozadas (Art. 76)
+            </h3>
+            <p className="text-xs text-gray-500">
+              Períodos formales de descanso registrados y aprobados dentro de tu tiempo laborado.
+            </p>
+          </div>
+          <div className="flex items-center gap-3 text-xs bg-amber-50 px-3 py-1.5 rounded-xl border border-amber-200">
+            <span className="text-amber-900 font-bold">Saldo Actual: <strong>{diasVacacionesDisponibles} días</strong></span>
+            <span className="text-gray-400">|</span>
+            <span className="text-gray-600">Gozados: <strong>{diasTomados} días</strong></span>
+          </div>
+        </div>
+
+        {periodosVacaciones.length === 0 ? (
+          <div className="text-center py-8 border-2 border-dashed border-gray-100 rounded-2xl bg-gray-50/50">
+            <Palmtree className="mx-auto text-gray-300 mb-2" size={32} />
+            <p className="font-bold text-gray-600 text-xs">No tienes períodos de vacaciones registrados aún</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">
+              Cuando solicites vacaciones y sean aprobadas por gerencia, aparecerán aquí con sus fechas exactas.
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto rounded-xl border border-gray-100">
+            <table className="w-full text-xs text-left">
+              <thead className="bg-gray-50 text-gray-500 font-bold uppercase text-[10px]">
+                <tr>
+                  <th className="p-3">Rango de Fechas</th>
+                  <th className="p-3 text-center">Días Gozados</th>
+                  <th className="p-3">Período / Motivo</th>
+                  <th className="p-3">Origen</th>
+                  <th className="p-3">Autorizado Por</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {periodosVacaciones.map(p => (
+                  <tr key={p.id} className="hover:bg-amber-50/30">
+                    <td className="p-3 font-mono font-medium text-gray-800">
+                      {p.fecha_inicio} al {p.fecha_fin}
+                    </td>
+                    <td className="p-3 text-center">
+                      <span className="font-black text-red-600 bg-red-50 px-2.5 py-0.5 rounded-full border border-red-100">
+                        {p.dias} días
+                      </span>
+                    </td>
+                    <td className="p-3 text-gray-700">
+                      <strong className="block">{p.periodo_correspondiente || 'Vacaciones'}</strong>
+                      {p.observaciones && <span className="text-[10px] text-gray-400 italic block">{p.observaciones}</span>}
+                    </td>
+                    <td className="p-3">
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        p.tipo_registro === 'Solicitud Aprobada'
+                          ? 'bg-green-100 text-green-700'
+                          : 'bg-blue-100 text-blue-700'
+                      }`}>
+                        {p.tipo_registro || 'Histórico'}
+                      </span>
+                    </td>
+                    <td className="p-3 text-gray-500 text-[11px]">
+                      {p.registrado_por || 'Gerencia'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* MODAL CREAR NUEVA SOLICITUD */}

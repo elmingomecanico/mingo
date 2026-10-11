@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { ref, onValue, set, push, update } from 'firebase/database';
+import { ref, onValue, set, push, update, remove } from 'firebase/database';
 import { rtdb } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 import { 
   Users, CalendarDays, DollarSign, CheckCircle2, History, HandCoins, 
   Palmtree, Clock, FileText, Check, X, AlertCircle, Plus, Eye, Edit3, 
   Search, ShieldAlert, Award, Briefcase, Phone, Mail, MapPin, 
-  Calendar, CreditCard, ChevronRight, Sparkles, Filter, CheckCheck
+  Calendar, CreditCard, ChevronRight, Sparkles, Filter, CheckCheck,
+  Trash2, CalendarPlus, XCircle
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -38,6 +39,17 @@ export default function RRHH() {
   const [isExpedienteModalOpen, setIsExpedienteModalOpen] = useState(false);
   const [expedienteTab, setExpedienteTab] = useState('general'); // general, prestaciones, deudas
   const [formExpediente, setFormExpediente] = useState({});
+
+  // Estados para Registro de Período de Vacaciones
+  const [isPeriodoModalOpen, setIsPeriodoModalOpen] = useState(false);
+  const [periodoForm, setPeriodoForm] = useState({
+    fecha_inicio: '',
+    fecha_fin: '',
+    dias: 1,
+    periodo_correspondiente: '',
+    observaciones: ''
+  });
+  const [periodoAEliminar, setPeriodoAEliminar] = useState(null);
 
   // Estados para Modal de Deuda Manual
   const [isDeudaModalOpen, setIsDeudaModalOpen] = useState(false);
@@ -123,11 +135,23 @@ export default function RRHH() {
   // Solicitudes pendientes
   const solicitudesPendientes = solicitudes.filter(s => s.estado === 'Pendiente');
 
+  // Helper para normalizar y ordenar períodos de vacaciones de un empleado
+  const getPeriodosVacaciones = (emp) => {
+    if (!emp || !emp.periodos_vacaciones) return [];
+    if (Array.isArray(emp.periodos_vacaciones)) return emp.periodos_vacaciones;
+    return Object.keys(emp.periodos_vacaciones).map(k => ({
+      id: k,
+      ...emp.periodos_vacaciones[k]
+    })).sort((a, b) => new Date(b.fecha_inicio) - new Date(a.fecha_inicio));
+  };
+
   // Helpers de cálculos laborales de Nicaragua
   const calcAntiguedad = (fechaIngresoStr) => {
-    if (!fechaIngresoStr) return { anos: 0, meses: 0, dias: 0, texto: 'Sin fecha registrada', mesesTotales: 0 };
-    const inicio = new Date(fechaIngresoStr);
+    if (!fechaIngresoStr) return { anos: 0, meses: 0, dias: 0, texto: 'Sin fecha registrada', mesesTotales: 0, tieneFecha: false };
+    const inicio = new Date(fechaIngresoStr + (fechaIngresoStr.length === 10 ? 'T00:00:00' : ''));
     const fin = new Date();
+    if (isNaN(inicio.getTime())) return { anos: 0, meses: 0, dias: 0, texto: 'Fecha no válida', mesesTotales: 0, tieneFecha: false };
+    
     let anos = fin.getFullYear() - inicio.getFullYear();
     let meses = fin.getMonth() - inicio.getMonth();
     let dias = fin.getDate() - inicio.getDate();
@@ -141,22 +165,35 @@ export default function RRHH() {
     }
     const mesesTotales = Math.max(0, (anos * 12) + meses + (dias / 30));
     const texto = anos > 0 ? `${anos} a, ${meses} m` : `${meses} m, ${dias} d`;
-    return { anos, meses, dias, texto, mesesTotales };
+    return { anos, meses, dias, texto, mesesTotales, tieneFecha: true };
   };
 
   const calcVacaciones = (emp) => {
-    const { mesesTotales } = calcAntiguedad(emp.fecha_ingreso);
-    // Art. 76 Código del Trabajo de Nicaragua: 15 días por cada 6 meses continuos = 2.5 días por mes trabajado
-    const diasAcumulados = Number((mesesTotales * 2.5).toFixed(1));
-    const diasTomados = Number(emp.dias_vacaciones_tomados || 0);
-    const diasDisponibles = Math.max(0, Number((diasAcumulados - diasTomados).toFixed(1)));
-    return { diasAcumulados, diasTomados, diasDisponibles };
+    if (!emp) return { diasAcumulados: 0, diasTomados: 0, diasDisponibles: 0, saldoReal: 0, periodos: [], tieneFecha: false };
+    const antig = calcAntiguedad(emp.fecha_ingreso);
+    // Art. 76 Código del Trabajo de Nicaragua: 15 días continuos por cada 6 meses continuos = 2.5 días por mes trabajado
+    const diasAcumulados = antig.tieneFecha ? Number((antig.mesesTotales * 2.5).toFixed(1)) : 0;
+    const periodos = getPeriodosVacaciones(emp);
+    
+    // Si tiene períodos registrados en bitácora, ese es el valor 100% auditado con fechas
+    const diasTomadosPeriodos = periodos.reduce((acc, p) => acc + Number(p.dias || 0), 0);
+    const diasTomados = periodos.length > 0 
+      ? Number(diasTomadosPeriodos.toFixed(1)) 
+      : Number(emp.dias_vacaciones_tomados || 0);
+
+    const saldoReal = Number((diasAcumulados - diasTomados).toFixed(1));
+    const diasDisponibles = Math.max(0, saldoReal);
+    return { diasAcumulados, diasTomados, diasDisponibles, saldoReal, periodos, tieneFecha: antig.tieneFecha };
   };
 
   const calcPrestacionesNicaragua = (emp) => {
-    const { anos, meses, dias, mesesTotales } = calcAntiguedad(emp.fecha_ingreso);
-    const salarioBase = Number(emp.salario_base || 0);
+    const { anos, meses, dias, tieneFecha } = calcAntiguedad(emp?.fecha_ingreso);
+    const salarioBase = Number(emp?.salario_base || 0);
     
+    if (!tieneFecha || salarioBase <= 0) {
+      return { aguinaldoAcumulado: 0, indemnizacionMonto: 0, mesesIndemnizacion: 0 };
+    }
+
     // Aguinaldo (Décimo Tercer Mes): 1 mes de salario por año trabajado o proporcional
     const hoy = new Date();
     const mesesPeriodoAguinaldo = hoy.getMonth() + 1; // del 1 de dic a la fecha
@@ -187,7 +224,7 @@ export default function RRHH() {
       cedula: emp.cedula || '',
       telefono: emp.telefono || '',
       direccion: emp.direccion || '',
-      fecha_ingreso: emp.fecha_ingreso || '2025-01-01',
+      fecha_ingreso: emp.fecha_ingreso || '',
       funcion: emp.funcion || 'Mecánico',
       id_sucursal: emp.id_sucursal || 'SUC-01',
       estado: emp.estado || 'Activo',
@@ -208,19 +245,25 @@ export default function RRHH() {
     if (!selectedExpediente) return;
 
     try {
+      const activeEmp = usuarios.find(u => u.id === selectedExpediente.id) || selectedExpediente;
+      const periodos = getPeriodosVacaciones(activeEmp);
+      const totalTomados = periodos.length > 0
+        ? Number(periodos.reduce((acc, p) => acc + Number(p.dias || 0), 0).toFixed(1))
+        : Number(formExpediente.dias_vacaciones_tomados || 0);
+
       await update(ref(rtdb, `usuarios/${selectedExpediente.id}`), {
         nombre_completo: formExpediente.nombre_completo.trim(),
         cedula: formExpediente.cedula.trim(),
         telefono: formExpediente.telefono.trim(),
         direccion: formExpediente.direccion.trim(),
-        fecha_ingreso: formExpediente.fecha_ingreso,
+        fecha_ingreso: formExpediente.fecha_ingreso || '',
         funcion: formExpediente.funcion,
         id_sucursal: formExpediente.id_sucursal,
         estado: formExpediente.estado,
         tipo_salario: formExpediente.tipo_salario,
         salario_base: Number(formExpediente.salario_base) || 0,
         porcentaje_comision: Number(formExpediente.porcentaje_comision) || 0,
-        dias_vacaciones_tomados: Number(formExpediente.dias_vacaciones_tomados) || 0,
+        dias_vacaciones_tomados: totalTomados,
         contacto_emergencia: formExpediente.contacto_emergencia.trim(),
         notas_expediente: formExpediente.notas_expediente.trim()
       });
@@ -229,6 +272,127 @@ export default function RRHH() {
       setIsExpedienteModalOpen(false);
     } catch (err) {
       toast.error('Error al actualizar expediente: ' + err.message);
+    }
+  };
+
+  // Apertura y gestión de período de vacaciones
+  const handleAbrirModalPeriodo = (empTarget) => {
+    const hoyStr = new Date().toISOString().split('T')[0];
+    const anioActual = new Date().getFullYear();
+    setPeriodoForm({
+      fecha_inicio: hoyStr,
+      fecha_fin: hoyStr,
+      dias: 1,
+      periodo_correspondiente: `Período ${anioActual - 1} - ${anioActual}`,
+      observaciones: 'Registro histórico de vacaciones gozadas'
+    });
+    setIsPeriodoModalOpen(true);
+  };
+
+  const handlePeriodoFechaChange = (campo, valor) => {
+    setPeriodoForm(prev => {
+      const nuevo = { ...prev, [campo]: valor };
+      if (nuevo.fecha_inicio && nuevo.fecha_fin) {
+        const d1 = new Date(nuevo.fecha_inicio + 'T00:00:00');
+        const d2 = new Date(nuevo.fecha_fin + 'T00:00:00');
+        const diffMs = d2 - d1;
+        if (!isNaN(diffMs)) {
+          const diffDias = Math.round(diffMs / (1000 * 60 * 60 * 24)) + 1;
+          if (diffDias > 0) {
+            nuevo.dias = diffDias;
+          }
+        }
+      }
+      return nuevo;
+    });
+  };
+
+  const handleGuardarPeriodoVacaciones = async (e) => {
+    e.preventDefault();
+    if (!selectedExpediente) return;
+    const activeEmp = usuarios.find(u => u.id === selectedExpediente.id) || selectedExpediente;
+    const empHireDate = formExpediente.fecha_ingreso || activeEmp.fecha_ingreso;
+
+    if (!periodoForm.fecha_inicio || !periodoForm.fecha_fin) {
+      return toast.error('Debe ingresar las fechas de inicio y fin del descanso.');
+    }
+
+    const dInicio = new Date(periodoForm.fecha_inicio + 'T00:00:00');
+    const dFin = new Date(periodoForm.fecha_fin + 'T00:00:00');
+
+    if (dFin < dInicio) {
+      return toast.error('La fecha de fin no puede ser anterior a la fecha de inicio.');
+    }
+
+    if (empHireDate) {
+      const dIngreso = new Date(empHireDate + 'T00:00:00');
+      if (dInicio < dIngreso) {
+        return toast.error(`Inconsistencia temporal: La fecha de inicio de vacaciones (${periodoForm.fecha_inicio}) no puede ser anterior a la fecha de contratación del empleado (${empHireDate}). Todo período de descanso debe corresponder al tiempo laborado.`);
+      }
+    }
+
+    const diasNum = Number(periodoForm.dias);
+    if (!diasNum || diasNum <= 0) {
+      return toast.error('La cantidad de días debe ser mayor a 0.');
+    }
+
+    try {
+      const nuevoRef = push(ref(rtdb, `usuarios/${activeEmp.id}/periodos_vacaciones`));
+      await set(nuevoRef, {
+        fecha_inicio: periodoForm.fecha_inicio,
+        fecha_fin: periodoForm.fecha_fin,
+        dias: diasNum,
+        periodo_correspondiente: periodoForm.periodo_correspondiente.trim() || 'Período Vacacional',
+        tipo_registro: 'Histórico / Asentado',
+        observaciones: periodoForm.observaciones.trim() || 'Registro histórico de vacaciones gozadas',
+        registrado_por: user?.nombre_completo || 'Gerencia',
+        fecha_registro: new Date().toISOString()
+      });
+
+      // Recalcular total de días tomados
+      const periodosActuales = getPeriodosVacaciones(activeEmp);
+      const totalTomados = periodosActuales.reduce((acc, p) => acc + Number(p.dias || 0), 0) + diasNum;
+
+      await update(ref(rtdb, `usuarios/${activeEmp.id}`), {
+        dias_vacaciones_tomados: Number(totalTomados.toFixed(1))
+      });
+
+      setFormExpediente(prev => ({
+        ...prev,
+        dias_vacaciones_tomados: Number(totalTomados.toFixed(1))
+      }));
+
+      toast.success(`Período de vacaciones registrado exitosamente (${diasNum} días auditados)`);
+      setIsPeriodoModalOpen(false);
+    } catch (err) {
+      toast.error('Error al registrar período: ' + err.message);
+    }
+  };
+
+  const handleConfirmarEliminarPeriodo = async () => {
+    if (!selectedExpediente || !periodoAEliminar) return;
+    const activeEmp = usuarios.find(u => u.id === selectedExpediente.id) || selectedExpediente;
+
+    try {
+      await remove(ref(rtdb, `usuarios/${activeEmp.id}/periodos_vacaciones/${periodoAEliminar.id}`));
+
+      // Recalcular total sin el período eliminado
+      const periodosActuales = getPeriodosVacaciones(activeEmp).filter(p => p.id !== periodoAEliminar.id);
+      const totalTomados = periodosActuales.reduce((acc, p) => acc + Number(p.dias || 0), 0);
+
+      await update(ref(rtdb, `usuarios/${activeEmp.id}`), {
+        dias_vacaciones_tomados: Number(totalTomados.toFixed(1))
+      });
+
+      setFormExpediente(prev => ({
+        ...prev,
+        dias_vacaciones_tomados: Number(totalTomados.toFixed(1))
+      }));
+
+      toast.success('Período de vacaciones eliminado y días reintegrados al saldo disponible');
+      setPeriodoAEliminar(null);
+    } catch (err) {
+      toast.error('Error al eliminar período: ' + err.message);
     }
   };
 
@@ -291,11 +455,26 @@ export default function RRHH() {
       // 2. Ejecutar efectos según tipo
       if (sol.tipo === 'Vacaciones') {
         const emp = usuarios.find(u => u.id === sol.id_empleado);
-        const tomadosActuales = Number(emp?.dias_vacaciones_tomados || 0);
-        await update(ref(rtdb, `usuarios/${sol.id_empleado}`), {
-          dias_vacaciones_tomados: tomadosActuales + Number(sol.dias_solicitados || 0)
+        const periodosExistentes = getPeriodosVacaciones(emp);
+        const diasSol = Number(sol.dias_solicitados || 0);
+
+        const nuevoPeriodoRef = push(ref(rtdb, `usuarios/${sol.id_empleado}/periodos_vacaciones`));
+        await set(nuevoPeriodoRef, {
+          fecha_inicio: sol.fecha_inicio || new Date().toISOString().split('T')[0],
+          fecha_fin: sol.fecha_fin || sol.fecha_inicio || new Date().toISOString().split('T')[0],
+          dias: diasSol,
+          periodo_correspondiente: `Solicitud Aprobada (${sol.fecha_inicio || ''} al ${sol.fecha_fin || ''})`,
+          tipo_registro: 'Solicitud Aprobada',
+          observaciones: sol.motivo ? `Aprobado por gerencia: ${sol.motivo}` : 'Vacaciones aprobadas por Gerencia',
+          registrado_por: user?.nombre_completo || 'Gerencia',
+          fecha_registro: new Date().toISOString()
         });
-        toast.success(`Vacaciones aprobadas. Se descontaron ${sol.dias_solicitados} días.`);
+
+        const nuevoTotalTomados = periodosExistentes.reduce((sum, p) => sum + Number(p.dias || 0), 0) + diasSol;
+        await update(ref(rtdb, `usuarios/${sol.id_empleado}`), {
+          dias_vacaciones_tomados: Number(nuevoTotalTomados.toFixed(1))
+        });
+        toast.success(`Vacaciones aprobadas. Se registraron ${diasSol} días en la bitácora del colaborador.`);
       } else if (sol.tipo === 'Adelanto') {
         await push(ref(rtdb, 'deudas_empleados'), {
           id_empleado: sol.id_empleado,
@@ -491,6 +670,17 @@ export default function RRHH() {
     const text = `${u.nombre_completo || ''} ${u.funcion || ''} ${u.cedula || ''}`.toLowerCase();
     return text.includes(searchEmpleado.toLowerCase());
   });
+
+  // Empleado activo para el modal de expediente con cálculos reactivos en vivo
+  const activeExpedienteEmp = selectedExpediente ? (usuarios.find(u => u.id === selectedExpediente.id) || selectedExpediente) : null;
+  const empCalculoModal = activeExpedienteEmp ? {
+    ...activeExpedienteEmp,
+    fecha_ingreso: formExpediente.fecha_ingreso || activeExpedienteEmp.fecha_ingreso || '',
+    salario_base: formExpediente.salario_base !== undefined ? formExpediente.salario_base : activeExpedienteEmp.salario_base
+  } : null;
+  const vacInfoModal = empCalculoModal ? calcVacaciones(empCalculoModal) : null;
+  const antigModal = empCalculoModal ? calcAntiguedad(empCalculoModal.fecha_ingreso) : null;
+  const prestModal = empCalculoModal ? calcPrestacionesNicaragua(empCalculoModal) : null;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 max-w-7xl mx-auto pb-12">
@@ -1033,7 +1223,7 @@ export default function RRHH() {
       {/* ========================================================================= */}
       {isExpedienteModalOpen && selectedExpediente && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
+          <div className="bg-white rounded-3xl w-full max-w-4xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 max-h-[92vh] flex flex-col">
             
             {/* Header del expediente */}
             <div className="p-6 bg-gradient-to-r from-blue-900 to-indigo-900 text-white flex justify-between items-center">
@@ -1048,7 +1238,7 @@ export default function RRHH() {
               </div>
               <button
                 onClick={() => setIsExpedienteModalOpen(false)}
-                className="text-white/70 hover:text-white p-1 rounded-full hover:bg-white/10"
+                className="text-white/70 hover:text-white p-1 rounded-full hover:bg-white/10 text-xl font-bold leading-none"
               >
                 &times;
               </button>
@@ -1207,64 +1397,227 @@ export default function RRHH() {
                 </div>
               )}
 
-              {expedienteTab === 'prestaciones' && (
+              {expedienteTab === 'prestaciones' && empCalculoModal && (
                 <div className="space-y-4">
-                  {/* CÁLCULO LEGAL VACACIONES */}
-                  <div className="bg-amber-50 p-4 rounded-2xl border border-amber-200 space-y-3">
-                    <h4 className="font-bold text-amber-900 text-sm flex items-center gap-2">
-                      <Palmtree size={18} /> Vacaciones según Art. 76 Código del Trabajo
-                    </h4>
-                    <p className="text-xs text-amber-800">
-                      Nicaragua estipula 15 días continuos de descanso remunerado por cada 6 meses continuos de servicio (2.5 días por mes trabajado).
-                    </p>
-                    
-                    <div className="grid grid-cols-3 gap-2 text-center pt-2">
-                      <div className="bg-white p-2.5 rounded-xl border border-amber-200">
-                        <span className="text-[10px] uppercase font-bold text-gray-400 block">Acumulados</span>
-                        <strong className="text-lg text-amber-900">
-                          {calcVacaciones(selectedExpediente).diasAcumulados} días
-                        </strong>
+                  {/* ALERTA O RESUMEN DE FECHA DE INGRESO Y ANTIGÜEDAD */}
+                  {!antigModal.tieneFecha ? (
+                    <div className="bg-amber-50 border border-amber-300 p-4 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-950">
+                      <div className="flex items-center gap-2.5">
+                        <AlertCircle className="text-amber-600 shrink-0" size={22} />
+                        <div>
+                          <p className="text-xs font-bold">Fecha de Ingreso Laboral no establecida</p>
+                          <p className="text-[11px] text-amber-800">
+                            Para calcular la antigüedad legal y la acumulación de vacaciones (Art. 76) e indemnización (Art. 45), asigne la fecha en que inició a laborar:
+                          </p>
+                        </div>
                       </div>
-                      <div className="bg-white p-2.5 rounded-xl border border-amber-200">
-                        <span className="text-[10px] uppercase font-bold text-gray-400 block">Días Tomados</span>
+                      <div className="flex items-center gap-2 w-full sm:w-auto">
                         <input
-                          type="number"
-                          step="0.5"
-                          value={formExpediente.dias_vacaciones_tomados}
-                          onChange={e => setFormExpediente({ ...formExpediente, dias_vacaciones_tomados: e.target.value })}
-                          className="w-full text-center font-bold text-lg text-red-600 outline-none"
+                          type="date"
+                          value={formExpediente.fecha_ingreso || ''}
+                          onChange={e => setFormExpediente({ ...formExpediente, fecha_ingreso: e.target.value })}
+                          className="border border-amber-300 p-2 rounded-xl text-xs bg-white font-bold text-gray-800 outline-none focus:ring-2 focus:ring-amber-500 shadow-sm"
                         />
                       </div>
-                      <div className="bg-white p-2.5 rounded-xl border border-amber-200">
-                        <span className="text-[10px] uppercase font-bold text-gray-400 block">Saldo Disponible</span>
-                        <strong className="text-lg text-green-700">
-                          {Math.max(0, calcVacaciones(selectedExpediente).diasAcumulados - Number(formExpediente.dias_vacaciones_tomados || 0)).toFixed(1)} días
+                    </div>
+                  ) : (
+                    <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-2 bg-blue-100 text-blue-700 rounded-xl">
+                          <Briefcase size={16} />
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-gray-400 uppercase font-bold block">Fecha de Ingreso</span>
+                          <strong className="text-gray-800 text-sm font-black">{empCalculoModal.fecha_ingreso}</strong>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-2 bg-indigo-100 text-indigo-700 rounded-xl">
+                          <Clock size={16} />
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-gray-400 uppercase font-bold block">Antigüedad Exacta</span>
+                          <strong className="text-indigo-900 text-sm font-black">
+                            {antigModal.anos > 0 ? `${antigModal.anos} a, ` : ''}
+                            {antigModal.meses} m, {antigModal.dias} d
+                          </strong>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-2 bg-amber-100 text-amber-700 rounded-xl">
+                          <Award size={16} />
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-gray-400 uppercase font-bold block">Tiempo Laborado</span>
+                          <strong className="text-amber-900 text-sm font-black">
+                            {antigModal.mesesTotales.toFixed(1)} meses acumulados
+                          </strong>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* CÁLCULO LEGAL VACACIONES (ART. 76) */}
+                  <div className="bg-amber-50/70 p-4 rounded-2xl border border-amber-200 space-y-3">
+                    <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-1">
+                      <h4 className="font-bold text-amber-900 text-sm flex items-center gap-2">
+                        <Palmtree size={18} className="text-amber-700" /> Vacaciones según Art. 76 Código del Trabajo
+                      </h4>
+                      <span className="text-[11px] font-bold text-amber-800 bg-amber-100 px-2.5 py-0.5 rounded-full border border-amber-200 self-start sm:self-auto">
+                        2.5 días por mes laborado (15 días / 6 meses)
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-amber-900/80 leading-relaxed">
+                      Nicaragua estipula 15 días continuos de descanso remunerado por cada 6 meses continuos de servicio. Los días tomados deben estar respaldados con fechas exactas en la bitácora laboral para asegurar la credibilidad del reporte.
+                    </p>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-center pt-1">
+                      <div className="bg-white p-3 rounded-xl border border-amber-200 shadow-sm">
+                        <span className="text-[10px] uppercase font-bold text-gray-400 block">Acumulados por Ley</span>
+                        <strong className="text-xl text-amber-900 block font-black my-0.5">
+                          {vacInfoModal.diasAcumulados} días
                         </strong>
+                        <span className="text-[10px] text-gray-500 font-medium">
+                          {antigModal.tieneFecha ? `2.5 d × ${antigModal.mesesTotales.toFixed(1)} meses` : 'Pendiente de fecha'}
+                        </span>
+                      </div>
+
+                      <div className="bg-white p-3 rounded-xl border border-amber-200 shadow-sm">
+                        <span className="text-[10px] uppercase font-bold text-gray-400 block">Días Tomados (Auditados)</span>
+                        <strong className="text-xl text-red-600 block font-black my-0.5">
+                          {vacInfoModal.diasTomados} días
+                        </strong>
+                        <span className="text-[10px] text-gray-500 font-medium">
+                          {vacInfoModal.periodos.length} período(s) en bitácora
+                        </span>
+                      </div>
+
+                      <div className="bg-white p-3 rounded-xl border border-amber-200 shadow-sm">
+                        <span className="text-[10px] uppercase font-bold text-gray-400 block">Saldo Disponible</span>
+                        <strong className={`text-xl block font-black my-0.5 ${vacInfoModal.saldoReal < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
+                          {vacInfoModal.diasDisponibles} días
+                        </strong>
+                        <span className={`text-[10px] font-bold ${vacInfoModal.saldoReal < 0 ? 'text-red-500' : 'text-emerald-600'}`}>
+                          {vacInfoModal.saldoReal < 0 ? `⚠️ Excedido por ${Math.abs(vacInfoModal.saldoReal)} d` : 'Disponibles para goce'}
+                        </span>
                       </div>
                     </div>
                   </div>
 
+                  {/* BITÁCORA Y REGISTRO DE PERÍODOS DE VACACIONES */}
+                  <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm space-y-3">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-gray-100 pb-3">
+                      <div>
+                        <h5 className="font-bold text-gray-800 text-sm flex items-center gap-2">
+                          <History size={16} className="text-amber-600" />
+                          Bitácora de Períodos de Vacaciones Gozadas
+                        </h5>
+                        <p className="text-[11px] text-gray-500">
+                          Historial exacto con fechas de inicio y fin registradas dentro del tiempo laborado.
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleAbrirModalPeriodo(empCalculoModal)}
+                        className="bg-amber-600 hover:bg-amber-700 active:scale-95 text-white font-bold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-sm shadow-amber-200 transition-all shrink-0"
+                      >
+                        <CalendarPlus size={14} /> Registrar Período de Vacaciones
+                      </button>
+                    </div>
+
+                    {vacInfoModal.periodos.length === 0 ? (
+                      <div className="text-center py-7 border-2 border-dashed border-gray-100 rounded-2xl bg-amber-50/20">
+                        <Palmtree className="mx-auto text-amber-300 mb-2" size={32} />
+                        <p className="text-xs font-bold text-gray-700">No hay períodos de vacaciones asentados</p>
+                        <p className="text-[11px] text-gray-400 max-w-md mx-auto mt-0.5">
+                          Para asentar vacaciones históricas o descansos tomados con anterioridad, haga clic en "+ Registrar Período de Vacaciones" indicando las fechas exactas dentro de su relación laboral.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto max-h-56 overflow-y-auto rounded-xl border border-gray-100">
+                        <table className="w-full text-xs text-left">
+                          <thead className="bg-gray-50 text-gray-500 font-bold uppercase text-[10px] sticky top-0 border-b border-gray-100">
+                            <tr>
+                              <th className="p-2.5">Rango de Fechas</th>
+                              <th className="p-2.5 text-center">Días</th>
+                              <th className="p-2.5">Período / Detalle</th>
+                              <th className="p-2.5">Origen</th>
+                              <th className="p-2.5">Registrado Por</th>
+                              <th className="p-2.5 text-right">Acción</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {vacInfoModal.periodos.map(p => (
+                              <tr key={p.id} className="hover:bg-amber-50/30 transition-colors">
+                                <td className="p-2.5 font-mono font-medium text-gray-800">
+                                  {p.fecha_inicio} al {p.fecha_fin}
+                                </td>
+                                <td className="p-2.5 text-center">
+                                  <span className="font-black text-red-600 bg-red-50 px-2 py-0.5 rounded-full border border-red-100">
+                                    {p.dias} días
+                                  </span>
+                                </td>
+                                <td className="p-2.5 text-gray-700">
+                                  <strong className="block font-semibold">{p.periodo_correspondiente || 'Vacaciones'}</strong>
+                                  {p.observaciones && <span className="text-[10px] text-gray-400 italic block">{p.observaciones}</span>}
+                                </td>
+                                <td className="p-2.5">
+                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                    p.tipo_registro === 'Solicitud Aprobada' 
+                                      ? 'bg-green-100 text-green-700' 
+                                      : 'bg-blue-100 text-blue-700'
+                                  }`}>
+                                    {p.tipo_registro || 'Histórico'}
+                                  </span>
+                                </td>
+                                <td className="p-2.5 text-gray-400 text-[11px]">
+                                  {p.registrado_por || 'Gerencia'}
+                                </td>
+                                <td className="p-2.5 text-right">
+                                  <button
+                                    type="button"
+                                    onClick={() => setPeriodoAEliminar(p)}
+                                    className="text-gray-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors"
+                                    title="Eliminar este período"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+
                   {/* AGUINALDO Y LIQUIDACIÓN PROYECTADA */}
-                  <div className="bg-blue-50 p-4 rounded-2xl border border-blue-200 space-y-2">
+                  <div className="bg-blue-50/70 p-4 rounded-2xl border border-blue-200 space-y-2">
                     <h4 className="font-bold text-blue-900 text-sm flex items-center gap-2">
-                      <Award size={18} /> Prestaciones y Liquidación Proyectada
+                      <Award size={18} className="text-blue-700" /> Prestaciones y Liquidación Proyectada
                     </h4>
                     
-                    <div className="grid grid-cols-2 gap-3 pt-2">
-                      <div className="bg-white p-3 rounded-xl border border-blue-100">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                      <div className="bg-white p-3.5 rounded-xl border border-blue-100 shadow-sm">
                         <span className="text-xs text-gray-500 font-bold block">Aguinaldo Acumulado (Art. 93):</span>
-                        <strong className="text-lg text-green-700">
-                          C$ {calcPrestacionesNicaragua(selectedExpediente).aguinaldoAcumulado}
+                        <strong className="text-lg text-emerald-700 font-black block mt-0.5">
+                          C$ {prestModal.aguinaldoAcumulado}
                         </strong>
                         <p className="text-[10px] text-gray-400 mt-0.5">Décimo tercer mes proporcional a la fecha</p>
                       </div>
 
-                      <div className="bg-white p-3 rounded-xl border border-blue-100">
+                      <div className="bg-white p-3.5 rounded-xl border border-blue-100 shadow-sm">
                         <span className="text-xs text-gray-500 font-bold block">Indemnización Antigüedad (Art. 45):</span>
-                        <strong className="text-lg text-blue-800">
-                          C$ {calcPrestacionesNicaragua(selectedExpediente).indemnizacionMonto}
+                        <strong className="text-lg text-blue-800 font-black block mt-0.5">
+                          C$ {prestModal.indemnizacionMonto}
                         </strong>
-                        <p className="text-[10px] text-gray-400 mt-0.5">Equivalente a {calcPrestacionesNicaragua(selectedExpediente).mesesIndemnizacion} meses de salario</p>
+                        <p className="text-[10px] text-gray-400 mt-0.5">
+                          {antigModal.tieneFecha ? `Equivalente a ${prestModal.mesesIndemnizacion} meses de salario` : 'Requiere fecha de ingreso'}
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -1388,6 +1741,150 @@ export default function RRHH() {
                 className="bg-red-600 hover:bg-red-700 text-white font-bold px-5 py-2 rounded-xl text-sm shadow-md shadow-red-200"
               >
                 Confirmar Rechazo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL REGISTRAR PERÍODO DE VACACIONES (HISTÓRICO O ASENTADO) */}
+      {isPeriodoModalOpen && selectedExpediente && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-5 bg-gradient-to-r from-amber-600 to-amber-700 text-white flex justify-between items-center">
+              <div>
+                <h3 className="font-bold text-lg flex items-center gap-2">
+                  <CalendarPlus size={20} /> Asentar Período de Vacaciones
+                </h3>
+                <p className="text-xs text-amber-100">
+                  Empleado: {selectedExpediente.nombre_completo}
+                  {empCalculoModal?.fecha_ingreso ? ` (Ingreso: ${empCalculoModal.fecha_ingreso})` : ''}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsPeriodoModalOpen(false)}
+                className="text-white/80 hover:text-white p-1 rounded-full text-lg leading-none"
+              >
+                &times;
+              </button>
+            </div>
+
+            <form onSubmit={handleGuardarPeriodoVacaciones} className="p-6 space-y-4">
+              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900 leading-relaxed">
+                <strong>Norma de Integridad:</strong> Para que el expediente laboral sea creíble y auditable, especifique las fechas exactas en que el colaborador tomó su descanso dentro de su relación de trabajo.
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Fecha de Inicio *</label>
+                  <input
+                    required
+                    type="date"
+                    value={periodoForm.fecha_inicio}
+                    onChange={e => handlePeriodoFechaChange('fecha_inicio', e.target.value)}
+                    className="w-full border p-2.5 rounded-xl text-sm outline-none focus:ring-2 focus:ring-amber-500 font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Fecha de Fin *</label>
+                  <input
+                    required
+                    type="date"
+                    value={periodoForm.fecha_fin}
+                    onChange={e => handlePeriodoFechaChange('fecha_fin', e.target.value)}
+                    className="w-full border p-2.5 rounded-xl text-sm outline-none focus:ring-2 focus:ring-amber-500 font-bold"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block text-xs font-bold text-gray-700 uppercase">Días a Descontar *</label>
+                  <span className="text-[11px] text-gray-400">Calculado por rango de fechas</span>
+                </div>
+                <input
+                  required
+                  type="number"
+                  step="0.5"
+                  min="0.5"
+                  value={periodoForm.dias}
+                  onChange={e => setPeriodoForm({ ...periodoForm, dias: e.target.value })}
+                  className="w-full border p-2.5 rounded-xl text-base outline-none focus:ring-2 focus:ring-amber-500 font-black text-red-600"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Período / Motivo *</label>
+                <input
+                  required
+                  type="text"
+                  placeholder="Ej: Período 2023 - 2024, Vacaciones Diciembre 2024..."
+                  value={periodoForm.periodo_correspondiente}
+                  onChange={e => setPeriodoForm({ ...periodoForm, periodo_correspondiente: e.target.value })}
+                  className="w-full border p-2.5 rounded-xl text-sm outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Observaciones / Soporte</label>
+                <textarea
+                  rows="2"
+                  placeholder="Observaciones de autorización, memo o constancia física..."
+                  value={periodoForm.observaciones}
+                  onChange={e => setPeriodoForm({ ...periodoForm, observaciones: e.target.value })}
+                  className="w-full border p-2.5 rounded-xl text-sm outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setIsPeriodoModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-gray-600 text-sm font-medium hover:bg-gray-100"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="bg-amber-600 hover:bg-amber-700 text-white font-bold px-6 py-2 rounded-xl text-sm shadow-md shadow-amber-200 transition-all active:scale-95"
+                >
+                  Guardar Período
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CONFIRMAR ELIMINACIÓN DE PERÍODO DE VACACIONES */}
+      {periodoAEliminar && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden p-6 space-y-4">
+            <h3 className="font-bold text-lg text-gray-800 flex items-center gap-2">
+              <AlertCircle className="text-red-500" /> Eliminar Registro de Vacaciones
+            </h3>
+            <p className="text-sm text-gray-600">
+              ¿Está seguro de eliminar el período registrado del <strong>{periodoAEliminar.fecha_inicio}</strong> al <strong>{periodoAEliminar.fecha_fin}</strong> (<strong>{periodoAEliminar.dias} días</strong>)?
+            </p>
+            <p className="text-xs text-amber-700 bg-amber-50 p-3 rounded-xl border border-amber-200">
+              Los <strong>{periodoAEliminar.dias} días</strong> se reintegrarán automáticamente al saldo disponible de vacaciones del colaborador.
+            </p>
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setPeriodoAEliminar(null)}
+                className="px-4 py-2 rounded-xl text-gray-600 text-sm font-medium hover:bg-gray-100"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmarEliminarPeriodo}
+                className="bg-red-600 hover:bg-red-700 text-white font-bold px-5 py-2 rounded-xl text-sm shadow-md shadow-red-200"
+              >
+                Sí, Eliminar Período
               </button>
             </div>
           </div>
