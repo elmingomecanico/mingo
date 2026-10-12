@@ -9,8 +9,11 @@ import {
   RefreshCw, 
   Check, 
   AlertCircle,
+  AlertTriangle,
   Building2,
-  Wrench
+  Wrench,
+  ShieldCheck,
+  Zap
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -25,16 +28,35 @@ export default function ProductConfigModal({
   isMostrador,
   hasPrivilegios,
   descuentoEval,
-  metodoPago
+  metodoPago,
+  politicasInventario,
+  puedeFacturarMultisucursal = true,
+  usuarioSucursal = 'SUC-01'
 }) {
   if (!isOpen || !config || !config.product) return null;
 
   const { product, isEditing, existingCartItemId } = config;
   const isService = product.type === 'servicio';
 
+  // Evaluar política de venta en negativo (prioridad: regla individual > regla global)
+  const allowNegative = isService || (
+    product.permitir_negativo === 'si' ? true :
+    product.permitir_negativo === 'no' ? false :
+    Boolean(politicasInventario?.permitir_venta_negativa_global)
+  );
+
+  // Evaluar política de descuentos para este producto
+  const allowsDiscount = isService || (
+    product.permite_descuento !== false && 
+    politicasInventario?.permitir_descuento_global !== false
+  );
+  const maxDiscountAllowedPct = product.descuento_maximo !== undefined && product.descuento_maximo !== null && product.descuento_maximo !== ''
+    ? Number(product.descuento_maximo)
+    : Number(politicasInventario?.descuento_maximo_global ?? 15);
+
   // Sucursal seleccionada
   const [selectedBranch, setSelectedBranch] = useState(() => {
-    return config.sucursal || 'SUC-01';
+    return config.sucursal || (puedeFacturarMultisucursal ? 'SUC-01' : usuarioSucursal);
   });
 
   // Cantidad seleccionada
@@ -55,7 +77,7 @@ export default function ProductConfigModal({
 
   // Al abrir el modal o cambiar el producto, sincronizar
   useEffect(() => {
-    setSelectedBranch(config.sucursal || 'SUC-01');
+    setSelectedBranch(config.sucursal || (puedeFacturarMultisucursal ? 'SUC-01' : usuarioSucursal));
     setQty(config.qty || 1);
     setDiscountMode(config.discountMode || (isMostrador ? 'C$' : '%'));
     if (config.discountMode === '%') {
@@ -63,15 +85,20 @@ export default function ProductConfigModal({
     } else {
       setDiscountVal(config.discount || 0);
     }
-  }, [config, isMostrador]);
+  }, [config, isMostrador, puedeFacturarMultisucursal, usuarioSucursal]);
 
-  // Stock máximo en la sucursal seleccionada
-  const maxStock = isService ? 999999 : (getStock ? getStock(product.id, selectedBranch) : 9999);
+  // Stock físico registrado en la sucursal seleccionada
+  const stockInSelected = isService ? 999999 : (getStock ? getStock(product.id, selectedBranch) : 9999);
+  const isStockDeficient = !isService && (stockInSelected <= 0 || qty > stockInSelected);
 
-  // Asegurar que la cantidad no sobrepase el stock si el usuario cambia de sucursal
+  // Asegurar que la cantidad no sobrepase el stock si el usuario cambia de sucursal (solo si no permite negativo)
   const handleBranchChange = (newBranchId) => {
+    if (!puedeFacturarMultisucursal && newBranchId !== usuarioSucursal) {
+      toast.error(`🔒 Restringido: Tu usuario solo puede facturar en ${usuarioSucursal}`);
+      return;
+    }
     setSelectedBranch(newBranchId);
-    if (!isService && getStock) {
+    if (!isService && !allowNegative && getStock) {
       const stockInNew = getStock(product.id, newBranchId);
       if (stockInNew > 0 && qty > stockInNew) {
         setQty(stockInNew);
@@ -81,8 +108,8 @@ export default function ProductConfigModal({
   };
 
   const handleIncrement = () => {
-    if (!isService && qty >= maxStock) {
-      toast.error(`Stock máximo alcanzado en esta sucursal (${maxStock})`);
+    if (!isService && !allowNegative && qty >= stockInSelected) {
+      toast.error(`Stock máximo alcanzado en esta sucursal (${stockInSelected})`);
       return;
     }
     setQty(prev => prev + 1);
@@ -98,9 +125,9 @@ export default function ProductConfigModal({
     const parsed = parseInt(e.target.value, 10);
     if (isNaN(parsed) || parsed < 1) {
       setQty(1);
-    } else if (!isService && parsed > maxStock) {
-      setQty(Math.max(1, maxStock));
-      toast.error(`Stock máximo disponible: ${maxStock}`);
+    } else if (!isService && !allowNegative && parsed > stockInSelected) {
+      setQty(Math.max(1, stockInSelected));
+      toast.error(`Stock máximo disponible: ${stockInSelected}`);
     } else {
       setQty(parsed);
     }
@@ -113,22 +140,28 @@ export default function ProductConfigModal({
   let effectiveDiscount = 0;
   let effectivePercent = 0;
 
-  if (!isMostrador) {
+  if (!allowsDiscount) {
+    // Si la política de gerencia bloqueó descuentos para este producto
+    effectivePercent = 0;
+    effectiveDiscount = 0;
+  } else if (!isMostrador) {
     if (hasPrivilegios && descuentoEval?.aplica) {
-      effectivePercent = clienteActualObj?.descuento_fijo || 0;
+      const vipPct = Math.min(clienteActualObj?.descuento_fijo || 0, maxDiscountAllowedPct);
+      effectivePercent = vipPct;
       effectiveDiscount = Number(((subtotalBruto * effectivePercent) / 100).toFixed(2));
     } else {
       effectivePercent = 0;
       effectiveDiscount = 0;
     }
   } else {
-    // Modo Mostrador (permite descuento manual)
+    // Modo Mostrador (permite descuento manual respetando tope de gerencia)
     const val = Math.max(0, parseFloat(discountVal) || 0);
     if (discountMode === '%') {
-      effectivePercent = Math.min(100, val);
+      effectivePercent = Math.min(maxDiscountAllowedPct, Math.min(100, val));
       effectiveDiscount = Number(((subtotalBruto * effectivePercent) / 100).toFixed(2));
     } else {
-      effectiveDiscount = Math.min(subtotalBruto, val);
+      const maxDiscountMoney = (subtotalBruto * maxDiscountAllowedPct) / 100;
+      effectiveDiscount = Math.min(maxDiscountMoney, Math.min(subtotalBruto, val));
       effectivePercent = subtotalBruto > 0 ? Number(((effectiveDiscount / subtotalBruto) * 100).toFixed(1)) : 0;
     }
   }
@@ -138,13 +171,13 @@ export default function ProductConfigModal({
   const handleSubmit = (e) => {
     e.preventDefault();
 
-    if (!isService && maxStock <= 0) {
-      toast.error(`La sucursal seleccionada no tiene existencias.`);
+    if (!isService && !allowNegative && stockInSelected <= 0) {
+      toast.error(`La sucursal seleccionada no tiene existencias y la venta en negativo no está autorizada.`);
       return;
     }
 
-    if (!isService && qty > maxStock) {
-      toast.error(`Stock insuficiente en la sucursal seleccionada. Máx: ${maxStock}`);
+    if (!isService && !allowNegative && qty > stockInSelected) {
+      toast.error(`Stock insuficiente en la sucursal seleccionada. Máx disponible: ${stockInSelected}`);
       return;
     }
 
@@ -156,7 +189,8 @@ export default function ProductConfigModal({
       discountPercent: effectivePercent,
       discountMode,
       isEditing,
-      existingCartItemId
+      existingCartItemId,
+      isNegativeSale: !isService && (stockInSelected <= 0 || qty > stockInSelected)
     });
   };
 
@@ -259,32 +293,47 @@ export default function ProductConfigModal({
                   const stockSuc = getStock ? getStock(product.id, suc.id) : 0;
                   const isSelected = selectedBranch === suc.id;
                   const hasStock = stockSuc > 0;
+                  const isBranchLocked = !puedeFacturarMultisucursal && suc.id !== usuarioSucursal && suc.id !== selectedBranch;
+                  const isDisabled = isBranchLocked || (!hasStock && !allowNegative);
 
                   return (
                     <button
                       key={suc.id}
                       type="button"
-                      disabled={!hasStock}
+                      disabled={isDisabled}
                       onClick={() => handleBranchChange(suc.id)}
                       className={`p-3 rounded-2xl border text-left transition-all relative flex flex-col justify-between ${
                         isSelected
                           ? 'border-blue-600 bg-blue-50/80 ring-2 ring-blue-500 shadow-sm'
-                          : hasStock
+                          : !isDisabled
                             ? 'border-gray-200 bg-white hover:bg-gray-50'
                             : 'border-gray-200 bg-gray-100 opacity-50 cursor-not-allowed'
                       }`}
                     >
                       <div className="flex items-center justify-between mb-1">
-                        <span className="font-bold text-xs text-gray-800">{suc.short}</span>
+                        <span className="font-bold text-xs text-gray-800 flex items-center gap-1">
+                          {suc.short}
+                          {isBranchLocked && <Lock size={11} className="text-gray-400" title="Restringido por gerencia a tu sucursal asignada" />}
+                        </span>
                         {isSelected && <span className="w-2 h-2 rounded-full bg-blue-600"></span>}
                       </div>
 
                       <div className="flex items-center justify-between">
-                        <span className={`text-xs font-black ${
-                          hasStock ? (stockSuc > 5 ? 'text-green-700' : 'text-amber-700') : 'text-red-500'
-                        }`}>
-                          {hasStock ? `${stockSuc} disp.` : 'Agotado'}
-                        </span>
+                        {isBranchLocked ? (
+                          <span className="text-[10px] font-bold text-gray-400">Bloqueado</span>
+                        ) : hasStock ? (
+                          <span className={`text-xs font-black ${stockSuc > 5 ? 'text-green-700' : 'text-amber-700'}`}>
+                            {stockSuc} disp.
+                          </span>
+                        ) : allowNegative ? (
+                          <span className="text-[10px] font-black text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">
+                            ⚡ Negativo OK
+                          </span>
+                        ) : (
+                          <span className="text-xs font-black text-red-500">
+                            Agotado
+                          </span>
+                        )}
                         {suc.id === 'SUC-01' ? (
                           <span className="text-[10px] text-gray-400">Principal</span>
                         ) : (
@@ -296,11 +345,24 @@ export default function ProductConfigModal({
                 })}
               </div>
 
-              {maxStock <= 0 && (
-                <div className="flex items-center gap-1.5 p-2 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs">
-                  <AlertCircle size={14} className="shrink-0" />
-                  <span>Sin existencias en esta sucursal. Selecciona otra con stock.</span>
-                </div>
+              {/* ALERTA DE STOCK */}
+              {isStockDeficient && (
+                allowNegative ? (
+                  <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-300 rounded-2xl text-amber-900 text-xs shadow-xs">
+                    <AlertTriangle size={18} className="text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold block">⚡ Venta en Negativo Autorizada por Gerencia</span>
+                      <span className="text-[11px] text-amber-800 leading-snug block mt-0.5">
+                        Existencia en sistema ({stockInSelected} disp.) insuficiente para las {qty} requeridas. Quedará registrado en negativo y se compensará automáticamente al ingresar la factura o entrada física.
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5 p-2 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs">
+                    <AlertCircle size={14} className="shrink-0" />
+                    <span>Sin existencias en esta sucursal. La venta en negativo está bloqueada para este artículo.</span>
+                  </div>
+                )
               )}
             </div>
           )}
@@ -312,8 +374,12 @@ export default function ProductConfigModal({
                 Cantidad a Facturar
               </label>
               {!isService && (
-                <span className="text-xs font-bold text-blue-700 bg-blue-100/80 px-2 py-0.5 rounded-full">
-                  Máx: {maxStock} uds.
+                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                  allowNegative && stockInSelected <= 0
+                    ? 'text-amber-800 bg-amber-100/90'
+                    : 'text-blue-700 bg-blue-100/80'
+                }`}>
+                  {allowNegative ? `Físico en sistema: ${stockInSelected} uds (Permite negativo)` : `Máx: ${stockInSelected} uds.`}
                 </span>
               )}
             </div>
@@ -333,7 +399,7 @@ export default function ProductConfigModal({
                 <input
                   type="number"
                   min="1"
-                  max={!isService ? maxStock : undefined}
+                  max={!isService && !allowNegative ? stockInSelected : undefined}
                   value={qty}
                   onChange={handleQtyInput}
                   className="w-28 h-12 text-center text-2xl font-black text-blue-950 bg-white border-2 border-blue-300 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none shadow-inner"
@@ -343,7 +409,7 @@ export default function ProductConfigModal({
               <button
                 type="button"
                 onClick={handleIncrement}
-                disabled={!isService && qty >= maxStock}
+                disabled={!isService && !allowNegative && qty >= stockInSelected}
                 className="w-12 h-12 rounded-2xl bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 disabled:hover:bg-blue-600 flex items-center justify-center shadow-md shadow-blue-200 transition-all active:scale-95"
               >
                 <Plus size={20} />
@@ -353,7 +419,7 @@ export default function ProductConfigModal({
             {/* BOTONES RÁPIDOS DE CANTIDAD */}
             <div className="flex items-center justify-center gap-2 pt-2 flex-wrap">
               {[1, 2, 5, 10].map(n => {
-                if (!isService && n > maxStock) return null;
+                if (!isService && !allowNegative && n > stockInSelected) return null;
                 return (
                   <button
                     key={n}
@@ -369,17 +435,17 @@ export default function ProductConfigModal({
                   </button>
                 );
               })}
-              {!isService && maxStock > 0 && maxStock > 1 && (
+              {!isService && stockInSelected > 1 && (
                 <button
                   type="button"
-                  onClick={() => setQty(maxStock)}
+                  onClick={() => setQty(stockInSelected)}
                   className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
-                    qty === maxStock 
+                    qty === stockInSelected 
                       ? 'bg-amber-600 text-white shadow-xs' 
                       : 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100'
                   }`}
                 >
-                  Todo ({maxStock})
+                  Todo ({stockInSelected})
                 </button>
               )}
             </div>
@@ -391,14 +457,22 @@ export default function ProductConfigModal({
               <label className="text-xs font-black uppercase text-gray-600">
                 Descuento
               </label>
-              {isMostrador && (
-                <span className="text-[11px] text-gray-400">
-                  Manual para mostrador
+              {allowsDiscount && isMostrador && (
+                <span className="text-[11px] text-gray-400 font-medium">
+                  Manual para mostrador (Tope: {maxDiscountAllowedPct}%)
                 </span>
               )}
             </div>
 
-            {isMostrador ? (
+            {!allowsDiscount ? (
+              <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-xs text-rose-800 flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <Lock size={14} className="text-rose-500" />
+                  <span className="font-bold">Descuentos bloqueados para este producto según políticas de gerencia</span>
+                </div>
+                <span className="font-bold">C$ 0.00</span>
+              </div>
+            ) : isMostrador ? (
               <div className="flex items-center gap-2 bg-gray-50 p-2.5 rounded-2xl border border-gray-200">
                 <div className="flex-1 flex items-center bg-white border border-gray-200 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-blue-400">
                   <input
@@ -481,7 +555,7 @@ export default function ProductConfigModal({
             </button>
             <button
               type="submit"
-              disabled={!isService && maxStock <= 0}
+              disabled={!isService && !allowNegative && stockInSelected <= 0}
               className="flex-2 py-3 px-6 rounded-2xl bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-black text-sm flex items-center justify-center gap-2 shadow-lg shadow-green-100 transition-all active:scale-95"
             >
               <Check size={18} />

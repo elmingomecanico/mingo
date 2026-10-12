@@ -15,6 +15,7 @@ import CashMovementModal from './CashMovementModal';
 import MoneyCounterModal from './MoneyCounterModal';
 import TokenizedSearchSelect from './TokenizedSearchSelect';
 import ProductConfigModal from './ProductConfigModal';
+import { canSellNegative, canApplyDiscount, getMaxAllowedDiscount } from '../pages/Inventario';
 
 // Catálogo maestro de sucursales con nombres amigables
 export const SUCURSALES = [
@@ -34,7 +35,21 @@ export const getBranchShort = (sucId) => {
 
 export default function POS() {
   const { user } = useAuth();
-  const [sucursal, setSucursal] = useState('SUC-01');
+  const [currentUserRealtime, setCurrentUserRealtime] = useState(null);
+  const [politicasInventario, setPoliticasInventario] = useState({});
+
+  const puedeFacturarMultisucursal = Boolean(
+    currentUserRealtime?.rol === 'SuperAdmin' ||
+    currentUserRealtime?.permite_multisucursal ||
+    currentUserRealtime?.permisos?.includes('FACTURAR_MULTISUCURSAL') ||
+    user?.rol === 'SuperAdmin' ||
+    user?.permite_multisucursal ||
+    user?.permisos?.includes('FACTURAR_MULTISUCURSAL')
+  );
+
+  const [sucursal, setSucursal] = useState(() => {
+    return user?.id_sucursal || 'SUC-01';
+  });
   
   // ================= TAB SYSTEM =================
   const getDefaultTab = (num = 1) => ({
@@ -268,6 +283,34 @@ export default function POS() {
       }
     });
 
+    const politicasRef = ref(rtdb, 'configuracion/inventario');
+    const unsubPoliticas = onValue(politicasRef, (snapshot) => {
+      if (snapshot.exists()) {
+        setPoliticasInventario(snapshot.val());
+      } else {
+        setPoliticasInventario({});
+      }
+    });
+
+    let unsubCurrentUser = () => {};
+    if (user?.id) {
+      const curUserRef = ref(rtdb, `usuarios/${user.id}`);
+      unsubCurrentUser = onValue(curUserRef, (snapshot) => {
+        if (snapshot.exists()) {
+          const uData = { id: user.id, ...snapshot.val() };
+          setCurrentUserRealtime(uData);
+          const isMulti = Boolean(
+            uData.rol === 'SuperAdmin' ||
+            uData.permite_multisucursal ||
+            uData.permisos?.includes('FACTURAR_MULTISUCURSAL')
+          );
+          if (!isMulti && uData.id_sucursal && uData.id_sucursal !== sucursal) {
+            setSucursal(uData.id_sucursal);
+          }
+        }
+      });
+    }
+
     return () => {
       unsubProd();
       unsubServ();
@@ -276,8 +319,10 @@ export default function POS() {
       unsubUsr();
       unsubTurnos();
       unsubVentas();
+      unsubPoliticas();
+      unsubCurrentUser();
     };
-  }, [sucursal]);
+  }, [sucursal, user?.id]);
 
   const allItems = [...products, ...servicios];
   const searchTerms = searchCode.toLowerCase().split(' ').filter(t => t.trim() !== '');
@@ -519,7 +564,8 @@ export default function POS() {
     let targetBranch = preferredSucursal || existingCartItem?.sucursal || sucursal;
     if (!preferredSucursal && !existingCartItem && product.type !== 'servicio') {
       const currentStock = getStock(product.id, sucursal);
-      if (currentStock <= 0) {
+      const allowsNeg = canSellNegative(product, politicasInventario);
+      if (currentStock <= 0 && !allowsNeg && puedeFacturarMultisucursal) {
         const alt = SUCURSALES.find(s => s.id !== sucursal && getStock(product.id, s.id) > 0);
         if (alt) targetBranch = alt.id;
       }
@@ -550,10 +596,15 @@ export default function POS() {
     const finalSucursal = chosenSucursal || sucursal;
     const targetCartId = `${product.id}__${finalSucursal}`;
     const stockDisponible = product.type === 'servicio' ? 999999 : getStock(product.id, finalSucursal);
+    const allowsNeg = canSellNegative(product, politicasInventario);
 
-    if (product.type !== 'servicio' && qty > stockDisponible) {
+    if (product.type !== 'servicio' && !allowsNeg && qty > stockDisponible) {
       toast.error(`Stock insuficiente en ${getBranchName(finalSucursal)}. Solo quedan ${stockDisponible} unidades disponibles.`);
       return;
+    }
+
+    if (product.type !== 'servicio' && allowsNeg && (stockDisponible <= 0 || qty > stockDisponible)) {
+      toast(`⚡ "${product.name}" cargado en negativo (${qty} uds vs ${stockDisponible} en sistema). Urgencia autorizada.`, { icon: '⚠️', duration: 4000 });
     }
 
     if (qty <= 0) {
@@ -680,7 +731,8 @@ export default function POS() {
     }
 
     const itemSuc = item.sucursal || sucursal;
-    if (item.type !== 'servicio') {
+    const allowsNeg = canSellNegative(item, politicasInventario);
+    if (item.type !== 'servicio' && !allowsNeg) {
       const stockActual = getStock(item.id, itemSuc);
       if (newQty > stockActual) {
         toast.error(`Stock máximo disponible en ${getBranchName(itemSuc)}: ${stockActual}`);
@@ -723,7 +775,13 @@ export default function POS() {
     const currentSuc = item.sucursal || sucursal;
     if (currentSuc === newSucursal) return;
 
-    if (item.type !== 'servicio') {
+    if (!puedeFacturarMultisucursal) {
+      toast.error(`🔒 Restringido: Tu usuario solo puede facturar en ${currentUserRealtime?.id_sucursal || user?.id_sucursal || 'SUC-01'}`);
+      return;
+    }
+
+    const allowsNeg = canSellNegative(item, politicasInventario);
+    if (item.type !== 'servicio' && !allowsNeg) {
       const stockInNew = getStock(item.id, newSucursal);
       if (item.qty > stockInNew) {
         toast.error(`⚠️ ${getBranchName(newSucursal)} solo tiene ${stockInNew} unidades disponibles (requieres ${item.qty}).`);
@@ -739,7 +797,7 @@ export default function POS() {
     if (existingSame) {
       const totalCombinedQty = existingSame.qty + item.qty;
       const stockInNew = getStock(item.id, newSucursal);
-      if (item.type !== 'servicio' && totalCombinedQty > stockInNew) {
+      if (item.type !== 'servicio' && !allowsNeg && totalCombinedQty > stockInNew) {
         toast.error(`⚠️ No se puede combinar: supera el stock disponible en ${getBranchName(newSucursal)} (${stockInNew}).`);
         return;
       }
@@ -1093,23 +1151,24 @@ export default function POS() {
           if (item.type !== 'servicio') {
             const invProdRef = ref(rtdb, `inventario/${branchId}/${item.id}/stock_actual`);
             await runTransaction(invProdRef, (currentStock) => {
-              return (currentStock || 0) - item.qty;
+              return (Number(currentStock) || 0) - Number(item.qty || 0);
             });
 
             // Registrar en Kardex de la sucursal correspondiente
             const kardexRef = push(ref(rtdb, 'kardex'));
-            const currentStock = allInventory[branchId]?.[item.id]?.stock_actual || 0;
+            const currentStock = Number(allInventory[branchId]?.[item.id]?.stock_actual) || 0;
+            const nuevoStock = currentStock - Number(item.qty || 0);
             await set(kardexRef, {
               fecha: new Date().toISOString(),
               id_sucursal: branchId,
               id_producto: item.id,
               nombre_producto: item.name,
-              tipo_movimiento: 'Salida por Venta',
+              tipo_movimiento: nuevoStock < 0 ? 'Salida por Venta (En Negativo)' : 'Salida por Venta',
               cantidad: item.qty,
               id_referencia: humanId,
               stock_anterior: currentStock,
-              stock_nuevo: currentStock - item.qty,
-              usuario: 'Caja POS'
+              stock_nuevo: nuevoStock,
+              usuario: user?.nombre || 'Caja POS'
             });
           }
         }
@@ -1183,14 +1242,21 @@ export default function POS() {
               <ShoppingCart className="text-blue-600" size={22} />
               Caja POS
             </h1>
-            <select 
-              value={sucursal}
-              onChange={(e) => setSucursal(e.target.value)}
-              className="border border-gray-200 p-2 rounded-lg bg-gray-50 font-bold text-sm text-gray-700 outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="SUC-01">Sucursal Principal (SUC-01)</option>
-              <option value="SUC-02">Sucursal Norte (SUC-02)</option>
-            </select>
+            {puedeFacturarMultisucursal ? (
+              <select 
+                value={sucursal}
+                onChange={(e) => setSucursal(e.target.value)}
+                className="border border-gray-200 p-2 rounded-lg bg-gray-50 font-bold text-sm text-gray-700 outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+              >
+                <option value="SUC-01">Sucursal Principal (SUC-01)</option>
+                <option value="SUC-02">Sucursal Norte (SUC-02)</option>
+              </select>
+            ) : (
+              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 border border-gray-200 rounded-lg text-xs font-bold text-gray-700 shadow-inner">
+                <span className="text-gray-400">🔒 Sede Asignada:</span>
+                <span className="text-blue-700 font-extrabold">{SUCURSALES.find(s => s.id === sucursal)?.name || sucursal}</span>
+              </div>
+            )}
           </div>
 
           {/* CONTROL DE TURNO DE CAJA (APERTURA, SALIDAS A GERENCIA, CIERRE Y CONTADOR) */}
@@ -2133,6 +2199,9 @@ export default function POS() {
         hasPrivilegios={hasPrivilegios}
         descuentoEval={descuentoEval}
         metodoPago={metodoPago}
+        politicasInventario={politicasInventario}
+        puedeFacturarMultisucursal={puedeFacturarMultisucursal}
+        usuarioSucursal={currentUserRealtime?.id_sucursal || user?.id_sucursal || 'SUC-01'}
       />
 
       {/* MODAL ESCÁNER DE CÓDIGO DE BARRAS POR CÁMARA */}

@@ -17,6 +17,7 @@ const FUNCIONES_OPTIONS = [
 const PERMISOS_CATEGORIAS = {
   'Ventas y Facturación': [
     { id: 'VER_POS', label: 'Acceso a Caja POS' },
+    { id: 'FACTURAR_MULTISUCURSAL', label: 'Facturar desde Todas las Sucursales (Multisucursal)' },
     { id: 'ANULAR_FACTURA', label: 'Anular Facturas' }
   ],
   'Órdenes y Taller': [
@@ -61,7 +62,8 @@ export default function Usuarios() {
     funcion: null, 
     permisos: [],
     estado: 'Activo', 
-    id_sucursal: 'SUC-01'
+    id_sucursal: 'SUC-01',
+    permite_multisucursal: false
   });
 
   useEffect(() => {
@@ -82,6 +84,7 @@ export default function Usuarios() {
   const handleOpenModal = (item = null) => {
     if (item) {
       setEditingId(item.id);
+      const hasMulti = Boolean(item.permite_multisucursal || item.permisos?.includes('FACTURAR_MULTISUCURSAL'));
       setFormData({ 
         nombre_completo: item.nombre_completo || '', 
         usuario: item.usuario || '', 
@@ -93,7 +96,8 @@ export default function Usuarios() {
         id_sucursal: item.id_sucursal || 'SUC-01',
         tipo_salario: item.tipo_salario || 'Comisión',
         salario_base: item.salario_base || 0,
-        porcentaje_comision: item.porcentaje_comision || 50
+        porcentaje_comision: item.porcentaje_comision || 50,
+        permite_multisucursal: hasMulti
       });
     } else {
       setEditingId(null);
@@ -108,7 +112,8 @@ export default function Usuarios() {
         id_sucursal: 'SUC-01',
         tipo_salario: 'Comisión',
         salario_base: 0,
-        porcentaje_comision: 50
+        porcentaje_comision: 50,
+        permite_multisucursal: false
       });
     }
     setIsModalOpen(true);
@@ -127,15 +132,24 @@ export default function Usuarios() {
     try {
       const itemRef = editingId ? ref(rtdb, `usuarios/${editingId}`) : push(ref(rtdb, 'usuarios'));
       
+      // Asegurar que si permite_multisucursal es true, también esté en el array de permisos
+      let perms = [...formData.permisos];
+      if (formData.permite_multisucursal && !perms.includes('FACTURAR_MULTISUCURSAL')) {
+        perms.push('FACTURAR_MULTISUCURSAL');
+      } else if (!formData.permite_multisucursal && perms.includes('FACTURAR_MULTISUCURSAL')) {
+        perms = perms.filter(p => p !== 'FACTURAR_MULTISUCURSAL');
+      }
+
       const payload = {
         nombre_completo: formData.nombre_completo.trim(),
         usuario: formData.usuario.trim(),
         password: formData.password.trim(),
         rol: formData.rol,
         funcion: formData.funcion ? formData.funcion.value : '',
-        permisos: formData.permisos,
+        permisos: perms,
         estado: formData.estado,
         id_sucursal: formData.id_sucursal,
+        permite_multisucursal: Boolean(formData.permite_multisucursal),
         tipo_salario: formData.tipo_salario,
         salario_base: Number(formData.salario_base) || 0,
         porcentaje_comision: Number(formData.porcentaje_comision) || 0
@@ -227,7 +241,20 @@ export default function Usuarios() {
                       </span>
                     </td>
                     <td className="p-4 font-medium text-gray-700">{user.funcion || 'N/A'}</td>
-                    <td className="p-4 text-gray-600">{user.id_sucursal}</td>
+                    <td className="p-4 text-gray-600">
+                      <div className="flex flex-col gap-1 items-start">
+                        <span className="font-semibold text-gray-800">{user.id_sucursal || 'SUC-01'}</span>
+                        {user.permite_multisucursal || user.permisos?.includes('FACTURAR_MULTISUCURSAL') || user.rol === 'SuperAdmin' ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            ★ Multisucursal
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200">
+                            1 Sede Única
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td className="p-4 text-center">
                       <span className={`px-2 py-1 rounded-full text-xs font-bold ${
                         user.estado === 'Activo' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
@@ -400,6 +427,26 @@ export default function Usuarios() {
                       </div>
                     </div>
                   )}
+                </div>
+
+                {/* PRIVILEGIO GERENCIAL: FACTURACIÓN MULTISUCURSAL */}
+                <div className="bg-amber-50/90 p-3.5 sm:p-4 rounded-2xl border border-amber-200 flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    id="permite_multisucursal_chk"
+                    checked={formData.permite_multisucursal}
+                    onChange={(e) => setFormData({ ...formData, permite_multisucursal: e.target.checked })}
+                    className="mt-1 w-5 h-5 rounded border-amber-300 text-amber-600 focus:ring-amber-500 cursor-pointer"
+                  />
+                  <label htmlFor="permite_multisucursal_chk" className="cursor-pointer">
+                    <div className="text-xs sm:text-sm font-bold text-amber-950 flex items-center gap-1.5">
+                      <span>🏢 Autorizar Facturación Multisucursal</span>
+                      <span className="text-[10px] uppercase font-black tracking-wider bg-amber-200 text-amber-800 px-1.5 py-0.5 rounded">Decisión Gerencia</span>
+                    </div>
+                    <p className="text-[11px] sm:text-xs text-amber-800 mt-1 leading-snug">
+                      Permite que este usuario pueda despachar y facturar inventario desde cualquier sucursal simultáneamente en el POS. Si se desactiva, el cajero estará restringido únicamente a su sucursal asignada ({formData.id_sucursal}).
+                    </p>
+                  </label>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
