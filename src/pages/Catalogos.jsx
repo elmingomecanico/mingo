@@ -1,12 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { ref, onValue, set, push, remove } from 'firebase/database';
 import { rtdb } from '../firebase';
-import { Settings, Layers, Tag, MapPin, Plus, Trash2, Edit2 } from 'lucide-react';
+import { Settings, Layers, Tag, MapPin, Plus, Trash2, Edit2, Building2, Printer, Hash } from 'lucide-react';
 import toast from 'react-hot-toast';
 import ConfirmModal from '../components/ConfirmModal';
+import { useAuth } from '../context/AuthContext';
+import BranchManager from '../components/catalogos/BranchManager';
+import PrintFormatEditor from '../components/catalogos/PrintFormatEditor';
+import ConsecutivosManager from '../components/catalogos/ConsecutivosManager';
 
 export default function Catalogos() {
-  const [activeTab, setActiveTab] = useState('categorias');
+  const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState('sucursales');
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -18,12 +23,19 @@ export default function Catalogos() {
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null, isDanger: true });
 
   const tabs = [
+    { id: 'sucursales', name: 'Sucursales y Sedes', icon: <Building2 size={18} /> },
+    { id: 'impresion', name: 'Formatos Imprimibles', icon: <Printer size={18} /> },
+    { id: 'consecutivos', name: 'Folios y Códigos', icon: <Hash size={18} /> },
     { id: 'categorias', name: 'Categorías', icon: <Layers size={18} /> },
     { id: 'marcas', name: 'Marcas/Modelos', icon: <Tag size={18} /> },
     { id: 'ubicaciones', name: 'Ubicaciones', icon: <MapPin size={18} /> }
   ];
 
   useEffect(() => {
+    if (['sucursales', 'impresion', 'consecutivos'].includes(activeTab)) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     const dbRef = ref(rtdb, `catalogos/${activeTab}`);
     const unsub = onValue(dbRef, (snapshot) => {
@@ -146,19 +158,26 @@ export default function Catalogos() {
         <div>
           <h1 className="text-2xl font-black text-gray-800 flex items-center gap-2">
             <Settings className="text-gray-600" /> 
-            Catálogos del Sistema
+            Ajustes y Catálogos del Sistema
           </h1>
-          <p className="text-gray-500 text-sm">Administra las listas desplegables menores del taller.</p>
+          <p className="text-gray-500 text-sm">
+            {activeTab === 'sucursales' && 'Gestión multi-sucursal, encargados, direcciones y estados operativos.'}
+            {activeTab === 'impresion' && 'Personalización en vivo del formato de tickets y facturas impresas.'}
+            {activeTab === 'consecutivos' && 'Definición de correlativos, folios de venta y formatos de códigos visibles (SuperAdmin).'}
+            {['categorias', 'marcas', 'ubicaciones'].includes(activeTab) && 'Administra las listas desplegables auxiliares del inventario.'}
+          </p>
         </div>
-        <button onClick={requestSeed} className="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-lg font-bold text-sm shadow-sm transition-colors">
-          Cargar Datos de Prueba
-        </button>
+        {['categorias', 'marcas', 'ubicaciones'].includes(activeTab) && (
+          <button onClick={requestSeed} className="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-lg font-bold text-sm shadow-sm transition-colors">
+            Cargar Datos de Prueba
+          </button>
+        )}
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col md:flex-row">
         
         {/* Sidebar de Tabs */}
-        <div className="w-full md:w-64 bg-gray-50/50 border-r border-gray-100 p-4 space-y-1">
+        <div className="w-full md:w-64 bg-gray-50/50 border-r border-gray-100 p-4 space-y-1 shrink-0">
           {tabs.map((tab) => (
             <button
               key={tab.id}
@@ -170,56 +189,64 @@ export default function Catalogos() {
               }`}
             >
               {tab.icon}
-              {tab.name}
+              <span className="truncate">{tab.name}</span>
             </button>
           ))}
         </div>
 
         {/* Contenido Principal */}
-        <div className="flex-1 p-6">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-bold text-gray-800 capitalize">
-              {tabs.find(t => t.id === activeTab)?.name}
-            </h2>
-            <button 
-              onClick={() => handleOpenModal()}
-              className="bg-blue-100 hover:bg-blue-200 text-blue-700 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors"
-            >
-              <Plus size={16} /> Nuevo
-            </button>
-          </div>
+        <div className="flex-1 p-4 sm:p-6 min-w-0">
+          {activeTab === 'sucursales' && <BranchManager user={user} />}
+          {activeTab === 'impresion' && <PrintFormatEditor />}
+          {activeTab === 'consecutivos' && <ConsecutivosManager user={user} />}
 
-          <div className="bg-gray-50 rounded-xl overflow-hidden border border-gray-100">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-gray-100 text-gray-600">
-                <tr>
-                  <th className="p-4 font-bold">Nombre</th>
-                  <th className="p-4 font-bold text-right">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {loading ? (
-                  <tr><td colSpan="2" className="p-8 text-center text-gray-400">Cargando...</td></tr>
-                ) : data.length === 0 ? (
-                  <tr><td colSpan="2" className="p-8 text-center text-gray-400">No hay registros aún.</td></tr>
-                ) : (
-                  data.map((item) => (
-                    <tr key={item.id} className="bg-white hover:bg-gray-50 transition-colors">
-                      <td className="p-4 font-bold text-gray-800">{item.nombre}</td>
-                      <td className="p-4 flex justify-end gap-2">
-                        <button onClick={() => handleOpenModal(item)} className="text-blue-500 hover:bg-blue-50 p-2 rounded-lg transition-colors">
-                          <Edit2 size={16} />
-                        </button>
-                        <button onClick={() => requestDelete(item.id, item.nombre)} className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors">
-                          <Trash2 size={16} />
-                        </button>
-                      </td>
+          {!['sucursales', 'impresion', 'consecutivos'].includes(activeTab) && (
+            <div>
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-xl font-bold text-gray-800 capitalize">
+                  {tabs.find(t => t.id === activeTab)?.name}
+                </h2>
+                <button 
+                  onClick={() => handleOpenModal()}
+                  className="bg-blue-100 hover:bg-blue-200 text-blue-700 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors"
+                >
+                  <Plus size={16} /> Nuevo
+                </button>
+              </div>
+
+              <div className="bg-gray-50 rounded-xl overflow-hidden border border-gray-100">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-gray-100 text-gray-600">
+                    <tr>
+                      <th className="p-4 font-bold">Nombre</th>
+                      <th className="p-4 font-bold text-right">Acciones</th>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {loading ? (
+                      <tr><td colSpan="2" className="p-8 text-center text-gray-400">Cargando...</td></tr>
+                    ) : data.length === 0 ? (
+                      <tr><td colSpan="2" className="p-8 text-center text-gray-400">No hay registros aún.</td></tr>
+                    ) : (
+                      data.map((item) => (
+                        <tr key={item.id} className="bg-white hover:bg-gray-50 transition-colors">
+                          <td className="p-4 font-bold text-gray-800">{item.nombre}</td>
+                          <td className="p-4 flex justify-end gap-2">
+                            <button onClick={() => handleOpenModal(item)} className="text-blue-500 hover:bg-blue-50 p-2 rounded-lg transition-colors">
+                              <Edit2 size={16} />
+                            </button>
+                            <button onClick={() => requestDelete(item.id, item.nombre)} className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors">
+                              <Trash2 size={16} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

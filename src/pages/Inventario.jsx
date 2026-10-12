@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { ref, onValue, set, push, update } from 'firebase/database';
+import { ref, onValue, set, push, update, runTransaction } from 'firebase/database';
 import { rtdb } from '../firebase';
 import { 
   Search, Plus, Edit2, Package, History, Maximize2, ScanBarcode, 
   Sliders, ShieldCheck, AlertTriangle, CheckCircle2, Percent, 
-  RotateCcw, Sparkles, AlertCircle, Building2, Layers, Check, X 
+  RotateCcw, Sparkles, AlertCircle, Building2, Layers, Check, X,
+  Hash, Lock
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Select from 'react-select';
 import BarcodeScannerModal from '../components/BarcodeScannerModal';
 import ImagePreviewModal from '../components/ImagePreviewModal';
+import { DEFAULT_CONSECUTIVOS, formatConsecutive } from '../components/catalogos/ConsecutivosManager';
 
 export const canSellNegative = (product, globalPoliticas) => {
   if (!product) return false;
@@ -43,6 +45,7 @@ export default function Inventario() {
   const [search, setSearch] = useState('');
   const [sucursal, setSucursal] = useState('SUC-01');
   const [loading, setLoading] = useState(true);
+  const [consecutivosConfig, setConsecutivosConfig] = useState(DEFAULT_CONSECUTIVOS);
   
   // Políticas de Inventario y Venta en Negativo
   const [politicas, setPoliticas] = useState({
@@ -68,7 +71,7 @@ export default function Inventario() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [formData, setFormData] = useState({
-    name: '', price: '', cost: '', cat: '', stock_actual: 0, stock_minimo: 0, ubicacion: '', compatibilidad: [], image: '',
+    codigo_visible: '', name: '', price: '', cost: '', cat: '', stock_actual: 0, stock_minimo: 0, ubicacion: '', compatibilidad: [], image: '',
     permitir_negativo: 'heredar', permite_descuento: true, descuento_maximo: 15
   });
 
@@ -85,6 +88,7 @@ export default function Inventario() {
     const ubiRef = ref(rtdb, 'catalogos/ubicaciones');
     const modRef = ref(rtdb, 'catalogos/modelos');
     const ajustesRef = ref(rtdb, `ajustes_inventario/${sucursal}`);
+    const consRef = ref(rtdb, 'configuracion/consecutivos');
 
     const unsubProds = onValue(prodsRef, (snapshot) => {
       if (snapshot.exists()) {
@@ -133,8 +137,14 @@ export default function Inventario() {
       }
     });
 
+    const unsubCons = onValue(consRef, (snapshot) => {
+      if (snapshot.exists()) {
+        setConsecutivosConfig({ ...DEFAULT_CONSECUTIVOS, ...snapshot.val() });
+      }
+    });
+
     return () => {
-      unsubProds(); unsubInv(); unsubAllInv(); unsubPoliticas(); unsubCat(); unsubUbi(); unsubMod(); unsubAjustes();
+      unsubProds(); unsubInv(); unsubAllInv(); unsubPoliticas(); unsubCat(); unsubUbi(); unsubMod(); unsubAjustes(); unsubCons();
     };
   }, [sucursal]);
 
@@ -197,7 +207,7 @@ export default function Inventario() {
 
   const searchTerms = search.toLowerCase().split(' ').filter(t => t.trim() !== '');
   const filtered = products.filter(p => {
-    const textToSearch = `${p.name} ${p.id} ${p.cat || ''}`.toLowerCase();
+    const textToSearch = `${p.name} ${p.codigo_visible || ''} ${p.id} ${p.cat || ''}`.toLowerCase();
     return searchTerms.every(term => textToSearch.includes(term));
   });
 
@@ -207,6 +217,7 @@ export default function Inventario() {
     setSearch(code.trim());
     const match = products.find(p => 
       p.id?.toLowerCase() === clean || 
+      (p.codigo_visible && p.codigo_visible.toString().toLowerCase() === clean) ||
       (p.barcode && p.barcode.toString().toLowerCase() === clean) ||
       (p.codigo_barra && p.codigo_barra.toString().toLowerCase() === clean)
     );
@@ -220,6 +231,7 @@ export default function Inventario() {
       setEditingId(prod.id);
       const invData = inventory[prod.id] || { stock_actual: 0, stock_minimo: 0, ubicacion: '' };
       setFormData({
+        codigo_visible: prod.codigo_visible || prod.id,
         name: prod.name,
         price: prod.price,
         cost: prod.cost || 0,
@@ -235,12 +247,24 @@ export default function Inventario() {
       });
     } else {
       setEditingId(null);
+      const prodCfg = consecutivosConfig?.productos || DEFAULT_CONSECUTIVOS.productos;
+      const nextNum = prodCfg.siguiente_numero || (products.length + 1);
+      const suggestedCode = formatConsecutive(prodCfg, nextNum);
       setFormData({ 
+        codigo_visible: suggestedCode,
         name: '', price: '', cost: '', cat: '', stock_actual: 0, stock_minimo: 0, ubicacion: '', compatibilidad: [], image: '',
         permitir_negativo: 'heredar', permite_descuento: true, descuento_maximo: 15
       });
     }
     setIsModalOpen(true);
+  };
+
+  const handleRegenerateProductCode = () => {
+    const prodCfg = consecutivosConfig?.productos || DEFAULT_CONSECUTIVOS.productos;
+    const nextNum = prodCfg.siguiente_numero || (products.length + 1);
+    const suggestedCode = formatConsecutive(prodCfg, nextNum);
+    setFormData(prev => ({ ...prev, codigo_visible: suggestedCode }));
+    toast.success(`Código sugerido: ${suggestedCode}`, { icon: '✨' });
   };
 
   const handleImageUpload = (e) => {
@@ -287,15 +311,16 @@ export default function Inventario() {
     try {
       let prodId = editingId;
       if (!prodId) {
-        const num = products.length + 1;
-        prodId = `PROD-${num.toString().padStart(4, '0')}`;
-        if (products.find(p => p.id === prodId)) {
-          prodId = push(ref(rtdb, 'productos')).key;
-        }
+        // Garantizar UUID interno único e irrepetible para Firebase
+        prodId = push(ref(rtdb, 'productos')).key;
       }
+
+      const codigoFinal = formData.codigo_visible?.trim() || prodId;
 
       const prodRef = ref(rtdb, `productos/${prodId}`);
       await set(prodRef, {
+        id: prodId,
+        codigo_visible: codigoFinal,
         name: formData.name,
         price: Number(formData.price),
         cost: Number(formData.cost),
@@ -315,6 +340,11 @@ export default function Inventario() {
           stock_minimo: Number(formData.stock_minimo),
           ubicacion: formData.ubicacion
         });
+
+        // Actualizar el correlativo sugerido para productos
+        await runTransaction(ref(rtdb, 'configuracion/consecutivos/productos/siguiente_numero'), (cur) => {
+          return (Number(cur) || 1) + 1;
+        });
       } else {
         // Actualizar solo ubicacion y minimo si estamos editando
         const currentInv = inventory[prodId] || { stock_actual: 0 };
@@ -325,7 +355,7 @@ export default function Inventario() {
         });
       }
 
-      toast.success(editingId ? 'Producto actualizado' : 'Producto creado');
+      toast.success(editingId ? 'Producto actualizado' : 'Producto creado con UUID interno y código visible');
       setIsModalOpen(false);
     } catch (error) {
       toast.error('Error al guardar: ' + error.message);
@@ -512,7 +542,16 @@ export default function Inventario() {
                                 <Package size={20} />
                               </div>
                             )}
-                            <span className="font-mono text-xs text-gray-500">{prod.id}</span>
+                            <div className="flex flex-col">
+                              <span className="font-mono font-bold text-xs text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                                {prod.codigo_visible || prod.id}
+                              </span>
+                              {prod.codigo_visible && prod.codigo_visible !== prod.id && (
+                                <span className="font-mono text-[9px] text-gray-400 truncate max-w-[100px]" title={`UUID interno en base de datos: ${prod.id}`}>
+                                  UUID: {prod.id.substring(0, 8)}...
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </td>
                         <td className="p-4">
@@ -1086,7 +1125,45 @@ export default function Inventario() {
               <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-6">
                 
                 <div className="space-y-4">
-                  <h3 className="font-bold text-blue-900 border-b pb-2 text-xs sm:text-sm uppercase tracking-wider">Datos Generales</h3>
+                  <h3 className="font-bold text-blue-900 border-b pb-2 text-xs sm:text-sm uppercase tracking-wider flex items-center justify-between">
+                    <span>Identificación Comercial y Códigos</span>
+                    {editingId && (
+                      <span className="text-[11px] font-mono font-semibold bg-gray-100 text-gray-600 px-2.5 py-0.5 rounded-full flex items-center gap-1 border border-gray-200">
+                        <Lock size={11} /> UUID: {editingId}
+                      </span>
+                    )}
+                  </h3>
+
+                  {/* Campo de Código Visible / SKU Comercial */}
+                  <div className="bg-blue-50/60 p-3.5 rounded-2xl border border-blue-200 space-y-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                      <label className="text-xs font-bold text-blue-950 uppercase flex items-center gap-1.5">
+                        <Hash size={14} className="text-blue-700" />
+                        Código Visible / SKU Comercial *
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleRegenerateProductCode}
+                        className="text-xs font-bold text-blue-700 hover:text-blue-900 flex items-center gap-1 self-start sm:self-auto bg-white px-2.5 py-1 rounded-lg border border-blue-200 shadow-2xs hover:bg-blue-50 transition-colors"
+                        title="Regenerar sugerencia según regla de correlativos configurada por el SuperAdmin"
+                      >
+                        <Sparkles size={13} /> Sugerir Consecutivo
+                      </button>
+                    </div>
+
+                    <input
+                      type="text"
+                      required
+                      value={formData.codigo_visible}
+                      onChange={e => setFormData({ ...formData, codigo_visible: e.target.value })}
+                      placeholder="Ej: #REP-001, 10W40*, MOT-YMH-01, etc."
+                      className="w-full border-2 border-blue-300 p-2.5 rounded-xl outline-none focus:border-blue-600 font-mono font-bold text-sm text-blue-900 bg-white"
+                    />
+                    <p className="text-[11px] text-blue-800 leading-tight">
+                      ✨ <strong>Libertad de formato:</strong> Puede contener letras, números y símbolos especiales. Cada producto mantiene un UUID interno único e inalterable en base de datos.
+                    </p>
+                  </div>
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                     <div className="sm:col-span-2">
                       <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Nombre del Producto *</label>

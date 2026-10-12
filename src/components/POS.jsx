@@ -16,21 +16,22 @@ import MoneyCounterModal from './MoneyCounterModal';
 import TokenizedSearchSelect from './TokenizedSearchSelect';
 import ProductConfigModal from './ProductConfigModal';
 import { canSellNegative, canApplyDiscount, getMaxAllowedDiscount } from '../pages/Inventario';
+import { DEFAULT_SUCURSALES } from './catalogos/BranchManager';
+import { DEFAULT_CONSECUTIVOS } from './catalogos/ConsecutivosManager';
 
-// Catálogo maestro de sucursales con nombres amigables
-export const SUCURSALES = [
-  { id: 'SUC-01', nombre: 'Sucursal Principal', short: 'Principal', badgeColor: 'blue' },
-  { id: 'SUC-02', nombre: 'Sucursal Norte', short: 'Norte', badgeColor: 'purple' }
-];
+// Catálogo maestro de sucursales con nombres amigables (sincronizado reactivamente con RTDB)
+export let SUCURSALES = DEFAULT_SUCURSALES;
 
-export const getBranchName = (sucId) => {
-  const found = SUCURSALES.find(s => s.id === sucId);
-  return found ? found.nombre : `Sucursal ${sucId}`;
+export const getBranchName = (sucId, list = null) => {
+  const branches = list || SUCURSALES || DEFAULT_SUCURSALES;
+  const found = branches.find(s => s.id === sucId);
+  return found ? (found.nombre || found.name) : `Sucursal ${sucId}`;
 };
 
-export const getBranchShort = (sucId) => {
-  const found = SUCURSALES.find(s => s.id === sucId);
-  return found ? found.short : sucId;
+export const getBranchShort = (sucId, list = null) => {
+  const branches = list || SUCURSALES || DEFAULT_SUCURSALES;
+  const found = branches.find(s => s.id === sucId);
+  return found ? (found.short || found.nombre || sucId) : sucId;
 };
 
 export default function POS() {
@@ -38,6 +39,33 @@ export default function POS() {
   const [currentUserRealtime, setCurrentUserRealtime] = useState(null);
   const [politicasInventario, setPoliticasInventario] = useState({});
   const [cuentasBancarias, setCuentasBancarias] = useState([]);
+  const [sucursalesList, setSucursalesList] = useState(DEFAULT_SUCURSALES);
+  const [consecutivosConfig, setConsecutivosConfig] = useState(DEFAULT_CONSECUTIVOS);
+
+  useEffect(() => {
+    const sucRef = ref(rtdb, 'configuracion/sucursales');
+    const unsub = onValue(sucRef, (snap) => {
+      if (snap.exists()) {
+        const val = snap.val();
+        const list = Object.keys(val).map(k => ({ id: k, ...val[k] })).filter(s => s.estado !== 'Inactiva');
+        if (list.length > 0) {
+          setSucursalesList(list);
+          SUCURSALES = list;
+        }
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    const consRef = ref(rtdb, 'configuracion/consecutivos');
+    const unsub = onValue(consRef, (snap) => {
+      if (snap.exists()) {
+        setConsecutivosConfig({ ...DEFAULT_CONSECUTIVOS, ...snap.val() });
+      }
+    });
+    return () => unsub();
+  }, []);
 
   const puedeFacturarMultisucursal = Boolean(
     currentUserRealtime?.rol === 'SuperAdmin' ||
@@ -1040,13 +1068,23 @@ export default function POS() {
         const branchDescuento = branchItems.reduce((sum, item) => sum + getItemDiscount(item), 0);
         const branchTotal = Math.max(0, branchSubtotal - branchDescuento);
 
-        // Obtener número secuencial de factura para esta sucursal (FAC-0001)
+        // Obtener número secuencial de factura para esta sucursal (o global)
         const counterRef = ref(rtdb, 'counters/ventas');
         const counterResult = await runTransaction(counterRef, (currentData) => {
           return (currentData || 0) + 1;
         });
         const numFactura = counterResult.snapshot.val();
-        const humanId = `FAC-${numFactura.toString().padStart(4, '0')}`;
+
+        // Formato correlativo configurable por SuperAdmin
+        const ventasCfg = consecutivosConfig?.ventas || DEFAULT_CONSECUTIVOS.ventas;
+        const padCount = Number(ventasCfg.digitos_relleno) || 4;
+        const baseNum = numFactura.toString().padStart(padCount, '0');
+        let humanId = `${ventasCfg.prefijo !== undefined ? ventasCfg.prefijo : 'FAC-'}${baseNum}`;
+        if (ventasCfg.incluir_prefijo_sucursal) {
+          const branchObj = sucursalesList.find(s => s.id === branchId);
+          const branchPrefix = branchObj?.prefijo_factura || `${branchId}-`;
+          humanId = `${branchPrefix}${humanId}`;
+        }
 
         const saleRef = push(ref(rtdb, 'ventas'));
         const saleId = saleRef.key;
@@ -1058,8 +1096,10 @@ export default function POS() {
           numero_turno: activeTurno?.numero_turno || null,
           fecha: new Date().toISOString(),
           sucursal: branchId,
+          sucursal_nombre: getBranchName(branchId, sucursalesList),
           id_cliente: targetClienteId,
           nombre_cliente: nombreFinalCliente,
+          cajero: user?.nombre || 'Caja POS',
           metodo_pago: metodoPago,
           id_mecanico: selectedMecanico ? selectedMecanico.value : null,
           nombre_mecanico: selectedMecanico ? selectedMecanico.label : null,
@@ -1079,6 +1119,7 @@ export default function POS() {
               id_producto: item.id,
               type: item.type || 'producto',
               name: item.name,
+              codigo_visible: item.codigo_visible || item.sku || null,
               cantidad: item.qty,
               precio_unitario: item.price,
               descuento: finalDesc,
@@ -1306,13 +1347,14 @@ export default function POS() {
                 onChange={(e) => setSucursal(e.target.value)}
                 className="border border-gray-200 p-2 rounded-lg bg-gray-50 font-bold text-sm text-gray-700 outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
               >
-                <option value="SUC-01">Sucursal Principal (SUC-01)</option>
-                <option value="SUC-02">Sucursal Norte (SUC-02)</option>
+                {sucursalesList.map(s => (
+                  <option key={s.id} value={s.id}>{s.nombre || s.name} ({s.id})</option>
+                ))}
               </select>
             ) : (
               <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 border border-gray-200 rounded-lg text-xs font-bold text-gray-700 shadow-inner">
                 <span className="text-gray-400">🔒 Sede Asignada:</span>
-                <span className="text-blue-700 font-extrabold">{SUCURSALES.find(s => s.id === sucursal)?.name || sucursal}</span>
+                <span className="text-blue-700 font-extrabold">{getBranchName(sucursal, sucursalesList)}</span>
               </div>
             )}
           </div>
