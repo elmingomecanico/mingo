@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingCart, Trash2, Search, Save, Loader, Printer, Plus, X, UserPlus, Minus, Percent, FileDown, ShieldAlert, Sparkles, RefreshCw, Gift, Lock, Camera, Maximize2, Package, ScanBarcode, LockOpen, ArrowUpRight, Calculator, CheckCircle2, AlertTriangle, Coins, DollarSign, User, Wrench, Phone, CreditCard, MapPin } from 'lucide-react';
+import { ShoppingCart, Trash2, Search, Save, Loader, Printer, Plus, X, UserPlus, Minus, Percent, FileDown, ShieldAlert, Sparkles, RefreshCw, Gift, Lock, Camera, Maximize2, Package, ScanBarcode, LockOpen, ArrowUpRight, Calculator, CheckCircle2, AlertTriangle, Coins, DollarSign, User, Wrench, Phone, CreditCard, MapPin, Building, Layers, Store } from 'lucide-react';
 import { ref, onValue, push, set, runTransaction } from 'firebase/database';
 import { rtdb } from '../firebase';
 import { useAuth } from '../context/AuthContext';
@@ -14,6 +14,22 @@ import CashCloseModal from './CashCloseModal';
 import CashMovementModal from './CashMovementModal';
 import MoneyCounterModal from './MoneyCounterModal';
 import TokenizedSearchSelect from './TokenizedSearchSelect';
+
+// Catálogo maestro de sucursales con nombres amigables
+export const SUCURSALES = [
+  { id: 'SUC-01', nombre: 'Sucursal Principal', short: 'Principal', badgeColor: 'blue' },
+  { id: 'SUC-02', nombre: 'Sucursal Norte', short: 'Norte', badgeColor: 'purple' }
+];
+
+export const getBranchName = (sucId) => {
+  const found = SUCURSALES.find(s => s.id === sucId);
+  return found ? found.nombre : `Sucursal ${sucId}`;
+};
+
+export const getBranchShort = (sucId) => {
+  const found = SUCURSALES.find(s => s.id === sucId);
+  return found ? found.short : sucId;
+};
 
 export default function POS() {
   const { user } = useAuth();
@@ -100,11 +116,25 @@ export default function POS() {
   const [searchCode, setSearchCode] = useState('');
   const [products, setProducts] = useState([]);
   const [servicios, setServicios] = useState([]);
+  const [allInventory, setAllInventory] = useState({});
   const [inventory, setInventory] = useState({});
   const [loading, setLoading] = useState(true);
   const [clientes, setClientes] = useState([]);
   const [mecanicos, setMecanicos] = useState([]);
   const [empleados, setEmpleados] = useState([]);
+
+  // Consultar existencia de un producto en cualquier sucursal
+  const getStock = (productId, sucId = sucursal) => {
+    return allInventory[sucId]?.[productId]?.stock_actual || 0;
+  };
+
+  // Existencia total acumulada en todas las sucursales
+  const getTotalStock = (productId) => {
+    return SUCURSALES.reduce((sum, s) => sum + getStock(productId, s.id), 0);
+  };
+
+  // Clave única para item en carrito combinando producto y sucursal
+  const getItemKey = (item) => item?.cartItemId || `${item?.id}__${item?.sucursal || sucursal}`;
 
   // Modal para creación rápida de clientes por cajero
   const [isNewClientModalOpen, setIsNewClientModalOpen] = useState(false);
@@ -131,7 +161,7 @@ export default function POS() {
   useEffect(() => {
     const prodRef = ref(rtdb, 'productos');
     const servRef = ref(rtdb, 'servicios');
-    const invRef = ref(rtdb, `inventario/${sucursal}`);
+    const invRef = ref(rtdb, 'inventario');
     const turnosRef = ref(rtdb, 'turnos_caja');
     const ventasRef = ref(rtdb, 'ventas');
 
@@ -195,11 +225,9 @@ export default function POS() {
     });
 
     const unsubInv = onValue(invRef, (snapshot) => {
-      if (snapshot.val()) {
-        setInventory(snapshot.val());
-      } else {
-        setInventory({});
-      }
+      const data = snapshot.val() || {};
+      setAllInventory(data);
+      setInventory(data[sucursal] || {});
       setLoading(false);
     });
 
@@ -482,13 +510,48 @@ export default function POS() {
     updateActiveTab({ selectedCliente: clientSelection, name: newName, cart: updatedCart });
   };
 
-  const addToCart = (product) => {
-    const stockActual = inventory[product.id]?.stock_actual || 0;
-    const existing = cart.find(item => item.id === product.id);
+  const addToCart = (product, explicitSucursal = null) => {
+    let targetSucursal = explicitSucursal;
+
+    if (!targetSucursal) {
+      if (product.type === 'servicio') {
+        targetSucursal = sucursal;
+      } else {
+        // 1. Revisar si la sucursal activa donde está el cajero tiene existencia suficiente
+        const stockActualSuc = getStock(product.id, sucursal);
+        const inCartCurrent = cart.find(item => item.id === product.id && (item.sucursal || sucursal) === sucursal);
+        const currentInCartQty = inCartCurrent ? inCartCurrent.qty : 0;
+
+        if (stockActualSuc > currentInCartQty) {
+          targetSucursal = sucursal;
+        } else {
+          // 2. Si no hay existencia en la sucursal activa, buscar automáticamente otra sucursal que sí tenga existencia
+          const altBranch = SUCURSALES.find(s => {
+            if (s.id === sucursal) return false;
+            const st = getStock(product.id, s.id);
+            const inCartAlt = cart.find(item => item.id === product.id && (item.sucursal || sucursal) === s.id);
+            const altQty = inCartAlt ? inCartAlt.qty : 0;
+            return st > altQty;
+          });
+
+          if (altBranch) {
+            targetSucursal = altBranch.id;
+          } else {
+            targetSucursal = sucursal;
+          }
+        }
+      }
+    }
+
+    const finalSucursal = targetSucursal || sucursal;
+    const targetCartId = `${product.id}__${finalSucursal}`;
+    const stockDisponible = product.type === 'servicio' ? 999999 : getStock(product.id, finalSucursal);
+
+    const existing = cart.find(item => getItemKey(item) === targetCartId);
     const requestedQty = existing ? existing.qty + 1 : 1;
 
-    if (product.type !== 'servicio' && requestedQty > stockActual) {
-      toast.error(`Stock insuficiente. Solo quedan ${stockActual} unidades disponibles.`);
+    if (product.type !== 'servicio' && requestedQty > stockDisponible) {
+      toast.error(`Stock insuficiente en ${getBranchName(finalSucursal)}. Solo quedan ${stockDisponible} unidades disponibles.`);
       return;
     }
 
@@ -518,7 +581,7 @@ export default function POS() {
         }
       }
 
-      setCart(cart.map(item => item.id === product.id ? { 
+      setCart(cart.map(item => getItemKey(item) === targetCartId ? { 
         ...item, 
         qty: newQty, 
         discount: finalDiscount,
@@ -537,11 +600,17 @@ export default function POS() {
 
       setCart([...cart, { 
         ...product, 
+        cartItemId: targetCartId,
+        sucursal: finalSucursal,
         qty: 1, 
         discount: initialDiscount,
         discountPercent: initialPercent,
         discountMode: (!isMostrador && hasPrivilegios && aplica) ? '%' : 'C$'
       }]);
+
+      if (finalSucursal !== sucursal) {
+        toast(`📍 Facturando desde ${getBranchName(finalSucursal)} (Existencia disponible)`, { icon: '📦' });
+      }
     }
   };
 
@@ -569,15 +638,32 @@ export default function POS() {
 
     if (match) {
       if (match.type !== 'servicio') {
-        const stockActual = inventory[match.id]?.stock_actual || 0;
-        const inCart = cart.find(i => i.id === match.id);
-        const nextQty = inCart ? inCart.qty + 1 : 1;
+        const stockActual = getStock(match.id, sucursal);
+        const inCartCurrent = cart.find(i => getItemKey(i) === `${match.id}__${sucursal}`);
+        const nextQty = inCartCurrent ? inCartCurrent.qty + 1 : 1;
+
         if (nextQty > stockActual) {
-          toast.error(`⚠️ Stock insuficiente para ${match.name}. Disponible: ${stockActual}`);
-          return;
+          // Intentar en otra sucursal si la activa no tiene existencia
+          const altBranch = SUCURSALES.find(s => {
+            if (s.id === sucursal) return false;
+            const st = getStock(match.id, s.id);
+            const inCartAlt = cart.find(i => getItemKey(i) === `${match.id}__${s.id}`);
+            const altQty = inCartAlt ? inCartAlt.qty + 1 : 1;
+            return st >= altQty;
+          });
+
+          if (altBranch) {
+            addToCart(match, altBranch.id);
+            setSearchCode('');
+            toast.success(`⚡ Escaneado: ${match.name} (Asignado a ${altBranch.nombre} por existencia)`, { icon: '📦' });
+            return;
+          } else {
+            toast.error(`⚠️ Stock insuficiente en todas las sucursales para ${match.name}.`);
+            return;
+          }
         }
       }
-      addToCart(match);
+      addToCart(match, sucursal);
       setSearchCode('');
       toast.success(`⚡ Escaneado: ${match.name}`, { icon: '📦' });
     } else {
@@ -585,19 +671,20 @@ export default function POS() {
     }
   };
 
-  const updateCartQty = (productId, newQty) => {
-    const item = cart.find(c => c.id === productId);
+  const updateCartQty = (targetCartId, newQty) => {
+    const item = cart.find(c => getItemKey(c) === targetCartId);
     if (!item) return;
 
     if (newQty <= 0) {
-      setCart(cart.filter(c => c.id !== productId));
+      setCart(cart.filter(c => getItemKey(c) !== targetCartId));
       return;
     }
 
+    const itemSuc = item.sucursal || sucursal;
     if (item.type !== 'servicio') {
-      const stockActual = inventory[productId]?.stock_actual || 0;
+      const stockActual = getStock(item.id, itemSuc);
       if (newQty > stockActual) {
-        toast.error(`Stock máximo disponible: ${stockActual}`);
+        toast.error(`Stock máximo disponible en ${getBranchName(itemSuc)}: ${stockActual}`);
         return;
       }
     }
@@ -624,7 +711,7 @@ export default function POS() {
       }
     }
 
-    setCart(cart.map(c => c.id === productId ? { 
+    setCart(cart.map(c => getItemKey(c) === targetCartId ? { 
       ...c, 
       qty: newQty, 
       discount: finalDiscount,
@@ -632,12 +719,68 @@ export default function POS() {
     } : c));
   };
 
+  // Reasignar la sucursal de origen de un ítem en el carrito
+  const handleChangeItemSucursal = (item, newSucursal) => {
+    const currentSuc = item.sucursal || sucursal;
+    if (currentSuc === newSucursal) return;
+
+    if (item.type !== 'servicio') {
+      const stockInNew = getStock(item.id, newSucursal);
+      if (item.qty > stockInNew) {
+        toast.error(`⚠️ ${getBranchName(newSucursal)} solo tiene ${stockInNew} unidades disponibles (requieres ${item.qty}).`);
+        return;
+      }
+    }
+
+    const oldCartId = getItemKey(item);
+    const newCartId = `${item.id}__${newSucursal}`;
+
+    // Si ya existe otra fila del mismo producto en la nueva sucursal, combinarla
+    const existingSame = cart.find(c => getItemKey(c) === newCartId);
+    if (existingSame) {
+      const totalCombinedQty = existingSame.qty + item.qty;
+      const stockInNew = getStock(item.id, newSucursal);
+      if (item.type !== 'servicio' && totalCombinedQty > stockInNew) {
+        toast.error(`⚠️ No se puede combinar: supera el stock disponible en ${getBranchName(newSucursal)} (${stockInNew}).`);
+        return;
+      }
+      setCart(cart.filter(c => getItemKey(c) !== oldCartId).map(c => {
+        if (getItemKey(c) === newCartId) {
+          const itemTotal = c.price * totalCombinedQty;
+          const { aplica, porcentaje } = evalClienteDescuento(clienteActualObj, metodoPago);
+          let newDesc = c.discount;
+          let newPct = c.discountPercent;
+          if (!isMostrador && hasPrivilegios && aplica) {
+            newPct = porcentaje;
+            newDesc = Number(((itemTotal * newPct) / 100).toFixed(2));
+          } else if (c.discountMode === '%') {
+            newDesc = Number(((itemTotal * (newPct || 0)) / 100).toFixed(2));
+          }
+          return { ...c, qty: totalCombinedQty, discount: newDesc, discountPercent: newPct };
+        }
+        return c;
+      }));
+    } else {
+      setCart(cart.map(c => {
+        if (getItemKey(c) === oldCartId) {
+          return {
+            ...c,
+            sucursal: newSucursal,
+            cartItemId: newCartId
+          };
+        }
+        return c;
+      }));
+    }
+    toast.success(`Producto reasignado a ${getBranchName(newSucursal)}`);
+  };
+
   // Manejador inteligente de Descuentos para Mostrador (Conversión bidireccional C$ <-> %)
-  const handleDiscountChange = (productId, rawVal, currentMode) => {
+  const handleDiscountChange = (targetCartId, rawVal, currentMode) => {
     if (!isMostrador) return; // Solo permitido para clientes de mostrador
     const val = Math.max(0, parseFloat(rawVal) || 0);
     setCart(cart.map(c => {
-      if (c.id === productId) {
+      if (getItemKey(c) === targetCartId) {
         const itemTotal = c.price * c.qty;
         let finalDiscount = 0;
         let finalPercent = 0;
@@ -662,10 +805,10 @@ export default function POS() {
   };
 
   // Alternar entre modo Porcentaje (%) y Córdobas (C$)
-  const toggleDiscountMode = (productId) => {
+  const toggleDiscountMode = (targetCartId) => {
     if (!isMostrador) return;
     setCart(cart.map(c => {
-      if (c.id === productId) {
+      if (getItemKey(c) === targetCartId) {
         const currentMode = c.discountMode || 'C$';
         const newMode = currentMode === '%' ? 'C$' : '%';
         const itemTotal = c.price * c.qty;
@@ -695,13 +838,42 @@ export default function POS() {
   const subtotalBruto = cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
   const totalDescuentos = cart.reduce((sum, item) => sum + getItemDiscount(item), 0);
   const total = Math.max(0, subtotalBruto - totalDescuentos);
+
+  // Análisis Multisucursal del carrito actual
+  const uniqueSucursalesInCart = Array.from(new Set(cart.map(item => item.sucursal || sucursal)));
+  const isMultiSucursal = uniqueSucursalesInCart.length > 1;
+
+  const branchBreakdown = uniqueSucursalesInCart.map(sucId => {
+    const sucItems = cart.filter(it => (it.sucursal || sucursal) === sucId);
+    const subtotal = sucItems.reduce((sum, it) => sum + (it.price * it.qty), 0);
+    const descuento = sucItems.reduce((sum, it) => sum + getItemDiscount(it), 0);
+    const totalSuc = Math.max(0, subtotal - descuento);
+    return {
+      sucursalId: sucId,
+      nombre: getBranchName(sucId),
+      short: getBranchShort(sucId),
+      itemsCount: sucItems.reduce((sum, it) => sum + it.qty, 0),
+      subtotal,
+      descuento,
+      total: totalSuc
+    };
+  });
   
   // Variables para la impresión
   const [completedSale, setCompletedSale] = useState(null);
+  const [completedSalesList, setCompletedSalesList] = useState([]);
   const printRef = React.useRef();
+  const multiPrintRef = React.useRef();
+
   const handlePrint = useReactToPrint({
     contentRef: printRef,
     documentTitle: `Ticket_${completedSale?.numero_factura || 'POS'}`,
+    pageStyle: `@page { size: 80mm auto; margin: 0; } @media print { body { -webkit-print-color-adjust: exact; } }`
+  });
+
+  const handlePrintAll = useReactToPrint({
+    contentRef: multiPrintRef,
+    documentTitle: `Tickets_Multisucursal_${completedSalesList[0]?.multisucursal_id || 'POS'}`,
     pageStyle: `@page { size: 80mm auto; margin: 0; } @media print { body { -webkit-print-color-adjust: exact; } }`
   });
 
@@ -776,147 +948,182 @@ export default function POS() {
     setLoading(true);
 
     try {
-      // Obtener número secuencial (FAC-0001)
-      const counterRef = ref(rtdb, 'counters/ventas');
-      const counterResult = await runTransaction(counterRef, (currentData) => {
-        return (currentData || 0) + 1;
+      // Agrupar items por sucursal de origen
+      const groupedBySucursal = {};
+      cart.forEach(item => {
+        const itemSuc = item.sucursal || sucursal;
+        if (!groupedBySucursal[itemSuc]) groupedBySucursal[itemSuc] = [];
+        groupedBySucursal[itemSuc].push(item);
       });
-      const numFactura = counterResult.snapshot.val();
-      const humanId = `FAC-${numFactura.toString().padStart(4, '0')}`;
 
-      const saleRef = push(ref(rtdb, 'ventas'));
-      const saleId = saleRef.key;
-      
+      const branchIds = Object.keys(groupedBySucursal);
+      const isMulti = branchIds.length > 1;
+      const multiVentaId = isMulti ? `MS-${Date.now().toString(36).toUpperCase()}` : null;
+      const createdSales = [];
+
       // Nombre exacto y limpio del cliente
       const nombreFinalCliente = (targetClienteId !== 'MOSTRADOR' && clienteDataObj)
         ? clienteDataObj.nombre
         : (selectedCliente.label && targetClienteId !== 'MOSTRADOR' ? selectedCliente.label : 'CLIENTE DE MOSTRADOR');
 
-      const newSale = {
-        id: saleId,
-        numero_factura: humanId,
-        id_turno: activeTurno?.id || null,
-        numero_turno: activeTurno?.numero_turno || null,
-        fecha: new Date().toISOString(),
-        sucursal,
-        id_cliente: targetClienteId,
-        nombre_cliente: nombreFinalCliente,
-        metodo_pago: metodoPago,
-        id_mecanico: selectedMecanico ? selectedMecanico.value : null,
-        nombre_mecanico: selectedMecanico ? selectedMecanico.label : null,
-        empleado_deudor: selectedEmpleadoDeudor ? selectedEmpleadoDeudor.value : null,
-        subtotal_bruto: subtotalBruto,
-        descuento_total: totalDescuentos,
-        total,
-        regalia: (!descuentoEval.aplica && descuentoEval.regalia) ? descuentoEval.regalia : null,
-        estado: 'Completado',
-        items: cart.map(item => {
-          const finalDesc = getItemDiscount(item);
-          const finalPercent = getItemDiscountPercent(item);
-          return {
-            id_producto: item.id,
-            type: item.type || 'producto',
-            name: item.name,
-            cantidad: item.qty,
-            precio_unitario: item.price,
-            descuento: finalDesc,
-            descuento_porcentaje: finalPercent,
-            subtotal: (item.price * item.qty) - finalDesc
-          };
-        })
-      };
+      for (const branchId of branchIds) {
+        const branchItems = groupedBySucursal[branchId];
+        const branchSubtotal = branchItems.reduce((sum, item) => sum + (item.price * item.qty), 0);
+        const branchDescuento = branchItems.reduce((sum, item) => sum + getItemDiscount(item), 0);
+        const branchTotal = Math.max(0, branchSubtotal - branchDescuento);
 
-      await set(saleRef, newSale);
+        // Obtener número secuencial de factura para esta sucursal (FAC-0001)
+        const counterRef = ref(rtdb, 'counters/ventas');
+        const counterResult = await runTransaction(counterRef, (currentData) => {
+          return (currentData || 0) + 1;
+        });
+        const numFactura = counterResult.snapshot.val();
+        const humanId = `FAC-${numFactura.toString().padStart(4, '0')}`;
 
-      // Si es crédito a cliente, generar cuenta por cobrar
-      if (metodoPago === 'Crédito' && targetClienteId !== 'MOSTRADOR') {
-        const cxcRecord = push(ref(rtdb, 'cxc'));
-        const fechaVence = new Date();
-        fechaVence.setDate(fechaVence.getDate() + 30);
-        
-        await set(cxcRecord, {
+        const saleRef = push(ref(rtdb, 'ventas'));
+        const saleId = saleRef.key;
+
+        const newSale = {
+          id: saleId,
+          numero_factura: humanId,
+          id_turno: activeTurno?.id || null,
+          numero_turno: activeTurno?.numero_turno || null,
+          fecha: new Date().toISOString(),
+          sucursal: branchId,
           id_cliente: targetClienteId,
           nombre_cliente: nombreFinalCliente,
-          id_factura: saleId,
-          numero_factura: humanId,
-          fecha_emision: newSale.fecha,
-          fecha_vencimiento: fechaVence.toISOString(),
-          monto_total: total,
-          saldo_pendiente: total,
-          estado: 'Pendiente'
-        });
-      }
+          metodo_pago: metodoPago,
+          id_mecanico: selectedMecanico ? selectedMecanico.value : null,
+          nombre_mecanico: selectedMecanico ? selectedMecanico.label : null,
+          empleado_deudor: selectedEmpleadoDeudor ? selectedEmpleadoDeudor.value : null,
+          subtotal_bruto: branchSubtotal,
+          descuento_total: branchDescuento,
+          total: branchTotal,
+          regalia: (!descuentoEval.aplica && descuentoEval.regalia) ? descuentoEval.regalia : null,
+          multisucursal_id: multiVentaId,
+          multisucursal_total_operacion: total,
+          multisucursal_sucursales: branchIds,
+          estado: 'Completado',
+          items: branchItems.map(item => {
+            const finalDesc = getItemDiscount(item);
+            const finalPercent = getItemDiscountPercent(item);
+            return {
+              id_producto: item.id,
+              type: item.type || 'producto',
+              name: item.name,
+              cantidad: item.qty,
+              precio_unitario: item.price,
+              descuento: finalDesc,
+              descuento_porcentaje: finalPercent,
+              subtotal: (item.price * item.qty) - finalDesc,
+              sucursal: branchId
+            };
+          })
+        };
 
-      // Si es crédito a empleado, registrar deuda en RRHH
-      if (metodoPago === 'Crédito Empleado' && selectedEmpleadoDeudor) {
-        const deudaRecord = push(ref(rtdb, 'deudas_empleados'));
-        await set(deudaRecord, {
-          id_empleado: selectedEmpleadoDeudor.value,
-          tipo: 'Crédito',
-          motivo: `Compra interna - Factura ${humanId}`,
-          monto_total: total,
-          saldo_pendiente: total,
-          cuota_por_pago: total,
-          fecha_creacion: newSale.fecha,
-          estado: 'Activo'
-        });
-      }
+        await set(saleRef, newSale);
+        createdSales.push(newSale);
 
-      // Si hay servicios, generar Orden de Trabajo
-      const serviciosEnCarrito = cart.filter(item => item.type === 'servicio');
-      if (serviciosEnCarrito.length > 0 && selectedMecanico) {
-        const otRef = push(ref(rtdb, 'ordenes_trabajo'));
-        const totalServicios = serviciosEnCarrito.reduce((sum, item) => sum + ((item.price * item.qty) - (item.discount || 0)), 0);
-        
-        await set(otRef, {
-          id_factura: saleId,
-          numero_factura: humanId,
-          fecha_creacion: newSale.fecha,
-          id_cliente: targetClienteId,
-          nombre_cliente: nombreFinalCliente,
-          id_mecanico: selectedMecanico.value,
-          nombre_mecanico: selectedMecanico.label,
-          estado: 'Pendiente',
-          servicios: serviciosEnCarrito.map(s => ({
-            id_servicio: s.id,
-            nombre: s.name,
-            cantidad: s.qty,
-            subtotal: (s.price * s.qty) - (s.discount || 0)
-          })),
-          total_servicios: totalServicios,
-          comision_mecanico_porcentaje: selectedMecanico.comision || 50,
-          comision_mecanico_monto: totalServicios * ((selectedMecanico.comision || 50) / 100)
-        });
-      }
-
-      // Descontar inventario
-      for (const item of cart) {
-        if (item.type !== 'servicio') {
-          const invProdRef = ref(rtdb, `inventario/${sucursal}/${item.id}/stock_actual`);
-          await runTransaction(invProdRef, (currentStock) => {
-            return (currentStock || 0) - item.qty;
+        // Si es crédito a cliente, generar cuenta por cobrar para esta factura
+        if (metodoPago === 'Crédito' && targetClienteId !== 'MOSTRADOR') {
+          const cxcRecord = push(ref(rtdb, 'cxc'));
+          const fechaVence = new Date();
+          fechaVence.setDate(fechaVence.getDate() + 30);
+          
+          await set(cxcRecord, {
+            id_cliente: targetClienteId,
+            nombre_cliente: nombreFinalCliente,
+            id_factura: saleId,
+            numero_factura: humanId,
+            fecha_emision: newSale.fecha,
+            fecha_vencimiento: fechaVence.toISOString(),
+            monto_total: branchTotal,
+            saldo_pendiente: branchTotal,
+            sucursal: branchId,
+            multisucursal_id: multiVentaId,
+            estado: 'Pendiente'
           });
+        }
 
-          // Registrar en Kardex
-          const kardexRef = push(ref(rtdb, 'kardex'));
-          const currentStock = inventory[item.id]?.stock_actual || 0;
-          await set(kardexRef, {
-            fecha: new Date().toISOString(),
-            id_sucursal: sucursal,
-            id_producto: item.id,
-            nombre_producto: item.name,
-            tipo_movimiento: 'Salida por Venta',
-            cantidad: item.qty,
-            id_referencia: humanId,
-            stock_anterior: currentStock,
-            stock_nuevo: currentStock - item.qty,
-            usuario: 'Caja POS'
+        // Si es crédito a empleado, registrar deuda en RRHH para esta factura
+        if (metodoPago === 'Crédito Empleado' && selectedEmpleadoDeudor) {
+          const deudaRecord = push(ref(rtdb, 'deudas_empleados'));
+          await set(deudaRecord, {
+            id_empleado: selectedEmpleadoDeudor.value,
+            tipo: 'Crédito',
+            motivo: `Compra interna - Factura ${humanId} (${getBranchName(branchId)})`,
+            monto_total: branchTotal,
+            saldo_pendiente: branchTotal,
+            cuota_por_pago: branchTotal,
+            fecha_creacion: newSale.fecha,
+            sucursal: branchId,
+            estado: 'Activo'
           });
+        }
+
+        // Si hay servicios en esta sucursal, generar Orden de Trabajo
+        const serviciosEnEstaSuc = branchItems.filter(item => item.type === 'servicio');
+        if (serviciosEnEstaSuc.length > 0 && selectedMecanico) {
+          const otRef = push(ref(rtdb, 'ordenes_trabajo'));
+          const totalServicios = serviciosEnEstaSuc.reduce((sum, item) => sum + ((item.price * item.qty) - (item.discount || 0)), 0);
+          
+          await set(otRef, {
+            id_factura: saleId,
+            numero_factura: humanId,
+            fecha_creacion: newSale.fecha,
+            id_cliente: targetClienteId,
+            nombre_cliente: nombreFinalCliente,
+            id_mecanico: selectedMecanico.value,
+            nombre_mecanico: selectedMecanico.label,
+            sucursal: branchId,
+            estado: 'Pendiente',
+            servicios: serviciosEnEstaSuc.map(s => ({
+              id_servicio: s.id,
+              nombre: s.name,
+              cantidad: s.qty,
+              subtotal: (s.price * s.qty) - (s.discount || 0)
+            })),
+            total_servicios: totalServicios,
+            comision_mecanico_porcentaje: selectedMecanico.comision || 50,
+            comision_mecanico_monto: totalServicios * ((selectedMecanico.comision || 50) / 100)
+          });
+        }
+
+        // Descontar inventario y registrar en Kardex de esta sucursal
+        for (const item of branchItems) {
+          if (item.type !== 'servicio') {
+            const invProdRef = ref(rtdb, `inventario/${branchId}/${item.id}/stock_actual`);
+            await runTransaction(invProdRef, (currentStock) => {
+              return (currentStock || 0) - item.qty;
+            });
+
+            // Registrar en Kardex de la sucursal correspondiente
+            const kardexRef = push(ref(rtdb, 'kardex'));
+            const currentStock = allInventory[branchId]?.[item.id]?.stock_actual || 0;
+            await set(kardexRef, {
+              fecha: new Date().toISOString(),
+              id_sucursal: branchId,
+              id_producto: item.id,
+              nombre_producto: item.name,
+              tipo_movimiento: 'Salida por Venta',
+              cantidad: item.qty,
+              id_referencia: humanId,
+              stock_anterior: currentStock,
+              stock_nuevo: currentStock - item.qty,
+              usuario: 'Caja POS'
+            });
+          }
         }
       }
 
-      toast.success(`Factura ${humanId} procesada exitosamente`);
-      setCompletedSale(newSale);
+      if (isMulti) {
+        toast.success(`✨ Venta multisucursal procesada: Se emitieron ${createdSales.length} facturas independientes (${createdSales.map(s => s.numero_factura).join(', ')})`, { duration: 6000 });
+      } else {
+        toast.success(`Factura ${createdSales[0].numero_factura} procesada exitosamente`);
+      }
+
+      setCompletedSalesList(createdSales);
+      setCompletedSale(createdSales[0]);
       closeTab(activeTabId, { stopPropagation: () => {} });
 
     } catch (error) {
@@ -1277,21 +1484,26 @@ export default function POS() {
                   )}
                   {!loading && filteredProducts.map(p => {
                     const isService = p.type === 'servicio';
-                    const stock = isService ? '∞' : (inventory[p.id]?.stock_actual || 0);
-                    const hasStock = isService || stock > 0;
-                    
+                    const stockCurrent = isService ? '∞' : getStock(p.id, sucursal);
+                    const stockSuc1 = isService ? '∞' : getStock(p.id, 'SUC-01');
+                    const stockSuc2 = isService ? '∞' : getStock(p.id, 'SUC-02');
+                    const totalStock = isService ? '∞' : getTotalStock(p.id);
+                    const hasStockInCurrent = isService || stockCurrent > 0;
+                    const hasStockAnywhere = isService || totalStock > 0;
+
+                    // Sucursal alternativa con stock si en la actual no hay
+                    const otherSucWithStock = !isService && !hasStockInCurrent
+                      ? SUCURSALES.find(s => s.id !== sucursal && getStock(p.id, s.id) > 0)
+                      : null;
+
                     return (
                       <div 
                         key={p.id} 
-                        onClick={() => {
-                          if (hasStock) {
-                            addToCart(p);
-                            setSearchCode('');
-                          }
-                        }}
-                        className={`p-3 flex items-center justify-between cursor-pointer hover:bg-blue-50 transition-colors ${!hasStock ? 'opacity-50 bg-gray-50 cursor-not-allowed' : ''}`}
+                        className={`p-3 flex items-center justify-between gap-3 hover:bg-blue-50/70 transition-colors ${
+                          !hasStockAnywhere ? 'opacity-50 bg-gray-50' : ''
+                        }`}
                       >
-                        <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
                           {/* Miniatura con visualizador */}
                           {p.image ? (
                             <div 
@@ -1305,20 +1517,20 @@ export default function POS() {
                               <img 
                                 src={p.image} 
                                 alt={p.name} 
-                                className="w-10 h-10 rounded-lg object-cover border border-gray-200 shadow-xs cursor-zoom-in group-hover:opacity-85 transition-opacity" 
+                                className="w-11 h-11 rounded-lg object-cover border border-gray-200 shadow-xs cursor-zoom-in group-hover:opacity-85 transition-opacity" 
                               />
                               <div className="absolute inset-0 bg-black/30 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                                 <Maximize2 size={14} className="text-white" />
                               </div>
                             </div>
                           ) : (
-                            <div className="w-10 h-10 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-400 shrink-0">
+                            <div className="w-11 h-11 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-400 shrink-0">
                               <Package size={18} />
                             </div>
                           )}
 
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-mono text-xs font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded shrink-0">
                                 {p.id}
                               </span>
@@ -1326,28 +1538,107 @@ export default function POS() {
                                 {isService ? '🔧 ' : ''}{p.name}
                               </p>
                             </div>
+
                             {p.compatibilidad && p.compatibilidad.length > 0 && (
-                              <p className="text-[11px] text-blue-600 font-medium truncate">
+                              <p className="text-[11px] text-blue-600 font-medium truncate mt-0.5">
                                 Compat: {p.compatibilidad.join(', ')}
                               </p>
+                            )}
+
+                            {/* EXISTENCIA POR SUCURSAL */}
+                            {!isService ? (
+                              <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                  stockSuc1 > 0 
+                                    ? (sucursal === 'SUC-01' ? 'bg-blue-100 text-blue-800 border-blue-300 font-black ring-1 ring-blue-300' : 'bg-blue-50 text-blue-700 border-blue-200')
+                                    : 'bg-gray-100 text-gray-400 border-gray-200'
+                                }`}>
+                                  Principal: {stockSuc1} {sucursal === 'SUC-01' ? '📍' : ''}
+                                </span>
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                  stockSuc2 > 0 
+                                    ? (sucursal === 'SUC-02' ? 'bg-purple-100 text-purple-800 border-purple-300 font-black ring-1 ring-purple-300' : 'bg-purple-50 text-purple-700 border-purple-200')
+                                    : 'bg-gray-100 text-gray-400 border-gray-200'
+                                }`}>
+                                  Norte: {stockSuc2} {sucursal === 'SUC-02' ? '📍' : ''}
+                                </span>
+                                {!hasStockInCurrent && hasStockAnywhere && otherSucWithStock && (
+                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 animate-pulse flex items-center gap-1">
+                                    <Sparkles size={10} /> Facturable desde {otherSucWithStock.short}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-[10px] font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full inline-block mt-0.5">
+                                Servicio de Taller • Mano de obra
+                              </span>
                             )}
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-3 shrink-0 ml-2">
-                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${isService ? 'bg-purple-100 text-purple-700' : (stock > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700')}`}>
-                            {isService ? 'Servicio' : `${stock} disp.`}
-                          </span>
+                        {/* PRECIO Y BOTONES DE ACCIÓN */}
+                        <div className="flex items-center gap-2 shrink-0">
                           <span className="font-black text-blue-700 text-base min-w-[70px] text-right">
                             C$ {p.price}
                           </span>
-                          <button 
-                            type="button"
-                            disabled={!hasStock}
-                            className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm"
-                          >
-                            <Plus size={14} /> Agregar
-                          </button>
+
+                          {isService ? (
+                            <button 
+                              type="button"
+                              onClick={() => {
+                                addToCart(p, sucursal);
+                                setSearchCode('');
+                              }}
+                              className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm active:scale-95 transition-all"
+                            >
+                              <Plus size={14} /> Agregar
+                            </button>
+                          ) : hasStockInCurrent ? (
+                            <div className="flex items-center gap-1">
+                              <button 
+                                type="button"
+                                onClick={() => {
+                                  addToCart(p, sucursal);
+                                  setSearchCode('');
+                                }}
+                                className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm active:scale-95 transition-all"
+                                title={`Agregar desde ${getBranchName(sucursal)}`}
+                              >
+                                <Plus size={14} /> Agregar ({getBranchShort(sucursal)})
+                              </button>
+                              {/* Botón rápido opcional para agregar desde la otra sucursal si tiene existencia */}
+                              {SUCURSALES.filter(s => s.id !== sucursal && getStock(p.id, s.id) > 0).map(otherSuc => (
+                                <button
+                                  key={otherSuc.id}
+                                  type="button"
+                                  onClick={() => {
+                                    addToCart(p, otherSuc.id);
+                                    setSearchCode('');
+                                  }}
+                                  className="bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all active:scale-95"
+                                  title={`Facturar desde ${otherSuc.nombre} (${getStock(p.id, otherSuc.id)} disp.)`}
+                                >
+                                  <Plus size={12} /> {otherSuc.short}
+                                </button>
+                              ))}
+                            </div>
+                          ) : hasStockAnywhere && otherSucWithStock ? (
+                            <button 
+                              type="button"
+                              onClick={() => {
+                                addToCart(p, otherSucWithStock.id);
+                                setSearchCode('');
+                              }}
+                              className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm active:scale-95 transition-all"
+                              title={`Agotado en ${getBranchShort(sucursal)}. Facturar desde ${otherSucWithStock.nombre}`}
+                            >
+                              <Plus size={14} /> Facturar de {otherSucWithStock.short} ({getStock(p.id, otherSucWithStock.id)})
+                            </button>
+                          ) : (
+                            <span className="text-xs font-bold text-red-500 bg-red-50 px-2 py-1 rounded-lg border border-red-200">
+                              Sin existencia
+                            </span>
+                          )}
                         </div>
                       </div>
                     );
@@ -1387,6 +1678,7 @@ export default function POS() {
                   <thead className="bg-gray-50 text-gray-500 font-bold border-b border-gray-100">
                     <tr>
                       <th className="p-3">Descripción</th>
+                      <th className="p-3 text-center w-36">Sucursal Origen</th>
                       <th className="p-3 text-center w-28">Cant.</th>
                       <th className="p-3 text-right">P. Unit</th>
                       <th className="p-3 text-center w-36">Descuento</th>
@@ -1396,12 +1688,16 @@ export default function POS() {
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {cart.map((item) => {
+                      const itemKey = getItemKey(item);
                       const effectiveDiscount = getItemDiscount(item);
                       const effectivePercent = getItemDiscountPercent(item);
                       const itemSubtotal = (item.price * item.qty) - effectiveDiscount;
                       const isPercentMode = item.discountMode === '%';
+                      const itemBranch = item.sucursal || sucursal;
+                      const stockInBranch = item.type === 'servicio' ? '∞' : getStock(item.id, itemBranch);
+
                       return (
-                        <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+                        <tr key={itemKey} className="hover:bg-gray-50 transition-colors">
                           <td className="p-3">
                             <div className="flex items-center gap-2.5">
                               {item.image ? (
@@ -1429,15 +1725,50 @@ export default function POS() {
                                   {item.type === 'servicio' && <span className="text-purple-600 font-bold text-xs bg-purple-50 px-1.5 py-0.5 rounded">Servicio</span>}
                                   <span className="font-bold text-gray-800">{item.name}</span>
                                 </div>
-                                <span className="font-mono text-[11px] text-gray-400">{item.id}</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-mono text-[11px] text-gray-400">{item.id}</span>
+                                  <span className="text-[10px] text-gray-400">• Disp: {stockInBranch}</span>
+                                </div>
                               </div>
                             </div>
                           </td>
+
+                          {/* SUCURSAL ORIGEN */}
+                          <td className="p-3 text-center">
+                            <div className="inline-flex items-center gap-1">
+                              <select
+                                value={itemBranch}
+                                onChange={(e) => handleChangeItemSucursal(item, e.target.value)}
+                                className={`text-[11px] font-bold rounded-lg px-2 py-1 border shadow-2xs outline-none cursor-pointer transition-all ${
+                                  itemBranch === 'SUC-01'
+                                    ? 'bg-blue-50 text-blue-700 border-blue-200 focus:ring-1 focus:ring-blue-400'
+                                    : 'bg-purple-50 text-purple-700 border-purple-200 focus:ring-1 focus:ring-purple-400'
+                                }`}
+                                title="Sucursal de donde se despacha el producto y se emitirá la factura"
+                              >
+                                {SUCURSALES.map(s => {
+                                  const st = item.type === 'servicio' ? '∞' : getStock(item.id, s.id);
+                                  const disabled = item.type !== 'servicio' && st < item.qty;
+                                  return (
+                                    <option key={s.id} value={s.id} disabled={disabled}>
+                                      {s.short} ({st} disp.) {disabled ? '⚠️ Insuficiente' : ''}
+                                    </option>
+                                  );
+                                })}
+                              </select>
+                              {itemBranch !== sucursal && (
+                                <span className="text-[9px] font-black uppercase text-purple-700 bg-purple-100 px-1 py-0.5 rounded border border-purple-200" title={`Facturado desde ${getBranchName(itemBranch)}`}>
+                                  Ext
+                                </span>
+                              )}
+                            </div>
+                          </td>
+
                           <td className="p-3">
                             <div className="flex items-center justify-center gap-1">
                               <button 
                                 type="button"
-                                onClick={() => updateCartQty(item.id, item.qty - 1)}
+                                onClick={() => updateCartQty(itemKey, item.qty - 1)}
                                 className="w-6 h-6 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded flex items-center justify-center font-bold"
                               >
                                 <Minus size={12} />
@@ -1446,12 +1777,12 @@ export default function POS() {
                                 type="number" 
                                 min="1" 
                                 value={item.qty} 
-                                onChange={(e) => updateCartQty(item.id, parseInt(e.target.value) || 1)}
+                                onChange={(e) => updateCartQty(itemKey, parseInt(e.target.value) || 1)}
                                 className="w-10 text-center font-bold border rounded py-0.5 outline-none text-xs" 
                               />
                               <button 
                                 type="button"
-                                onClick={() => updateCartQty(item.id, item.qty + 1)}
+                                onClick={() => updateCartQty(itemKey, item.qty + 1)}
                                 className="w-6 h-6 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded flex items-center justify-center font-bold"
                               >
                                 <Plus size={12} />
@@ -1471,13 +1802,13 @@ export default function POS() {
                                     min="0" 
                                     step={isPercentMode ? "1" : "5"}
                                     value={isPercentMode ? (item.discountPercent || 0) : (item.discount || 0)}
-                                    onChange={(e) => handleDiscountChange(item.id, e.target.value, isPercentMode ? '%' : 'C$')}
+                                    onChange={(e) => handleDiscountChange(itemKey, e.target.value, isPercentMode ? '%' : 'C$')}
                                     className="w-16 text-center py-1 text-xs text-red-600 font-bold outline-none"
                                     title={isPercentMode ? "Porcentaje de descuento de mostrador" : "Descuento en Córdobas de mostrador"}
                                   />
                                   <button
                                     type="button"
-                                    onClick={() => toggleDiscountMode(item.id)}
+                                    onClick={() => toggleDiscountMode(itemKey)}
                                     className={`px-1.5 py-1 text-[11px] font-black border-l transition-colors flex items-center gap-0.5 ${isPercentMode ? 'bg-purple-100 text-purple-700 hover:bg-purple-200' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'}`}
                                     title="Clic para cambiar entre Porcentaje (%) y Córdobas (C$)"
                                   >
@@ -1535,7 +1866,7 @@ export default function POS() {
                           <td className="p-3 text-center">
                             <button 
                               type="button"
-                              onClick={() => setCart(cart.filter(c => c.id !== item.id))}
+                              onClick={() => setCart(cart.filter(c => getItemKey(c) !== itemKey))}
                               className="text-gray-400 hover:text-red-500 p-1 rounded transition-colors"
                               title="Eliminar de la lista"
                             >
@@ -1587,6 +1918,35 @@ export default function POS() {
               )}
             </div>
 
+            {/* Desglose Multisucursal cuando hay productos de distintas sucursales */}
+            {isMultiSucursal && (
+              <div className="p-3 bg-purple-50 rounded-xl border border-purple-200 text-xs space-y-2 mt-2">
+                <div className="font-bold text-purple-900 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-purple-600 animate-pulse"></span>
+                    Desglose Multisucursal
+                  </span>
+                  <span className="text-[10px] bg-purple-200 text-purple-800 px-1.5 py-0.5 rounded font-black">
+                    {uniqueSucursalesInCart.length} FACTURAS
+                  </span>
+                </div>
+                <div className="space-y-1 divide-y divide-purple-100">
+                  {branchBreakdown.map((b) => (
+                    <div key={b.sucursalId} className="flex justify-between items-center pt-1 text-purple-800">
+                      <div>
+                        <span className="font-bold">{b.short}</span>
+                        <span className="text-gray-500 text-[11px] ml-1">({b.itemsCount} arts.)</span>
+                      </div>
+                      <span className="font-black">C$ {b.total.toFixed(2)}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="text-[10px] text-purple-700 italic border-t border-purple-100 pt-1">
+                  * Se emitirá automáticamente 1 factura y Kardex separado por cada sucursal.
+                </div>
+              </div>
+            )}
+
             <div className="flex justify-between text-3xl font-black pt-3 border-t border-gray-100 text-blue-900">
               <span>TOTAL:</span>
               <span>C$ {total.toFixed(2)}</span>
@@ -1599,7 +1959,7 @@ export default function POS() {
             className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-black text-lg py-4 px-6 rounded-2xl flex items-center justify-center gap-2 shadow-xl shadow-green-100 transition-all active:scale-95"
           >
             {loading ? <Loader className="animate-spin" size={24} /> : <Save size={24} />}
-            PROCESAR FACTURA
+            {isMultiSucursal ? `PROCESAR (${uniqueSucursalesInCart.length} FACTURAS)` : 'PROCESAR FACTURA'}
           </button>
         </div>
 
@@ -1693,12 +2053,47 @@ export default function POS() {
       {completedSale && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm animate-in fade-in duration-200 overflow-hidden">
           <div className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
-            <div className="p-4 text-center border-b border-gray-100 bg-gray-50/80 flex justify-between items-center shrink-0">
-              <span className="text-xs font-bold text-green-600 bg-green-50 px-2.5 py-1 rounded-full">
-                ✓ Factura Generada: {completedSale.numero_factura}
-              </span>
-              <button onClick={() => setCompletedSale(null)} className="text-gray-400 hover:text-gray-600 font-bold text-xl">&times;</button>
+            <div className="p-3 sm:p-4 text-center border-b border-gray-100 bg-gray-50/80 flex justify-between items-center shrink-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-bold text-green-700 bg-green-50 px-2.5 py-1 rounded-full border border-green-200">
+                  {completedSalesList.length > 1 
+                    ? `✓ Multisucursal (${completedSalesList.length} Facturas)`
+                    : `✓ Factura: ${completedSale.numero_factura}`}
+                </span>
+                {completedSalesList.length > 1 && (
+                  <span className="text-xs font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200">
+                    {getBranchShort(completedSale.sucursal)}
+                  </span>
+                )}
+              </div>
+              <button onClick={() => { setCompletedSale(null); setCompletedSalesList([]); }} className="text-gray-400 hover:text-gray-600 font-bold text-xl">&times;</button>
             </div>
+
+            {/* PESTAÑAS SELECTORAS SI HAY MÚLTIPLES FACTURAS EMITIDAS */}
+            {completedSalesList.length > 1 && (
+              <div className="flex items-center gap-1.5 p-2 bg-purple-50 border-b border-purple-100 overflow-x-auto shrink-0">
+                <span className="text-[11px] font-bold text-purple-900 uppercase shrink-0 pl-1">
+                  Ver Factura:
+                </span>
+                {completedSalesList.map((s, idx) => {
+                  const isSel = completedSale?.id === s.id;
+                  return (
+                    <button
+                      key={s.id || idx}
+                      type="button"
+                      onClick={() => setCompletedSale(s)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all shrink-0 ${
+                        isSel
+                          ? 'bg-purple-600 text-white shadow-sm'
+                          : 'bg-white text-purple-800 hover:bg-purple-100 border border-purple-200'
+                      }`}
+                    >
+                      {s.numero_factura} ({getBranchShort(s.sucursal)})
+                    </button>
+                  );
+                })}
+              </div>
+            )}
             
             {/* VISTA PREVIA DEL TICKET EN PANTALLA */}
             <div className="p-4 overflow-y-auto bg-gray-100 flex-1 flex justify-center">
@@ -1707,24 +2102,54 @@ export default function POS() {
 
             {/* BOTONES DE IMPRESIÓN Y ACCIONES */}
             <div className="p-3 sm:p-4 bg-white border-t border-gray-100 space-y-2 shrink-0">
-              <div className="grid grid-cols-2 gap-3">
-                <button 
-                  onClick={handlePrint}
-                  className="bg-blue-600 hover:bg-blue-700 text-white py-3 px-4 rounded-xl font-bold text-sm shadow-lg shadow-blue-200 transition-all flex items-center justify-center gap-2 active:scale-95"
-                >
-                  <Printer size={18} />
-                  Imprimir POS-80
-                </button>
-                <button 
-                  onClick={handlePrint}
-                  className="bg-gray-800 hover:bg-gray-900 text-white py-3 px-4 rounded-xl font-bold text-sm shadow-lg shadow-gray-200 transition-all flex items-center justify-center gap-2 active:scale-95"
-                >
-                  <FileDown size={18} />
-                  Descargar PDF
-                </button>
-              </div>
+              {completedSalesList.length > 1 ? (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <button 
+                      onClick={handlePrint}
+                      className="bg-blue-600 hover:bg-blue-700 text-white py-2.5 px-3 rounded-xl font-bold text-xs shadow-md shadow-blue-200 transition-all flex items-center justify-center gap-1.5 active:scale-95"
+                      title={`Imprimir ticket de ${completedSale.numero_factura}`}
+                    >
+                      <Printer size={16} />
+                      Imprimir Actual
+                    </button>
+                    <button 
+                      onClick={handlePrintAll}
+                      className="bg-purple-600 hover:bg-purple-700 text-white py-2.5 px-3 rounded-xl font-bold text-xs shadow-md shadow-purple-200 transition-all flex items-center justify-center gap-1.5 active:scale-95"
+                      title="Imprimir todos los tickets secuencialmente"
+                    >
+                      <Printer size={16} />
+                      Imprimir Todas ({completedSalesList.length})
+                    </button>
+                  </div>
+                  <button 
+                    onClick={handlePrint}
+                    className="w-full bg-gray-800 hover:bg-gray-900 text-white py-2.5 px-4 rounded-xl font-bold text-xs shadow-sm transition-all flex items-center justify-center gap-2 active:scale-95"
+                  >
+                    <FileDown size={16} />
+                    Descargar PDF ({completedSale.numero_factura})
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  <button 
+                    onClick={handlePrint}
+                    className="bg-blue-600 hover:bg-blue-700 text-white py-3 px-4 rounded-xl font-bold text-sm shadow-lg shadow-blue-200 transition-all flex items-center justify-center gap-2 active:scale-95"
+                  >
+                    <Printer size={18} />
+                    Imprimir POS-80
+                  </button>
+                  <button 
+                    onClick={handlePrint}
+                    className="bg-gray-800 hover:bg-gray-900 text-white py-3 px-4 rounded-xl font-bold text-sm shadow-lg shadow-gray-200 transition-all flex items-center justify-center gap-2 active:scale-95"
+                  >
+                    <FileDown size={18} />
+                    Descargar PDF
+                  </button>
+                </div>
+              )}
               <button 
-                onClick={() => setCompletedSale(null)}
+                onClick={() => { setCompletedSale(null); setCompletedSalesList([]); }}
                 className="w-full text-gray-500 font-bold hover:bg-gray-100 py-2.5 rounded-xl text-sm transition-colors"
               >
                 Cerrar y Nueva Factura
@@ -1734,6 +2159,13 @@ export default function POS() {
             {/* ELEMENTO OCULTO PARA LA IMPRESORA REAL */}
             <div className="hidden">
               <TicketPrinter ref={printRef} sale={completedSale} isPreview={false} />
+              <div ref={multiPrintRef}>
+                {completedSalesList.map((sItem) => (
+                  <div key={sItem.id} style={{ pageBreakAfter: 'always', paddingBottom: '20px' }}>
+                    <TicketPrinter sale={sItem} isPreview={false} />
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>

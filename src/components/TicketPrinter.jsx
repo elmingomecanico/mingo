@@ -18,7 +18,10 @@ const TicketPrinter = forwardRef(({ sale, isPreview = false }, ref) => {
         <p className="text-[11px] font-bold">Servicios Mecánicos y Repuestos</p>
         <p className="text-[10px]">RUC: J0310000284751</p>
         <p className="text-[10px]">Teléfono: +505 8888-8888 / 7777-7777</p>
-        <p className="text-[10px]">Sucursal: {sale.sucursal || 'Principal (SUC-01)'}</p>
+        <p className="text-[10px]">Sucursal: {sale.sucursal === 'SUC-01' ? 'Sucursal Principal (SUC-01)' : sale.sucursal === 'SUC-02' ? 'Sucursal Norte (SUC-02)' : (sale.sucursal || 'Principal (SUC-01)')}</p>
+        {sale.multisucursal_id && (
+          <p className="text-[9px] font-bold text-gray-700">★ Venta Multisucursal: {sale.multisucursal_id}</p>
+        )}
       </div>
 
       {/* METADATOS FACTURA */}
