@@ -6,11 +6,13 @@ import {
   Landmark, DollarSign, TrendingUp, TrendingDown, Plus, Minus, Search, 
   Calendar, CreditCard, Filter, ArrowUpRight, ArrowDownRight, FileText, 
   Printer, CheckCircle2, AlertCircle, Clock, Trash2, Tag, ShieldAlert,
-  Wallet, Building, PieChart
+  Wallet, Building, PieChart, Scale, ArrowRightLeft, Building2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Select from 'react-select';
 import TokenizedSearchSelect from '../components/TokenizedSearchSelect';
+import BancosManager from '../components/contabilidad/BancosManager';
+import AsientoApertura from '../components/contabilidad/AsientoApertura';
 
 const CATEGORIAS_GASTOS_DEFAULT = [
   'Servicios Básicos (Luz, Agua, Internet)',
@@ -24,6 +26,7 @@ const CATEGORIAS_GASTOS_DEFAULT = [
   'Papelería y Suministros',
   'Impuestos y Tasas Municipales',
   'Publicidad y Marketing',
+  'Gastos y Comisiones Bancarias',
   'Otros Gastos de Operación'
 ];
 
@@ -32,12 +35,13 @@ const CATEGORIAS_INGRESOS_DEFAULT = [
   'Cobro de Crédito (CxC)',
   'Inyección de Capital / Aporte Socio',
   'Devolución de Proveedor',
+  'Asiento Inicial de Apertura',
   'Otros Ingresos Extraordinarios'
 ];
 
 export default function Contabilidad() {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState('flujo'); // 'flujo' | 'cxp' | 'resultados' | 'categorias'
+  const [activeTab, setActiveTab] = useState('flujo'); // 'flujo' | 'bancos' | 'apertura' | 'cxp' | 'resultados' | 'categorias'
   
   // Datos desde Firebase
   const [movimientos, setMovimientos] = useState([]);
@@ -45,6 +49,10 @@ export default function Contabilidad() {
   const [compras, setCompras] = useState([]);
   const [cxpList, setCxpList] = useState([]);
   const [cxcList, setCxcList] = useState([]);
+  const [cuentasBancarias, setCuentasBancarias] = useState([]);
+  const [movimientosBancarios, setMovimientosBancarios] = useState([]);
+  const [asientoApertura, setAsientoApertura] = useState(null);
+  const [allInventory, setAllInventory] = useState({});
   const [proveedoresMap, setProveedoresMap] = useState({});
   const [proveedoresList, setProveedoresList] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -64,6 +72,8 @@ export default function Contabilidad() {
     concepto: '',
     monto: '',
     metodo_pago: 'Efectivo',
+    id_cuenta_bancaria: '',
+    referencia_bancaria: '',
     numero_comprobante: '',
     beneficiario: '',
     sucursal: 'SUC-01',
@@ -75,6 +85,7 @@ export default function Contabilidad() {
   const [abonoForm, setAbonoForm] = useState({
     monto: '',
     metodo_pago: 'Efectivo',
+    id_cuenta_bancaria: '',
     comprobante: '',
     observacion: ''
   });
@@ -181,8 +192,57 @@ export default function Contabilidad() {
       setLoading(false);
     });
 
+    // 7. Cuentas Bancarias
+    const bancRef = ref(rtdb, 'cuentas_bancarias');
+    const unsubBanc = onValue(bancRef, (snap) => {
+      if (snap.exists()) {
+        const list = Object.keys(snap.val()).map(k => ({
+          id: k,
+          ...snap.val()[k]
+        }));
+        setCuentasBancarias(list);
+      } else {
+        setCuentasBancarias([]);
+      }
+    });
+
+    // 8. Movimientos Bancarios
+    const movBancRef = ref(rtdb, 'movimientos_bancarios');
+    const unsubMovBanc = onValue(movBancRef, (snap) => {
+      if (snap.exists()) {
+        const list = Object.keys(snap.val()).map(k => ({
+          id: k,
+          ...snap.val()[k]
+        }));
+        setMovimientosBancarios(list);
+      } else {
+        setMovimientosBancarios([]);
+      }
+    });
+
+    // 9. Asiento Inicial de Apertura
+    const aperturaRef = ref(rtdb, 'asiento_apertura/general');
+    const unsubApertura = onValue(aperturaRef, (snap) => {
+      if (snap.exists()) {
+        setAsientoApertura(snap.val());
+      } else {
+        setAsientoApertura(null);
+      }
+    });
+
+    // 10. Inventario para autocalcular balance inicial
+    const invRef = ref(rtdb, 'inventario');
+    const unsubInv = onValue(invRef, (snap) => {
+      if (snap.exists()) {
+        setAllInventory(snap.val());
+      } else {
+        setAllInventory({});
+      }
+    });
+
     return () => {
       unsubProv(); unsubMov(); unsubVen(); unsubComp(); unsubCxp(); unsubCxc();
+      unsubBanc(); unsubMovBanc(); unsubApertura(); unsubInv();
     };
   }, []);
 
@@ -381,15 +441,58 @@ export default function Contabilidad() {
       return toast.error('Debe ingresar un concepto o motivo');
     }
 
+    const esMetodoBancario = movForm.metodo_pago === 'Transferencia' || movForm.metodo_pago === 'Tarjeta' || movForm.metodo_pago === 'Cheque';
+    if (esMetodoBancario && !movForm.id_cuenta_bancaria && cuentasBancarias.length > 0) {
+      return toast.error('Seleccione la cuenta bancaria afectada para este pago');
+    }
+
     try {
+      const nowIso = new Date().toISOString();
+      const cuentaAfectada = cuentasBancarias.find(c => c.id === movForm.id_cuenta_bancaria);
+
+      // Si afecta banco, actualizar saldo bancario y registrar movimiento bancario
+      if (cuentaAfectada && esMetodoBancario) {
+        const saldoAnt = Number(cuentaAfectada.saldo_actual) || 0;
+        const saldoPost = movTipo === 'Ingreso' ? (saldoAnt + montoNum) : (saldoAnt - montoNum);
+
+        await runTransaction(ref(rtdb, `cuentas_bancarias/${cuentaAfectada.id}/saldo_actual`), (cur) => {
+          return movTipo === 'Ingreso' ? ((Number(cur) || 0) + montoNum) : ((Number(cur) || 0) - montoNum);
+        });
+
+        const movBancarioRef = push(ref(rtdb, 'movimientos_bancarios'));
+        await set(movBancarioRef, {
+          id_cuenta: cuentaAfectada.id,
+          nombre_cuenta: cuentaAfectada.alias,
+          banco: cuentaAfectada.banco,
+          moneda: cuentaAfectada.moneda,
+          fecha: nowIso,
+          tipo: movTipo,
+          razon_movimiento: movTipo === 'Ingreso' ? 'Ingreso General' : 'Gasto Operativo Bancario',
+          concepto: movForm.concepto.trim(),
+          monto: montoNum,
+          referencia_bancaria: movForm.referencia_bancaria?.trim() || movForm.numero_comprobante?.trim() || 'N/A',
+          comprobante_relacionado: movForm.numero_comprobante?.trim() || 'N/A',
+          saldo_anterior: saldoAnt,
+          saldo_posterior: saldoPost,
+          beneficiario_o_depositante: movForm.beneficiario?.trim() || 'N/A',
+          usuario: user?.nombre_completo || 'Administración',
+          sucursal: movForm.sucursal,
+          notas: movForm.notas.trim() || ''
+        });
+      }
+
+      // Registrar en el Libro Diario
       const movRef = push(ref(rtdb, 'movimientos_contables'));
       await set(movRef, {
-        fecha: new Date().toISOString(),
+        fecha: nowIso,
         tipo: movTipo,
         categoria: movForm.categoria,
         concepto: movForm.concepto.trim(),
         monto: montoNum,
         metodo_pago: movForm.metodo_pago,
+        id_cuenta_bancaria: cuentaAfectada ? cuentaAfectada.id : null,
+        nombre_cuenta_bancaria: cuentaAfectada ? cuentaAfectada.alias : null,
+        referencia_bancaria: movForm.referencia_bancaria?.trim() || null,
         numero_comprobante: movForm.numero_comprobante.trim() || 'N/A',
         beneficiario: movForm.beneficiario.trim() || 'N/A',
         sucursal: movForm.sucursal,
@@ -404,6 +507,8 @@ export default function Contabilidad() {
         concepto: '',
         monto: '',
         metodo_pago: 'Efectivo',
+        id_cuenta_bancaria: '',
+        referencia_bancaria: '',
         numero_comprobante: '',
         beneficiario: '',
         sucursal: 'SUC-01',
@@ -432,7 +537,47 @@ export default function Contabilidad() {
     if (monto <= 0) return toast.error('El monto debe ser mayor a 0');
     if (monto > abonoModal.saldo_pendiente) return toast.error('El abono no puede superar el saldo pendiente');
 
+    const esMetodoBancario = abonoForm.metodo_pago === 'Transferencia' || abonoForm.metodo_pago === 'Cheque';
+    if (esMetodoBancario && !abonoForm.id_cuenta_bancaria && cuentasBancarias.length > 0) {
+      return toast.error('Seleccione la cuenta bancaria de origen para el pago');
+    }
+
     try {
+      const nowIso = new Date().toISOString();
+      const cuentaAfectada = cuentasBancarias.find(c => c.id === abonoForm.id_cuenta_bancaria);
+
+      // Si sale de banco, descontar saldo bancario y registrar movimiento bancario
+      if (cuentaAfectada && esMetodoBancario) {
+        const saldoAnt = Number(cuentaAfectada.saldo_actual) || 0;
+        const saldoPost = saldoAnt - monto;
+
+        await runTransaction(ref(rtdb, `cuentas_bancarias/${cuentaAfectada.id}/saldo_actual`), (cur) => {
+          return (Number(cur) || 0) - monto;
+        });
+
+        const movBancarioRef = push(ref(rtdb, 'movimientos_bancarios'));
+        await set(movBancarioRef, {
+          id_cuenta: cuentaAfectada.id,
+          nombre_cuenta: cuentaAfectada.alias,
+          banco: cuentaAfectada.banco,
+          moneda: cuentaAfectada.moneda,
+          fecha: nowIso,
+          tipo: 'Egreso',
+          razon_movimiento: 'Pago a Proveedor (CxP)',
+          concepto: `Abono a Factura ${abonoModal.numero_factura || ''} (${proveedoresMap[abonoModal.id_proveedor] || 'Proveedor'})`,
+          monto: monto,
+          referencia_bancaria: abonoForm.comprobante?.trim() || abonoModal.numero_factura || 'N/A',
+          comprobante_relacionado: abonoModal.numero_factura || 'N/A',
+          saldo_anterior: saldoAnt,
+          saldo_posterior: saldoPost,
+          beneficiario_o_depositante: proveedoresMap[abonoModal.id_proveedor] || 'Proveedor',
+          usuario: user?.nombre_completo || 'Administración',
+          sucursal: abonoModal.sucursal || 'SUC-01',
+          notas: `Pago de factura por CxP. Observación: ${abonoForm.observacion || 'Ninguna'}`
+        });
+      }
+
+      // Actualizar CxP
       const cxpRef = ref(rtdb, `cxp/${abonoModal.id}`);
       await runTransaction(cxpRef, (currentData) => {
         if (!currentData) return currentData;
@@ -443,9 +588,11 @@ export default function Contabilidad() {
         }
         if (!currentData.historial_abonos) currentData.historial_abonos = [];
         currentData.historial_abonos.push({
-          fecha: new Date().toISOString(),
+          fecha: nowIso,
           monto: monto,
           metodo_pago: abonoForm.metodo_pago,
+          id_cuenta_bancaria: cuentaAfectada ? cuentaAfectada.id : null,
+          nombre_cuenta_bancaria: cuentaAfectada ? cuentaAfectada.alias : null,
           comprobante: abonoForm.comprobante.trim() || 'N/A'
         });
         return currentData;
@@ -454,12 +601,14 @@ export default function Contabilidad() {
       // Registrar Egreso en el Libro Contable
       const movRef = push(ref(rtdb, 'movimientos_contables'));
       await set(movRef, {
-        fecha: new Date().toISOString(),
+        fecha: nowIso,
         tipo: 'Egreso',
         categoria: 'Pago a Proveedor (CxP)',
         concepto: `Abono a Factura ${abonoModal.numero_factura || ''} (${proveedoresMap[abonoModal.id_proveedor] || 'Proveedor'})`,
         monto: monto,
         metodo_pago: abonoForm.metodo_pago,
+        id_cuenta_bancaria: cuentaAfectada ? cuentaAfectada.id : null,
+        nombre_cuenta_bancaria: cuentaAfectada ? cuentaAfectada.alias : null,
         numero_comprobante: abonoForm.comprobante.trim() || abonoModal.numero_factura || 'N/A',
         beneficiario: proveedoresMap[abonoModal.id_proveedor] || 'Proveedor',
         sucursal: abonoModal.sucursal || 'SUC-01',
@@ -624,6 +773,36 @@ export default function Contabilidad() {
         >
           <FileText size={16} />
           Libro Diario & Flujo de Caja
+        </button>
+
+        <button
+          onClick={() => setActiveTab('bancos')}
+          className={`px-4 py-2.5 font-bold text-sm border-b-2 flex items-center gap-2 whitespace-nowrap transition-colors ${activeTab === 'bancos' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+        >
+          <Landmark size={16} />
+          Cuentas Bancarias & Tesorería
+          {cuentasBancarias.length > 0 && (
+            <span className="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-full font-bold">
+              {cuentasBancarias.length}
+            </span>
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveTab('apertura')}
+          className={`px-4 py-2.5 font-bold text-sm border-b-2 flex items-center gap-2 whitespace-nowrap transition-colors ${activeTab === 'apertura' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+        >
+          <Scale size={16} />
+          Asiento Inicial de Apertura
+          {asientoApertura ? (
+            <span className="bg-emerald-100 text-emerald-700 text-xs px-1.5 py-0.5 rounded-full font-bold">
+              ✓
+            </span>
+          ) : (
+            <span className="bg-amber-100 text-amber-700 text-xs px-1.5 py-0.5 rounded-full font-bold">
+              !
+            </span>
+          )}
         </button>
 
         <button
@@ -1056,6 +1235,28 @@ export default function Contabilidad() {
         </div>
       )}
 
+      {/* ================= TAB 3: CUENTAS BANCARIAS Y TESORERÍA ================= */}
+      {activeTab === 'bancos' && (
+        <BancosManager
+          cuentasBancarias={cuentasBancarias}
+          movimientosBancarios={movimientosBancarios}
+          user={user}
+        />
+      )}
+
+      {/* ================= TAB 4: ASIENTO INICIAL DE APERTURA ================= */}
+      {activeTab === 'apertura' && (
+        <AsientoApertura
+          asientoApertura={asientoApertura}
+          cuentasBancarias={cuentasBancarias}
+          inventario={allInventory['SUC-01'] || {}}
+          allInventory={allInventory}
+          cxpList={cxpList}
+          cxcList={cxcList}
+          user={user}
+        />
+      )}
+
       {/* ================= MODAL NUEVO MOVIMIENTO (ENTRADA / SALIDA) ================= */}
       {isMovModalOpen && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm animate-in fade-in overflow-hidden">
@@ -1131,12 +1332,48 @@ export default function Contabilidad() {
                       className="w-full border border-gray-200 p-2.5 rounded-xl bg-gray-50 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="Efectivo">Efectivo</option>
-                      <option value="Transferencia">Transferencia</option>
+                      <option value="Transferencia">Transferencia Bancaria</option>
                       <option value="Tarjeta">Tarjeta / POS</option>
                       <option value="Cheque">Cheque</option>
                     </select>
                   </div>
                 </div>
+
+                {/* VINCULACIÓN CON CUENTA BANCARIA */}
+                {(movForm.metodo_pago === 'Transferencia' || movForm.metodo_pago === 'Tarjeta' || movForm.metodo_pago === 'Cheque') && (
+                  <div className="p-3 bg-blue-50/70 rounded-xl border border-blue-100 space-y-2.5 animate-in fade-in">
+                    <span className="text-xs font-black text-blue-900 flex items-center gap-1.5">
+                      <Landmark size={14} /> Control Bancario Afectado:
+                    </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="block text-[10px] font-bold text-gray-600 uppercase mb-1">Cuenta Bancaria *</label>
+                        <select
+                          required
+                          value={movForm.id_cuenta_bancaria}
+                          onChange={e => setMovForm({ ...movForm, id_cuenta_bancaria: e.target.value })}
+                          className="w-full border border-gray-200 p-2 rounded-lg bg-white text-xs font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="">-- Seleccionar Banco --</option>
+                          {cuentasBancarias.map(c => (
+                            <option key={c.id} value={c.id}>{c.alias} ({c.banco} - {c.moneda})</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-gray-600 uppercase mb-1">Referencia / Minuta / Voucher *</label>
+                        <input
+                          required
+                          type="text"
+                          placeholder="Ej: REF-9921 / VOUCHER-4"
+                          value={movForm.referencia_bancaria}
+                          onChange={e => setMovForm({ ...movForm, referencia_bancaria: e.target.value })}
+                          className="w-full border border-gray-200 p-2 rounded-lg bg-white text-xs font-mono outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
@@ -1250,6 +1487,27 @@ export default function Contabilidad() {
                     <option value="Cheque">Cheque</option>
                   </select>
                 </div>
+
+                {(abonoForm.metodo_pago === 'Transferencia' || abonoForm.metodo_pago === 'Cheque') && (
+                  <div className="p-3 bg-rose-50/70 rounded-xl border border-rose-100 space-y-2 animate-in fade-in">
+                    <label className="block text-[10px] font-bold text-gray-600 uppercase mb-1">
+                      Cuenta Bancaria de Origen (Sale el dinero) *
+                    </label>
+                    <select
+                      required
+                      value={abonoForm.id_cuenta_bancaria}
+                      onChange={e => setAbonoForm({ ...abonoForm, id_cuenta_bancaria: e.target.value })}
+                      className="w-full border border-gray-200 p-2 rounded-lg bg-white text-xs font-bold text-gray-800 outline-none focus:ring-2 focus:ring-rose-500"
+                    >
+                      <option value="">-- Seleccionar Banco de Origen --</option>
+                      {cuentasBancarias.map(c => (
+                        <option key={c.id} value={c.id}>
+                          {c.alias} ({c.banco} - Saldo: {c.moneda} {Number(c.saldo_actual || 0).toFixed(2)})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Recibo de Caja / Minuta #</label>

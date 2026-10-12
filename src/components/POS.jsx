@@ -37,6 +37,7 @@ export default function POS() {
   const { user } = useAuth();
   const [currentUserRealtime, setCurrentUserRealtime] = useState(null);
   const [politicasInventario, setPoliticasInventario] = useState({});
+  const [cuentasBancarias, setCuentasBancarias] = useState([]);
 
   const puedeFacturarMultisucursal = Boolean(
     currentUserRealtime?.rol === 'SuperAdmin' ||
@@ -311,6 +312,15 @@ export default function POS() {
       });
     }
 
+    const bancRef = ref(rtdb, 'cuentas_bancarias');
+    const unsubBanc = onValue(bancRef, (snapshot) => {
+      if (snapshot.exists()) {
+        setCuentasBancarias(Object.keys(snapshot.val()).map(k => ({ id: k, ...snapshot.val()[k] })));
+      } else {
+        setCuentasBancarias([]);
+      }
+    });
+
     return () => {
       unsubProd();
       unsubServ();
@@ -321,6 +331,7 @@ export default function POS() {
       unsubVentas();
       unsubPoliticas();
       unsubCurrentUser();
+      unsubBanc();
     };
   }, [sucursal, user?.id]);
 
@@ -1080,6 +1091,53 @@ export default function POS() {
 
         await set(saleRef, newSale);
         createdSales.push(newSale);
+
+        // Si el cobro es con Tarjeta o Transferencia, acreditar en la cuenta bancaria vinculada
+        if (metodoPago === 'Tarjeta' || metodoPago === 'Transferencia') {
+          const cuentaDestino = cuentasBancarias.find(c => 
+            c.estado !== 'Inactiva' && (
+              (metodoPago === 'Tarjeta' && c.recibir_tarjetas_pos) ||
+              (metodoPago === 'Transferencia' && c.recibir_transferencias_pos)
+            ) && (c.sucursal === 'Todas' || c.sucursal === branchId)
+          ) || cuentasBancarias.find(c => 
+            c.estado !== 'Inactiva' && (
+              (metodoPago === 'Tarjeta' && c.recibir_tarjetas_pos) ||
+              (metodoPago === 'Transferencia' && c.recibir_transferencias_pos)
+            )
+          );
+
+          if (cuentaDestino) {
+            const saldoAnt = Number(cuentaDestino.saldo_actual) || 0;
+            const saldoPost = saldoAnt + branchTotal;
+
+            // Acreditar saldo en la cuenta bancaria en tiempo real
+            await runTransaction(ref(rtdb, `cuentas_bancarias/${cuentaDestino.id}/saldo_actual`), (cur) => {
+              return (Number(cur) || 0) + branchTotal;
+            });
+
+            // Registrar movimiento bancario con justificación y trazabilidad
+            const movBancRef = push(ref(rtdb, 'movimientos_bancarios'));
+            await set(movBancRef, {
+              id_cuenta: cuentaDestino.id,
+              nombre_cuenta: cuentaDestino.alias,
+              banco: cuentaDestino.banco,
+              moneda: cuentaDestino.moneda,
+              fecha: newSale.fecha,
+              tipo: 'Ingreso',
+              razon_movimiento: metodoPago === 'Tarjeta' ? 'Venta POS (Tarjeta)' : 'Venta POS (Transferencia)',
+              concepto: `Factura ${humanId} - ${nombreFinalCliente}`,
+              monto: branchTotal,
+              referencia_bancaria: humanId,
+              comprobante_relacionado: humanId,
+              saldo_anterior: saldoAnt,
+              saldo_posterior: saldoPost,
+              beneficiario_o_depositante: nombreFinalCliente,
+              usuario: user?.nombre || 'Caja POS',
+              sucursal: branchId,
+              notas: `Cobro procesado en Caja POS (${getBranchName(branchId)}) con método ${metodoPago}`
+            });
+          }
+        }
 
         // Si es crédito a cliente, generar cuenta por cobrar para esta factura
         if (metodoPago === 'Crédito' && targetClienteId !== 'MOSTRADOR') {
