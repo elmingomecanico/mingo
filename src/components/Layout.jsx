@@ -53,7 +53,7 @@ export default function Layout({ children }) {
     {
       title: 'Administración',
       items: [
-        { name: 'Ajustes y Catálogos', path: '/catalogos', icon: <Settings size={18} />, perm: 'VER_CATALOGOS' },
+        { name: 'Configuración del Sistema', path: '/catalogos', icon: <Settings size={18} />, perm: 'VER_CATALOGOS' },
         { name: 'Usuarios', path: '/usuarios', icon: <ShieldCheck size={18} />, perm: 'VER_USUARIOS' },
       ]
     }

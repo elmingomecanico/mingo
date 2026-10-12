@@ -12,6 +12,7 @@ import Select from 'react-select';
 import BarcodeScannerModal from '../components/BarcodeScannerModal';
 import ImagePreviewModal from '../components/ImagePreviewModal';
 import { DEFAULT_CONSECUTIVOS, formatConsecutive } from '../components/catalogos/ConsecutivosManager';
+import ProductCatalogsManager from '../components/inventario/ProductCatalogsManager';
 
 export const canSellNegative = (product, globalPoliticas) => {
   if (!product) return false;
@@ -37,7 +38,7 @@ export const getMaxAllowedDiscount = (product, globalPoliticas) => {
 };
 
 export default function Inventario() {
-  const [activeTab, setActiveTab] = useState('catalogo'); // 'catalogo' | 'ajustes' | 'politicas'
+  const [activeTab, setActiveTab] = useState('catalogo'); // 'catalogo' | 'ajustes' | 'politicas' | 'tablas_catalogos'
   const [products, setProducts] = useState([]);
   const [inventory, setInventory] = useState({});
   const [allInventory, setAllInventory] = useState({});
@@ -78,6 +79,35 @@ export default function Inventario() {
   // Modal State para Ajustes
   const [isAjusteModalOpen, setIsAjusteModalOpen] = useState(false);
   const [ajusteForm, setAjusteForm] = useState({ id_producto: null, nuevo_stock: '', motivo: '' });
+
+  // Modal State para Agregar Rápidamente (Categorías, Modelos, Ubicaciones) sin salir del formulario
+  const [quickAddModal, setQuickAddModal] = useState({ isOpen: false, type: 'categoria', value: '', desc: '' });
+
+  const handleQuickAddSave = async (e) => {
+    e?.preventDefault();
+    if (!quickAddModal.value.trim()) return toast.error("El nombre es requerido");
+    const name = quickAddModal.value.trim();
+    const desc = quickAddModal.desc?.trim() || '';
+
+    try {
+      if (quickAddModal.type === 'categoria') {
+        await push(ref(rtdb, 'catalogos/categorias'), { nombre: name, descripcion: desc });
+        setFormData(prev => ({ ...prev, cat: name }));
+        toast.success(`Categoría "${name}" agregada y seleccionada`);
+      } else if (quickAddModal.type === 'modelo') {
+        await push(ref(rtdb, 'catalogos/modelos'), { nombre: name, descripcion: desc });
+        setFormData(prev => ({ ...prev, compatibilidad: [...(prev.compatibilidad || []), name] }));
+        toast.success(`Modelo "${name}" agregado y seleccionado`);
+      } else if (quickAddModal.type === 'ubicacion') {
+        await push(ref(rtdb, 'catalogos/ubicaciones'), { nombre: name, descripcion: desc });
+        setFormData(prev => ({ ...prev, ubicacion: name }));
+        toast.success(`Ubicación "${name}" agregada y seleccionada`);
+      }
+      setQuickAddModal({ isOpen: false, type: 'categoria', value: '', desc: '' });
+    } catch (err) {
+      toast.error("Error al registrar: " + err.message);
+    }
+  };
 
   useEffect(() => {
     const prodsRef = ref(rtdb, 'productos');
@@ -453,6 +483,9 @@ export default function Inventario() {
         <button onClick={() => setActiveTab('ajustes')} className={`px-4 py-2 font-bold text-sm border-b-2 transition-colors ${activeTab === 'ajustes' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Ajustes de Inventario</button>
         <button onClick={() => setActiveTab('politicas')} className={`px-4 py-2 font-bold text-sm border-b-2 transition-colors flex items-center gap-1.5 ${activeTab === 'politicas' ? 'border-amber-600 text-amber-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
           <ShieldCheck size={16} /> Políticas y Condiciones (Gerencia)
+        </button>
+        <button onClick={() => setActiveTab('tablas_catalogos')} className={`px-4 py-2 font-bold text-sm border-b-2 transition-colors flex items-center gap-1.5 ${activeTab === 'tablas_catalogos' ? 'border-purple-600 text-purple-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+          <Layers size={16} /> Categorías, Marcas y Ubicaciones
         </button>
       </div>
 
@@ -1104,6 +1137,10 @@ export default function Inventario() {
         </div>
       )}
 
+      {activeTab === 'tablas_catalogos' && (
+        <ProductCatalogsManager />
+      )}
+
       {/* Modal Formulario Producto */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm animate-in fade-in overflow-hidden">
@@ -1170,7 +1207,17 @@ export default function Inventario() {
                       <input required type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full border p-2.5 rounded-xl outline-none focus:border-blue-500 text-sm" placeholder="Ej: Llanta Delantera 2.75-18" />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Categoría</label>
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="block text-xs font-bold text-gray-700 uppercase">Categoría</label>
+                        <button
+                          type="button"
+                          onClick={() => setQuickAddModal({ isOpen: true, type: 'categoria', value: '', desc: '' })}
+                          className="text-[11px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded transition-colors"
+                          title="Crear nueva categoría sin salir del formulario"
+                        >
+                          <Plus size={12} /> Nueva
+                        </button>
+                      </div>
                       <Select
                         options={categorias.map(c => ({ value: c, label: c }))}
                         value={formData.cat ? { value: formData.cat, label: formData.cat } : null}
@@ -1193,7 +1240,17 @@ export default function Inventario() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Compatibilidad (Modelos de Moto)</label>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="block text-xs font-bold text-gray-700 uppercase">Compatibilidad (Modelos de Moto)</label>
+                      <button
+                        type="button"
+                        onClick={() => setQuickAddModal({ isOpen: true, type: 'modelo', value: '', desc: '' })}
+                        className="text-[11px] font-bold text-purple-600 hover:text-purple-800 flex items-center gap-1 bg-purple-50 hover:bg-purple-100 px-2 py-0.5 rounded transition-colors"
+                        title="Crear nuevo modelo de moto sin salir del formulario"
+                      >
+                        <Plus size={12} /> Nuevo Modelo
+                      </button>
+                    </div>
                     <Select
                       isMulti
                       options={modelosMoto.map(m => ({ value: m, label: m }))}
@@ -1246,7 +1303,17 @@ export default function Inventario() {
                       <input type="number" value={formData.stock_minimo} onChange={e => setFormData({...formData, stock_minimo: e.target.value})} className="w-full border p-2.5 rounded-xl outline-none focus:border-blue-500 text-center" />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Ubicación / Estante</label>
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="block text-xs font-bold text-gray-700 uppercase">Ubicación / Estante</label>
+                        <button
+                          type="button"
+                          onClick={() => setQuickAddModal({ isOpen: true, type: 'ubicacion', value: '', desc: '' })}
+                          className="text-[11px] font-bold text-emerald-600 hover:text-emerald-800 flex items-center gap-1 bg-emerald-50 hover:bg-emerald-100 px-2 py-0.5 rounded transition-colors"
+                          title="Crear nueva ubicación en bodega sin salir del formulario"
+                        >
+                          <Plus size={12} /> Nueva
+                        </button>
+                      </div>
                       <Select
                         options={ubicaciones.map(u => ({ value: u, label: u }))}
                         value={formData.ubicacion ? { value: formData.ubicacion, label: formData.ubicacion } : null}
@@ -1440,6 +1507,75 @@ export default function Inventario() {
         onClose={() => setIsScannerOpen(false)}
         onScanSuccess={(code) => handleBarcodeInput(code)}
       />
+
+      {/* MODAL PARA AGREGAR RÁPIDAMENTE CATEGORÍAS, MODELOS O UBICACIONES */}
+      {quickAddModal.isOpen && (
+        <div className="fixed inset-0 bg-black/70 z-[70] flex items-center justify-center p-3 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden border border-gray-100 animate-in zoom-in-95">
+            <div className="p-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+              <h3 className="font-bold text-sm text-gray-800 flex items-center gap-2">
+                <Plus size={16} className="text-blue-600" />
+                {quickAddModal.type === 'categoria' && 'Nueva Categoría de Producto'}
+                {quickAddModal.type === 'modelo' && 'Nuevo Modelo de Moto'}
+                {quickAddModal.type === 'ubicacion' && 'Nueva Ubicación en Bodega'}
+              </h3>
+              <button 
+                type="button" 
+                onClick={() => setQuickAddModal({ isOpen: false, type: 'categoria', value: '', desc: '' })}
+                className="text-gray-400 hover:text-gray-600 font-bold text-lg leading-none"
+              >
+                &times;
+              </button>
+            </div>
+
+            <form onSubmit={handleQuickAddSave} className="p-4 space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Nombre *</label>
+                <input
+                  type="text"
+                  required
+                  autoFocus
+                  value={quickAddModal.value}
+                  onChange={e => setQuickAddModal({ ...quickAddModal, value: e.target.value })}
+                  placeholder={
+                    quickAddModal.type === 'categoria' ? 'Ej: Baterías, Filtros...' :
+                    quickAddModal.type === 'modelo' ? 'Ej: Pulsar NS 200, GN 125...' :
+                    'Ej: Estante C3, Vitrina 2...'
+                  }
+                  className="w-full border-2 border-gray-200 p-2.5 rounded-xl outline-none focus:border-blue-500 text-sm font-bold text-gray-800"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Descripción / Referencia (Opcional)</label>
+                <input
+                  type="text"
+                  value={quickAddModal.desc}
+                  onChange={e => setQuickAddModal({ ...quickAddModal, desc: e.target.value })}
+                  placeholder="Detalles breves..."
+                  className="w-full border border-gray-200 p-2 rounded-xl outline-none focus:border-blue-500 text-xs text-gray-700"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setQuickAddModal({ isOpen: false, type: 'categoria', value: '', desc: '' })}
+                  className="px-3.5 py-2 rounded-xl text-gray-600 font-bold hover:bg-gray-100 text-xs"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl font-bold text-xs shadow-md active:scale-95 transition-all"
+                >
+                  Guardar y Seleccionar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   );
