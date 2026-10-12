@@ -14,6 +14,7 @@ import CashCloseModal from './CashCloseModal';
 import CashMovementModal from './CashMovementModal';
 import MoneyCounterModal from './MoneyCounterModal';
 import TokenizedSearchSelect from './TokenizedSearchSelect';
+import ProductConfigModal from './ProductConfigModal';
 
 // Catálogo maestro de sucursales con nombres amigables
 export const SUCURSALES = [
@@ -148,6 +149,7 @@ export default function POS() {
   // Modal para escáner de código de barras por cámara y vista previa de imagen
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [previewProduct, setPreviewProduct] = useState(null);
+  const [productConfigModal, setProductConfigModal] = useState(null);
 
   // Estados de Control de Caja (Apertura, Salidas a Gerencia, Cierre y Contador)
   const [activeTurno, setActiveTurno] = useState(null);
@@ -510,108 +512,131 @@ export default function POS() {
     updateActiveTab({ selectedCliente: clientSelection, name: newName, cart: updatedCart });
   };
 
-  const addToCart = (product, explicitSucursal = null) => {
-    let targetSucursal = explicitSucursal;
+  // Abrir modal con detalles del producto para ingresar cantidad y sucursal
+  const openProductModal = (product, preferredSucursal = null, existingCartItem = null) => {
+    if (!product) return;
 
-    if (!targetSucursal) {
-      if (product.type === 'servicio') {
-        targetSucursal = sucursal;
-      } else {
-        // 1. Revisar si la sucursal activa donde está el cajero tiene existencia suficiente
-        const stockActualSuc = getStock(product.id, sucursal);
-        const inCartCurrent = cart.find(item => item.id === product.id && (item.sucursal || sucursal) === sucursal);
-        const currentInCartQty = inCartCurrent ? inCartCurrent.qty : 0;
-
-        if (stockActualSuc > currentInCartQty) {
-          targetSucursal = sucursal;
-        } else {
-          // 2. Si no hay existencia en la sucursal activa, buscar automáticamente otra sucursal que sí tenga existencia
-          const altBranch = SUCURSALES.find(s => {
-            if (s.id === sucursal) return false;
-            const st = getStock(product.id, s.id);
-            const inCartAlt = cart.find(item => item.id === product.id && (item.sucursal || sucursal) === s.id);
-            const altQty = inCartAlt ? inCartAlt.qty : 0;
-            return st > altQty;
-          });
-
-          if (altBranch) {
-            targetSucursal = altBranch.id;
-          } else {
-            targetSucursal = sucursal;
-          }
-        }
+    let targetBranch = preferredSucursal || existingCartItem?.sucursal || sucursal;
+    if (!preferredSucursal && !existingCartItem && product.type !== 'servicio') {
+      const currentStock = getStock(product.id, sucursal);
+      if (currentStock <= 0) {
+        const alt = SUCURSALES.find(s => s.id !== sucursal && getStock(product.id, s.id) > 0);
+        if (alt) targetBranch = alt.id;
       }
     }
 
-    const finalSucursal = targetSucursal || sucursal;
+    const isEditing = !!existingCartItem;
+    const initialQty = existingCartItem ? existingCartItem.qty : 1;
+    const initialDiscount = existingCartItem ? (existingCartItem.discount || 0) : 0;
+    const initialDiscountPercent = existingCartItem ? (existingCartItem.discountPercent || 0) : 0;
+    const initialDiscountMode = existingCartItem ? (existingCartItem.discountMode || (isMostrador ? 'C$' : '%')) : (isMostrador ? 'C$' : '%');
+
+    setProductConfigModal({
+      product,
+      sucursal: targetBranch,
+      qty: initialQty,
+      discount: initialDiscount,
+      discountPercent: initialDiscountPercent,
+      discountMode: initialDiscountMode,
+      isEditing,
+      existingCartItemId: existingCartItem ? getItemKey(existingCartItem) : null
+    });
+
+    setSearchCode('');
+  };
+
+  // Guardar o actualizar producto configurado desde el modal
+  const handleSaveProductConfig = ({ product, sucursal: chosenSucursal, qty, discount, discountPercent, discountMode, isEditing, existingCartItemId }) => {
+    const finalSucursal = chosenSucursal || sucursal;
     const targetCartId = `${product.id}__${finalSucursal}`;
     const stockDisponible = product.type === 'servicio' ? 999999 : getStock(product.id, finalSucursal);
 
-    const existing = cart.find(item => getItemKey(item) === targetCartId);
-    const requestedQty = existing ? existing.qty + 1 : 1;
-
-    if (product.type !== 'servicio' && requestedQty > stockDisponible) {
+    if (product.type !== 'servicio' && qty > stockDisponible) {
       toast.error(`Stock insuficiente en ${getBranchName(finalSucursal)}. Solo quedan ${stockDisponible} unidades disponibles.`);
       return;
     }
 
-    const { aplica, porcentaje } = evalClienteDescuento(clienteActualObj, metodoPago);
+    if (qty <= 0) {
+      if (isEditing && existingCartItemId) {
+        setCart(cart.filter(c => getItemKey(c) !== existingCartItemId));
+        toast.success('Producto removido de la factura');
+      }
+      setProductConfigModal(null);
+      return;
+    }
 
-    if (existing) {
-      const newQty = existing.qty + 1;
-      const itemTotal = existing.price * newQty;
-      let finalDiscount = existing.discount;
-      let finalPercent = existing.discountPercent || 0;
-
-      if (!isMostrador) {
-        if (hasPrivilegios && aplica) {
-          finalPercent = porcentaje;
-          finalDiscount = Number(((itemTotal * finalPercent) / 100).toFixed(2));
+    if (isEditing && existingCartItemId) {
+      if (existingCartItemId !== targetCartId) {
+        // Cambió de sucursal
+        const remaining = cart.filter(c => getItemKey(c) !== existingCartItemId);
+        const alreadyInNew = remaining.find(c => getItemKey(c) === targetCartId);
+        if (alreadyInNew) {
+          const combinedQty = qty;
+          setCart(remaining.map(c => getItemKey(c) === targetCartId ? {
+            ...c,
+            qty: combinedQty,
+            discount,
+            discountPercent,
+            discountMode
+          } : c));
         } else {
-          finalPercent = 0;
-          finalDiscount = 0;
+          setCart([...remaining, {
+            ...product,
+            cartItemId: targetCartId,
+            sucursal: finalSucursal,
+            qty,
+            discount,
+            discountPercent,
+            discountMode
+          }]);
         }
       } else {
-        if (existing.discountMode === '%') {
-          finalPercent = existing.discountPercent || 0;
-          finalDiscount = Number(((itemTotal * finalPercent) / 100).toFixed(2));
-        } else {
-          finalDiscount = Math.min(itemTotal, existing.discount || 0);
-          finalPercent = itemTotal > 0 ? Number(((finalDiscount / itemTotal) * 100).toFixed(1)) : 0;
-        }
+        setCart(cart.map(c => getItemKey(c) === existingCartItemId ? {
+          ...c,
+          qty,
+          discount,
+          discountPercent,
+          discountMode
+        } : c));
       }
-
-      setCart(cart.map(item => getItemKey(item) === targetCartId ? { 
-        ...item, 
-        qty: newQty, 
-        discount: finalDiscount,
-        discountPercent: finalPercent,
-        discountMode: isMostrador ? (item.discountMode || 'C$') : '%'
-      } : item));
+      toast.success(`Artículo actualizado: ${product.name}`);
     } else {
-      const itemTotal = product.price * 1;
-      let initialPercent = 0;
-      let initialDiscount = 0;
-
-      if (!isMostrador && hasPrivilegios && aplica) {
-        initialPercent = porcentaje;
-        initialDiscount = Number(((itemTotal * porcentaje) / 100).toFixed(2));
-      }
-
-      setCart([...cart, { 
-        ...product, 
-        cartItemId: targetCartId,
-        sucursal: finalSucursal,
-        qty: 1, 
-        discount: initialDiscount,
-        discountPercent: initialPercent,
-        discountMode: (!isMostrador && hasPrivilegios && aplica) ? '%' : 'C$'
-      }]);
-
-      if (finalSucursal !== sucursal) {
-        toast(`📍 Facturando desde ${getBranchName(finalSucursal)} (Existencia disponible)`, { icon: '📦' });
+      // Nuevo artículo agregado
+      const existing = cart.find(item => getItemKey(item) === targetCartId);
+      if (existing) {
+        const newTotal = existing.qty + qty;
+        if (product.type !== 'servicio' && newTotal > stockDisponible) {
+          toast.error(`Supera el stock disponible en ${getBranchName(finalSucursal)} (${stockDisponible}).`);
+          return;
+        }
+        setCart(cart.map(item => getItemKey(item) === targetCartId ? {
+          ...item,
+          qty: newTotal,
+          discount: discount || item.discount,
+          discountPercent: discountPercent || item.discountPercent,
+          discountMode: discountMode || item.discountMode
+        } : item));
+        toast.success(`Se agregaron +${qty} a ${product.name}`);
+      } else {
+        setCart([...cart, {
+          ...product,
+          cartItemId: targetCartId,
+          sucursal: finalSucursal,
+          qty,
+          discount,
+          discountPercent,
+          discountMode
+        }]);
+        toast.success(`Agregado a la factura: ${product.name}`);
       }
     }
+
+    setProductConfigModal(null);
+  };
+
+  const addToCart = (product, explicitSucursal = null) => {
+    // Abrir modal ergonómico para definir cantidad y sucursal
+    openProductModal(product, explicitSucursal);
   };
 
   const handleBarcodeInput = (code) => {
@@ -637,34 +662,8 @@ export default function POS() {
     }
 
     if (match) {
-      if (match.type !== 'servicio') {
-        const stockActual = getStock(match.id, sucursal);
-        const inCartCurrent = cart.find(i => getItemKey(i) === `${match.id}__${sucursal}`);
-        const nextQty = inCartCurrent ? inCartCurrent.qty + 1 : 1;
-
-        if (nextQty > stockActual) {
-          // Intentar en otra sucursal si la activa no tiene existencia
-          const altBranch = SUCURSALES.find(s => {
-            if (s.id === sucursal) return false;
-            const st = getStock(match.id, s.id);
-            const inCartAlt = cart.find(i => getItemKey(i) === `${match.id}__${s.id}`);
-            const altQty = inCartAlt ? inCartAlt.qty + 1 : 1;
-            return st >= altQty;
-          });
-
-          if (altBranch) {
-            addToCart(match, altBranch.id);
-            setSearchCode('');
-            toast.success(`⚡ Escaneado: ${match.name} (Asignado a ${altBranch.nombre} por existencia)`, { icon: '📦' });
-            return;
-          } else {
-            toast.error(`⚠️ Stock insuficiente en todas las sucursales para ${match.name}.`);
-            return;
-          }
-        }
-      }
-      addToCart(match, sucursal);
-      setSearchCode('');
+      const existingInCart = cart.find(i => i.id === match.id);
+      openProductModal(match, null, existingInCart);
       toast.success(`⚡ Escaneado: ${match.name}`, { icon: '📦' });
     } else {
       toast.error(`No se encontró ningún producto con código: "${code.trim()}"`);
@@ -1585,22 +1584,16 @@ export default function POS() {
                           {isService ? (
                             <button 
                               type="button"
-                              onClick={() => {
-                                addToCart(p, sucursal);
-                                setSearchCode('');
-                              }}
+                              onClick={() => openProductModal(p, sucursal)}
                               className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm active:scale-95 transition-all"
                             >
-                              <Plus size={14} /> Agregar
+                              <Plus size={14} /> Configurar
                             </button>
                           ) : hasStockInCurrent ? (
                             <div className="flex items-center gap-1">
                               <button 
                                 type="button"
-                                onClick={() => {
-                                  addToCart(p, sucursal);
-                                  setSearchCode('');
-                                }}
+                                onClick={() => openProductModal(p, sucursal)}
                                 className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm active:scale-95 transition-all"
                                 title={`Agregar desde ${getBranchName(sucursal)}`}
                               >
@@ -1611,10 +1604,7 @@ export default function POS() {
                                 <button
                                   key={otherSuc.id}
                                   type="button"
-                                  onClick={() => {
-                                    addToCart(p, otherSuc.id);
-                                    setSearchCode('');
-                                  }}
+                                  onClick={() => openProductModal(p, otherSuc.id)}
                                   className="bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all active:scale-95"
                                   title={`Facturar desde ${otherSuc.nombre} (${getStock(p.id, otherSuc.id)} disp.)`}
                                 >
@@ -1625,10 +1615,7 @@ export default function POS() {
                           ) : hasStockAnywhere && otherSucWithStock ? (
                             <button 
                               type="button"
-                              onClick={() => {
-                                addToCart(p, otherSucWithStock.id);
-                                setSearchCode('');
-                              }}
+                              onClick={() => openProductModal(p, otherSucWithStock.id)}
                               className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm active:scale-95 transition-all"
                               title={`Agotado en ${getBranchShort(sucursal)}. Facturar desde ${otherSucWithStock.nombre}`}
                             >
@@ -1650,16 +1637,17 @@ export default function POS() {
           </div>
 
           {/* LISTA DE PRODUCTOS QUE SE ESTÁN FACTURANDO */}
-          <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
-            <div className="flex justify-between items-center mb-3">
-              <h2 className="font-bold text-base text-gray-800 flex items-center gap-2">
+          <div id="lista-carrito-pos" className="bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-gray-100 space-y-3">
+            <div className="flex justify-between items-center pb-2 border-b border-gray-100">
+              <h2 className="font-black text-sm sm:text-base text-gray-800 flex items-center gap-2">
                 <ShoppingCart className="text-green-600" size={18} />
-                Lista de Productos y Servicios a Facturar ({cart.length})
+                Lista de Artículos a Facturar ({cart.length})
               </h2>
               {cart.length > 0 && (
                 <button 
+                  type="button"
                   onClick={() => setCart([])} 
-                  className="text-xs text-red-500 hover:text-red-700 font-bold"
+                  className="text-xs text-red-500 hover:text-red-700 font-bold px-2 py-1 rounded-lg hover:bg-red-50 transition-colors"
                 >
                   Vaciar lista
                 </button>
@@ -1667,26 +1655,15 @@ export default function POS() {
             </div>
 
             {cart.length === 0 ? (
-              <div className="py-12 px-4 text-center border-2 border-dashed border-gray-100 rounded-xl bg-gray-50/50">
-                <ShoppingCart className="mx-auto text-gray-300 mb-2" size={36} />
-                <p className="font-bold text-gray-600 text-sm">Esta factura está vacía</p>
-                <p className="text-xs text-gray-400 mt-1">Escribe en el buscador de arriba para agregar productos o servicios.</p>
+              <div className="py-10 px-4 text-center border-2 border-dashed border-gray-100 rounded-2xl bg-gray-50/50">
+                <ShoppingCart className="mx-auto text-gray-300 mb-2" size={38} />
+                <p className="font-bold text-gray-700 text-sm">Esta factura está vacía</p>
+                <p className="text-xs text-gray-400 mt-1 max-w-xs mx-auto">
+                  Selecciona productos en el buscador de arriba o escanea con la cámara para agregarlos con sus cantidades.
+                </p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm whitespace-nowrap">
-                  <thead className="bg-gray-50 text-gray-500 font-bold border-b border-gray-100">
-                    <tr>
-                      <th className="p-3">Descripción</th>
-                      <th className="p-3 text-center w-36">Sucursal Origen</th>
-                      <th className="p-3 text-center w-28">Cant.</th>
-                      <th className="p-3 text-right">P. Unit</th>
-                      <th className="p-3 text-center w-36">Descuento</th>
-                      <th className="p-3 text-right font-black text-blue-900">Subtotal</th>
-                      <th className="p-3 text-center w-10"></th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
+              <div className="space-y-3">
                     {cart.map((item) => {
                       const itemKey = getItemKey(item);
                       const effectiveDiscount = getItemDiscount(item);
@@ -1695,11 +1672,15 @@ export default function POS() {
                       const isPercentMode = item.discountMode === '%';
                       const itemBranch = item.sucursal || sucursal;
                       const stockInBranch = item.type === 'servicio' ? '∞' : getStock(item.id, itemBranch);
-
                       return (
-                        <tr key={itemKey} className="hover:bg-gray-50 transition-colors">
-                          <td className="p-3">
-                            <div className="flex items-center gap-2.5">
+                        <div 
+                          key={itemKey}
+                          className="p-3.5 sm:p-4 rounded-2xl border border-gray-200/90 bg-white hover:border-blue-300 transition-all shadow-2xs space-y-3"
+                        >
+                          {/* FILA SUPERIOR: FOTO, IDENTIFICACIÓN, SUCURSAL Y BOTÓN ELIMINAR */}
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-start gap-3 min-w-0 flex-1">
+                              {/* Foto con visor */}
                               {item.image ? (
                                 <div 
                                   className="relative group shrink-0 cursor-pointer"
@@ -1709,182 +1690,115 @@ export default function POS() {
                                   <img 
                                     src={item.image} 
                                     alt={item.name} 
-                                    className="w-9 h-9 rounded-lg object-cover border border-gray-200 shadow-xs cursor-zoom-in group-hover:opacity-85 transition-opacity" 
+                                    className="w-12 h-12 rounded-xl object-cover border border-gray-200 shadow-xs cursor-zoom-in group-hover:opacity-85 transition-opacity" 
                                   />
-                                  <div className="absolute inset-0 bg-black/25 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <div className="absolute inset-0 bg-black/25 rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                                     <Maximize2 size={12} className="text-white" />
                                   </div>
                                 </div>
                               ) : (
-                                <div className="w-9 h-9 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-400 shrink-0">
-                                  {item.type === 'servicio' ? <span className="text-xs">🔧</span> : <Package size={16} />}
+                                <div className="w-12 h-12 rounded-xl bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-400 shrink-0">
+                                  {item.type === 'servicio' ? <Wrench size={18} className="text-purple-500" /> : <Package size={18} />}
                                 </div>
                               )}
-                              <div>
+
+                              <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-1.5 flex-wrap">
-                                  {item.type === 'servicio' && <span className="text-purple-600 font-bold text-xs bg-purple-50 px-1.5 py-0.5 rounded">Servicio</span>}
-                                  <span className="font-bold text-gray-800">{item.name}</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <span className="font-mono text-[11px] text-gray-400">{item.id}</span>
-                                  <span className="text-[10px] text-gray-400">• Disp: {stockInBranch}</span>
-                                </div>
-                              </div>
-                            </div>
-                          </td>
-
-                          {/* SUCURSAL ORIGEN */}
-                          <td className="p-3 text-center">
-                            <div className="inline-flex items-center gap-1">
-                              <select
-                                value={itemBranch}
-                                onChange={(e) => handleChangeItemSucursal(item, e.target.value)}
-                                className={`text-[11px] font-bold rounded-lg px-2 py-1 border shadow-2xs outline-none cursor-pointer transition-all ${
-                                  itemBranch === 'SUC-01'
-                                    ? 'bg-blue-50 text-blue-700 border-blue-200 focus:ring-1 focus:ring-blue-400'
-                                    : 'bg-purple-50 text-purple-700 border-purple-200 focus:ring-1 focus:ring-purple-400'
-                                }`}
-                                title="Sucursal de donde se despacha el producto y se emitirá la factura"
-                              >
-                                {SUCURSALES.map(s => {
-                                  const st = item.type === 'servicio' ? '∞' : getStock(item.id, s.id);
-                                  const disabled = item.type !== 'servicio' && st < item.qty;
-                                  return (
-                                    <option key={s.id} value={s.id} disabled={disabled}>
-                                      {s.short} ({st} disp.) {disabled ? '⚠️ Insuficiente' : ''}
-                                    </option>
-                                  );
-                                })}
-                              </select>
-                              {itemBranch !== sucursal && (
-                                <span className="text-[9px] font-black uppercase text-purple-700 bg-purple-100 px-1 py-0.5 rounded border border-purple-200" title={`Facturado desde ${getBranchName(itemBranch)}`}>
-                                  Ext
-                                </span>
-                              )}
-                            </div>
-                          </td>
-
-                          <td className="p-3">
-                            <div className="flex items-center justify-center gap-1">
-                              <button 
-                                type="button"
-                                onClick={() => updateCartQty(itemKey, item.qty - 1)}
-                                className="w-6 h-6 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded flex items-center justify-center font-bold"
-                              >
-                                <Minus size={12} />
-                              </button>
-                              <input 
-                                type="number" 
-                                min="1" 
-                                value={item.qty} 
-                                onChange={(e) => updateCartQty(itemKey, parseInt(e.target.value) || 1)}
-                                className="w-10 text-center font-bold border rounded py-0.5 outline-none text-xs" 
-                              />
-                              <button 
-                                type="button"
-                                onClick={() => updateCartQty(itemKey, item.qty + 1)}
-                                className="w-6 h-6 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded flex items-center justify-center font-bold"
-                              >
-                                <Plus size={12} />
-                              </button>
-                            </div>
-                          </td>
-                          <td className="p-3 text-right text-gray-600 font-medium">C$ {item.price.toFixed(0)}</td>
-                          
-                          {/* CAMPO DE DESCUENTO: 3 TIERS BLINDADOS */}
-                          <td className="p-3 text-center">
-                            {isMostrador ? (
-                              /* TIER 3: CLIENTE DE MOSTRADOR -> Descuento manual interactivo (C$ <-> %) */
-                              <div className="flex flex-col items-center gap-0.5">
-                                <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white shadow-sm focus-within:ring-2 focus-within:ring-blue-400">
-                                  <input 
-                                    type="number" 
-                                    min="0" 
-                                    step={isPercentMode ? "1" : "5"}
-                                    value={isPercentMode ? (item.discountPercent || 0) : (item.discount || 0)}
-                                    onChange={(e) => handleDiscountChange(itemKey, e.target.value, isPercentMode ? '%' : 'C$')}
-                                    className="w-16 text-center py-1 text-xs text-red-600 font-bold outline-none"
-                                    title={isPercentMode ? "Porcentaje de descuento de mostrador" : "Descuento en Córdobas de mostrador"}
-                                  />
-                                  <button
-                                    type="button"
-                                    onClick={() => toggleDiscountMode(itemKey)}
-                                    className={`px-1.5 py-1 text-[11px] font-black border-l transition-colors flex items-center gap-0.5 ${isPercentMode ? 'bg-purple-100 text-purple-700 hover:bg-purple-200' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'}`}
-                                    title="Clic para cambiar entre Porcentaje (%) y Córdobas (C$)"
-                                  >
-                                    {isPercentMode ? '%' : 'C$'}
-                                    <RefreshCw size={9} className="opacity-60" />
-                                  </button>
-                                </div>
-                                <span className="text-[10px] text-gray-400 font-semibold">
-                                  {isPercentMode 
-                                    ? `≈ C$ ${effectiveDiscount.toFixed(2)}` 
-                                    : `≈ ${effectivePercent.toFixed(1)}%`}
-                                </span>
-                              </div>
-                            ) : hasPrivilegios ? (
-                              /* TIER 1: CLIENTE CON PRIVILEGIOS VIP -> Automático y Bloqueado */
-                              descuentoEval.aplica ? (
-                                <div className="flex flex-col items-center gap-0.5">
-                                  <div className="inline-flex items-center gap-1 bg-amber-50 border border-amber-300 text-amber-800 px-2.5 py-1 rounded-lg text-xs font-black shadow-xs">
-                                    <Sparkles size={11} className="text-amber-600" />
-                                    <span>VIP {clienteActualObj.descuento_fijo}%</span>
-                                    <Lock size={10} className="text-amber-500 opacity-70" title="Fijado por gerencia (Bloqueado)" />
-                                  </div>
-                                  <span className="text-[10px] font-bold text-amber-700">
-                                    - C$ {effectiveDiscount.toFixed(2)}
+                                  <span className="font-mono text-xs font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
+                                    {item.id}
+                                  </span>
+                                  {item.type === 'servicio' && (
+                                    <span className="text-purple-700 font-bold text-[11px] bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200">
+                                      Servicio
+                                    </span>
+                                  )}
+                                  {/* Badge de Sucursal de Despacho */}
+                                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${
+                                    itemBranch === 'SUC-01'
+                                      ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                      : 'bg-purple-50 text-purple-700 border-purple-200'
+                                  }`}>
+                                    📍 {getBranchShort(itemBranch)} ({stockInBranch} disp.)
                                   </span>
                                 </div>
-                              ) : (
-                                <div className="flex flex-col items-center gap-0.5">
-                                  <div className="inline-flex items-center gap-1 bg-gray-100 border border-gray-200 text-gray-500 px-2.5 py-1 rounded-lg text-xs font-bold" title={`No califica para descuento con pago en ${metodoPago}`}>
-                                    <Lock size={11} className="text-gray-400" />
-                                    <span>0.00</span>
-                                  </div>
-                                  <span className="text-[9px] font-bold text-red-500">
-                                    Sin desc. ({metodoPago})
-                                  </span>
-                                </div>
-                              )
-                            ) : (
-                              /* TIER 2: CLIENTE REGISTRADO SIN PRIVILEGIOS -> Bloqueado a 0.00 */
-                              <div className="flex flex-col items-center gap-0.5">
-                                <div className="inline-flex items-center gap-1 bg-gray-100 border border-gray-200 text-gray-400 px-2.5 py-1 rounded-lg text-xs font-bold" title="Cliente sin privilegios de descuento autorizados por gerencia">
-                                  <Lock size={11} />
-                                  <span>0.00</span>
-                                </div>
-                                <span className="text-[9px] font-medium text-gray-400">
-                                  Sin privilegio
-                                </span>
-                              </div>
-                            )}
-                          </td>
 
-                          <td className="p-3 text-right font-black text-blue-800 text-sm">
-                            C$ {itemSubtotal.toFixed(2)}
-                          </td>
-                          <td className="p-3 text-center">
+                                <h3 className="font-black text-gray-900 text-sm sm:text-base mt-1 leading-snug">
+                                  {item.name}
+                                </h3>
+                              </div>
+                            </div>
+
+                            {/* BOTÓN ELIMINAR */}
                             <button 
                               type="button"
                               onClick={() => setCart(cart.filter(c => getItemKey(c) !== itemKey))}
-                              className="text-gray-400 hover:text-red-500 p-1 rounded transition-colors"
+                              className="text-gray-400 hover:text-red-500 hover:bg-red-50 p-2 rounded-xl transition-colors shrink-0"
                               title="Eliminar de la lista"
                             >
-                              <Trash2 size={16} />
+                              <Trash2 size={18} />
                             </button>
-                          </td>
-                        </tr>
+                          </div>
+
+                          {/* FILA INFERIOR: CANTIDAD, DETALLE DE PRECIO, DESCUENTO Y BOTÓN EDITAR */}
+                          <div className="flex flex-wrap items-center justify-between gap-2.5 pt-2 border-t border-gray-100 bg-gray-50/70 p-2.5 rounded-xl">
+                            {/* Control Rápido de Cantidad & Botón Editar */}
+                            <div className="flex items-center gap-2">
+                              <div className="flex items-center bg-white border border-gray-200 rounded-xl overflow-hidden shadow-2xs">
+                                <button 
+                                  type="button"
+                                  onClick={() => updateCartQty(itemKey, item.qty - 1)}
+                                  className="w-8 h-8 flex items-center justify-center text-gray-600 hover:bg-gray-100 font-bold active:scale-95"
+                                  title="Restar 1"
+                                >
+                                  <Minus size={14} />
+                                </button>
+                                <span className="w-9 text-center font-black text-gray-800 text-sm">
+                                  {item.qty}
+                                </span>
+                                <button 
+                                  type="button"
+                                  onClick={() => updateCartQty(itemKey, item.qty + 1)}
+                                  className="w-8 h-8 flex items-center justify-center text-gray-600 hover:bg-gray-100 font-bold active:scale-95"
+                                  title="Sumar 1"
+                                >
+                                  <Plus size={14} />
+                                </button>
+                              </div>
+
+                              {/* Botón táctil para abrir modal y editar detalles completos */}
+                              <button
+                                type="button"
+                                onClick={() => openProductModal(item, item.sucursal, item)}
+                                className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 transition-all active:scale-95"
+                                title="Editar cantidad, sucursal o descuento en ventana completa"
+                              >
+                                <span>✏️ Modificar</span>
+                              </button>
+                            </div>
+
+                            {/* Detalle numérico: Precio unitario y Subtotal */}
+                            <div className="text-right">
+                              <div className="text-xs text-gray-500 font-medium flex items-center gap-1 justify-end">
+                                <span>{item.qty} × C$ {item.price.toFixed(2)}</span>
+                                {effectiveDiscount > 0 && (
+                                  <span className="text-red-600 font-bold">(- C$ {effectiveDiscount.toFixed(2)})</span>
+                                )}
+                              </div>
+                              <div className="text-base font-black text-blue-900">
+                                C$ {itemSubtotal.toFixed(2)}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
                       );
-                    })}
-                  </tbody>
-                </table>
+                })}
               </div>
             )}
           </div>
         </div>
 
         {/* Lado Derecho (Resumen y Cobro) */}
-        <div className="space-y-4">
+        <div id="resumen-cobro-pos" className="space-y-4">
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 border-t-4 border-t-blue-600 space-y-3">
             <h2 className="font-black text-gray-400 uppercase tracking-wider text-xs">Resumen de Factura</h2>
             
@@ -2170,6 +2084,56 @@ export default function POS() {
           </div>
         </div>
       )}
+
+      {/* BARRA FLOTANTE FIJA INFERIOR PARA MÓVIL */}
+      {cart.length > 0 && (
+        <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-gray-200 p-3 shadow-2xl flex items-center justify-between animate-in slide-in-from-bottom duration-200">
+          <div>
+            <span className="text-[10px] uppercase font-bold text-gray-400 block leading-tight">
+              {cart.reduce((s, i) => s + i.qty, 0)} arts. en Factura
+            </span>
+            <span className="text-base font-black text-blue-900 leading-tight">
+              Total: C$ {total.toFixed(2)}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                document.getElementById('lista-carrito-pos')?.scrollIntoView({ behavior: 'smooth' });
+              }}
+              className="px-3 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs"
+            >
+              Ver Carrito
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                document.getElementById('resumen-cobro-pos')?.scrollIntoView({ behavior: 'smooth' });
+              }}
+              className="px-4 py-2 rounded-xl bg-green-600 hover:bg-green-700 text-white font-black text-xs shadow-md shadow-green-200 flex items-center gap-1 active:scale-95"
+            >
+              <Save size={16} />
+              Cobrar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL ERGONÓMICO DE CONFIGURACIÓN Y CANTIDAD DE PRODUCTO */}
+      <ProductConfigModal
+        isOpen={!!productConfigModal}
+        onClose={() => setProductConfigModal(null)}
+        config={productConfigModal}
+        onSave={handleSaveProductConfig}
+        SUCURSALES={SUCURSALES}
+        getStock={getStock}
+        clienteActualObj={clienteActualObj}
+        isMostrador={isMostrador}
+        hasPrivilegios={hasPrivilegios}
+        descuentoEval={descuentoEval}
+        metodoPago={metodoPago}
+      />
 
       {/* MODAL ESCÁNER DE CÓDIGO DE BARRAS POR CÁMARA */}
       <BarcodeScannerModal 
