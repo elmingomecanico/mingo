@@ -175,11 +175,15 @@ export default function PortalEmpleado() {
   const totalSaldoDeuda = deudasActivas.reduce((sum, d) => sum + Number(d.saldo_pendiente || 0), 0);
   const proximaDeduccionTotal = deudasActivas.reduce((sum, d) => sum + Math.min(Number(d.cuota_por_pago || 0), Number(d.saldo_pendiente || 0)), 0);
 
-  // Comisiones acumuladas de órdenes completadas en el mes
+  // Comisiones acumuladas de órdenes completadas (Listo o Completado) en el mes
   const primerDiaMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
   const comisionesMes = ordenes
-    .filter(ot => ot.estado === 'Completado' && new Date(ot.fecha_creacion) >= primerDiaMes)
-    .reduce((sum, ot) => sum + Number(ot.comision_mecanico_monto || 0), 0);
+    .filter(ot => (ot.estado === 'Listo' || ot.estado === 'Completado') && new Date(ot.fecha_creacion) >= primerDiaMes)
+    .reduce((sum, ot) => {
+      const comisionMonto = Number(ot.comision_mecanico_monto) || 
+        (Number(ot.total_servicios || 0) * (Number(ot.comision_mecanico_porcentaje || empleadoData?.porcentaje_comision || 50) / 100));
+      return sum + comisionMonto;
+    }, 0);
 
   // Auto-cálculo de días en vacaciones
   const handleFechasVacacionesChange = (inicio, fin) => {

@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { LockOpen, Calculator, DollarSign, Coins, AlertCircle, X, ShieldCheck } from 'lucide-react';
-import { ref, push, set, runTransaction } from 'firebase/database';
+import React, { useState, useEffect } from 'react';
+import { LockOpen, Calculator, DollarSign, Coins, AlertCircle, X, ShieldCheck, Store } from 'lucide-react';
+import { ref, push, set, update, runTransaction } from 'firebase/database';
 import { rtdb } from '../firebase';
 import toast from 'react-hot-toast';
 import MoneyCounterModal from './MoneyCounterModal';
@@ -10,8 +10,11 @@ export default function CashOpenModal({
   onClose,
   sucursal = 'SUC-01',
   currentUser = null,
+  assignedCaja = null,
+  availableCajas = [],
   onOpenSuccess = () => {}
 }) {
+  const [selectedCajaId, setSelectedCajaId] = useState('');
   const [montoCordobas, setMontoCordobas] = useState('');
   const [montoDolares, setMontoDolares] = useState('');
   const [tipoCambio, setTipoCambio] = useState(36.62);
@@ -20,12 +23,26 @@ export default function CashOpenModal({
   const [desgloseCounts, setDesgloseCounts] = useState(null);
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    if (assignedCaja?.id) {
+      setSelectedCajaId(assignedCaja.id);
+    } else if (availableCajas.length > 0) {
+      setSelectedCajaId(availableCajas[0].id);
+    }
+  }, [assignedCaja, availableCajas]);
+
   if (!isOpen) return null;
 
   const nioVal = parseFloat(montoCordobas) || 0;
   const usdVal = parseFloat(montoDolares) || 0;
   const tcVal = parseFloat(tipoCambio) || 36.62;
   const totalInicial = nioVal + (usdVal * tcVal);
+
+  const activeCaja = availableCajas.find(c => c.id === selectedCajaId) || assignedCaja || {
+    id: 'CAJA-01',
+    codigo: 'CAJA-01',
+    nombre: 'Caja Principal'
+  };
 
   const handleApplyCounter = (result) => {
     setMontoCordobas(result.cordobas.toString());
@@ -61,6 +78,9 @@ export default function CashOpenModal({
         id: turnoId,
         numero_turno: humanId,
         sucursal,
+        id_caja: activeCaja.id,
+        codigo_caja: activeCaja.codigo,
+        nombre_caja: activeCaja.nombre,
         cajero_id: currentUser?.id || 'anon',
         cajero_nombre: cajeroName,
         fecha_apertura: new Date().toISOString(),
@@ -72,12 +92,27 @@ export default function CashOpenModal({
         observaciones_apertura: observaciones.trim(),
         estado: 'Abierta',
         total_ventas_efectivo: 0,
+        total_ventas_productos: 0,
+        total_ventas_servicios: 0,
         total_salidas_efectivo: 0
       };
 
       await set(turnoRef, newTurno);
 
-      toast.success(`Caja abierta con éxito. Turno: ${humanId}`);
+      try {
+        await update(ref(rtdb, `configuracion/cajas/${activeCaja.id}`), {
+          estado_turno: 'Abierto',
+          turno_actual_id: turnoId,
+          turno_actual_numero: humanId,
+          usuario_apertura_nombre: cajeroName,
+          fecha_apertura: new Date().toISOString(),
+          monto_inicial_cordobas: totalInicial
+        });
+      } catch (errSync) {
+        console.error("Error actualizando configuracion/cajas:", errSync);
+      }
+
+      toast.success(`Caja abierta con éxito (${activeCaja.codigo}). Turno: ${humanId}`);
       onOpenSuccess(newTurno);
       onClose();
     } catch (err) {
@@ -113,7 +148,25 @@ export default function CashOpenModal({
           <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
             <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
             {/* Metadatos informativos */}
-            <div className="grid grid-cols-2 gap-3 bg-gray-50 p-3 rounded-2xl border border-gray-100 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-gray-50 p-3 rounded-2xl border border-gray-100 text-xs">
+              <div>
+                <span className="block text-gray-400 font-bold uppercase text-[10px]">Caja Registradora</span>
+                {currentUser?.rol === 'SuperAdmin' && availableCajas.length > 1 ? (
+                  <select 
+                    value={selectedCajaId}
+                    onChange={(e) => setSelectedCajaId(e.target.value)}
+                    className="w-full mt-0.5 p-1 text-xs font-black text-blue-700 bg-white border border-blue-200 rounded-lg outline-none"
+                  >
+                    {availableCajas.map(c => (
+                      <option key={c.id} value={c.id}>{c.codigo} - {c.nombre}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="font-black text-blue-700 flex items-center gap-1">
+                    <Store size={13} /> {activeCaja.codigo} - {activeCaja.nombre}
+                  </span>
+                )}
+              </div>
               <div>
                 <span className="block text-gray-400 font-bold uppercase text-[10px]">Sucursal</span>
                 <span className="font-black text-gray-800">{sucursal}</span>

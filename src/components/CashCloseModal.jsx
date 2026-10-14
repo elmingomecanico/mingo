@@ -145,6 +145,19 @@ export default function CashCloseModal({
 
       await update(ref(rtdb, `turnos_caja/${activeTurno.id}`), updateData);
 
+      if (activeTurno.id_caja) {
+        try {
+          await update(ref(rtdb, `configuracion/cajas/${activeTurno.id_caja}`), {
+            estado_turno: 'Cerrado',
+            turno_actual_id: null,
+            turno_actual_numero: null,
+            ultimo_cierre: fechaCierre
+          });
+        } catch (e) {
+          console.error("Error actualizando estado en configuracion/cajas:", e);
+        }
+      }
+
       const fullClosedTurno = {
         ...activeTurno,
         ...updateData,

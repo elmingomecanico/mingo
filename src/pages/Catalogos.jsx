@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Settings, Building2, Printer, Hash, ShieldAlert } from 'lucide-react';
+import { Settings, Building2, Printer, Hash, ShieldAlert, Store } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import BranchManager from '../components/catalogos/BranchManager';
 import PrintFormatEditor from '../components/catalogos/PrintFormatEditor';
 import ConsecutivosManager from '../components/catalogos/ConsecutivosManager';
+import CajasManager from '../components/catalogos/CajasManager';
 
 export default function Catalogos() {
   const { user } = useAuth();
@@ -15,6 +16,12 @@ export default function Catalogos() {
       name: 'Sucursales y Sedes', 
       icon: <Building2 size={18} />,
       desc: 'Administración de sedes, encargados, direcciones y prefijos de sucursal.'
+    },
+    { 
+      id: 'cajas', 
+      name: 'Cajas Registradoras', 
+      icon: <Store size={18} />,
+      desc: 'Gestión de terminales de cobro, asignación de vendedores y control de turnos.'
     },
     { 
       id: 'impresion', 
@@ -76,6 +83,7 @@ export default function Catalogos() {
         {/* Contenido Principal */}
         <div className="flex-1 p-4 sm:p-6 min-w-0">
           {activeTab === 'sucursales' && <BranchManager user={user} />}
+          {activeTab === 'cajas' && <CajasManager user={user} />}
           {activeTab === 'impresion' && <PrintFormatEditor />}
           {activeTab === 'consecutivos' && <ConsecutivosManager user={user} />}
         </div>

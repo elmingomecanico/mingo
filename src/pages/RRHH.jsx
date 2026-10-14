@@ -549,12 +549,17 @@ export default function RRHH() {
     const end = new Date(fechaFin + 'T23:59:59');
 
     const borrador = usuarios.filter(u => u.estado === 'Activo').map(emp => {
-      // 1. Calcular Comisiones en el rango
+      // 1. Calcular Comisiones en el rango (Listo o Completado)
       const susOrdenes = ordenes.filter(ot => {
         const otDate = new Date(ot.fecha_creacion);
-        return ot.id_mecanico === emp.id && otDate >= start && otDate <= end && ot.estado === 'Completado';
+        const estaFinalizada = ot.estado === 'Listo' || ot.estado === 'Completado';
+        return ot.id_mecanico === emp.id && otDate >= start && otDate <= end && estaFinalizada;
       });
-      const totalComisiones = susOrdenes.reduce((sum, ot) => sum + (ot.comision_mecanico_monto || 0), 0);
+      const totalComisiones = susOrdenes.reduce((sum, ot) => {
+        const comisionMonto = Number(ot.comision_mecanico_monto) || 
+          (Number(ot.total_servicios || 0) * (Number(ot.comision_mecanico_porcentaje || emp.porcentaje_comision || 50) / 100));
+        return sum + comisionMonto;
+      }, 0);
 
       // 2. Obtener deudas activas que tengan saldo pendiente
       const susDeudas = deudas.filter(d => d.id_empleado === emp.id && d.estado === 'Activo' && d.saldo_pendiente > 0);

@@ -1,12 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ref, onValue } from 'firebase/database';
 import { rtdb } from '../firebase';
-import { BarChart2, DollarSign, ShoppingBag, Calendar, FileText, Lock, Printer, ArrowUpRight, CheckCircle2, AlertTriangle, Eye, X } from 'lucide-react';
+import { BarChart2, DollarSign, ShoppingBag, Calendar, FileText, Lock, Printer, ArrowUpRight, CheckCircle2, AlertTriangle, Eye, X, Store } from 'lucide-react';
 import { useReactToPrint } from 'react-to-print';
 import CashTicketPrinter from '../components/CashTicketPrinter';
+import ReporteGerencialCajas from '../components/reportes/ReporteGerencialCajas';
+import { useAuth } from '../context/AuthContext';
 
 export default function Reportes() {
-  const [activeTab, setActiveTab] = useState('ventas'); // 'ventas' | 'cierres'
+  const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState('gerencial'); // 'gerencial' | 'ventas' | 'cierres'
   const [ventas, setVentas] = useState([]);
   const [turnos, setTurnos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -99,11 +102,23 @@ export default function Reportes() {
         </select>
       </div>
 
-      {/* Pestañas: Facturas vs Cierres de Caja */}
-      <div className="flex border-b border-gray-200 gap-2">
+      {/* Pestañas: Monitor Gerencial vs Facturas vs Cierres de Caja */}
+      <div className="flex border-b border-gray-200 gap-2 overflow-x-auto">
+        <button
+          onClick={() => setActiveTab('gerencial')}
+          className={`pb-3 px-4 font-black text-sm flex items-center gap-2 border-b-2 whitespace-nowrap transition-all ${
+            activeTab === 'gerencial'
+              ? 'border-emerald-600 text-emerald-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <Store size={18} />
+          Monitor Gerencial de Cajas (Tiempo Real)
+        </button>
+
         <button
           onClick={() => setActiveTab('ventas')}
-          className={`pb-3 px-4 font-black text-sm flex items-center gap-2 border-b-2 transition-all ${
+          className={`pb-3 px-4 font-black text-sm flex items-center gap-2 border-b-2 whitespace-nowrap transition-all ${
             activeTab === 'ventas'
               ? 'border-blue-600 text-blue-600'
               : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -115,7 +130,7 @@ export default function Reportes() {
 
         <button
           onClick={() => setActiveTab('cierres')}
-          className={`pb-3 px-4 font-black text-sm flex items-center gap-2 border-b-2 transition-all ${
+          className={`pb-3 px-4 font-black text-sm flex items-center gap-2 border-b-2 whitespace-nowrap transition-all ${
             activeTab === 'cierres'
               ? 'border-amber-600 text-amber-600'
               : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -126,41 +141,47 @@ export default function Reportes() {
         </button>
       </div>
 
-      {/* Tarjetas de Métricas */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex items-center gap-5">
-          <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-emerald-50">
-            <DollarSign size={24} className="text-emerald-500" />
-          </div>
-          <div>
-            <p className="text-gray-500 font-medium text-xs uppercase tracking-wider">Ingresos de Hoy</p>
-            <h3 className="text-2xl font-black text-gray-800">C$ {ingresosHoy.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h3>
-          </div>
-        </div>
-        
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex items-center gap-5">
-          <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-blue-50">
-            <ShoppingBag size={24} className="text-blue-500" />
-          </div>
-          <div>
-            <p className="text-gray-500 font-medium text-xs uppercase tracking-wider">Facturas Emitidas Hoy</p>
-            <h3 className="text-2xl font-black text-gray-800">{ventasHoy.length}</h3>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex items-center gap-5">
-          <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-amber-50">
-            <FileText size={24} className="text-amber-500" />
-          </div>
-          <div>
-            <p className="text-gray-500 font-medium text-xs uppercase tracking-wider">Total Facturado Histórico</p>
-            <h3 className="text-2xl font-black text-gray-800">C$ {totalIngresos.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h3>
-          </div>
-        </div>
-      </div>
-
       {/* CONTENIDO SEGÚN LA PESTAÑA */}
-      {activeTab === 'ventas' ? (
+      {activeTab === 'gerencial' && (
+        <ReporteGerencialCajas user={user} />
+      )}
+
+      {/* Tarjetas de Métricas para Historial de Ventas y Cierres */}
+      {activeTab !== 'gerencial' && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex items-center gap-5">
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-emerald-50">
+              <DollarSign size={24} className="text-emerald-500" />
+            </div>
+            <div>
+              <p className="text-gray-500 font-medium text-xs uppercase tracking-wider">Ingresos de Hoy</p>
+              <h3 className="text-2xl font-black text-gray-800">C$ {ingresosHoy.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h3>
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex items-center gap-5">
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-blue-50">
+              <ShoppingBag size={24} className="text-blue-500" />
+            </div>
+            <div>
+              <p className="text-gray-500 font-medium text-xs uppercase tracking-wider">Facturas Emitidas Hoy</p>
+              <h3 className="text-2xl font-black text-gray-800">{ventasHoy.length}</h3>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex items-center gap-5">
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-amber-50">
+              <FileText size={24} className="text-amber-500" />
+            </div>
+            <div>
+              <p className="text-gray-500 font-medium text-xs uppercase tracking-wider">Total Facturado Histórico</p>
+              <h3 className="text-2xl font-black text-gray-800">C$ {totalIngresos.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h3>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'ventas' && (
         /* Historial de Ventas */
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="p-5 border-b border-gray-100 bg-gray-50/50 flex items-center gap-2">
@@ -238,7 +259,9 @@ export default function Reportes() {
             </table>
           </div>
         </div>
-      ) : (
+      )}
+
+      {activeTab === 'cierres' && (
         /* PESTAÑA: HISTORIAL Y AUDITORÍA DE CIERRES DE CAJA */
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="p-5 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">

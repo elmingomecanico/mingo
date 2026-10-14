@@ -198,11 +198,33 @@ export default function POS() {
   // Estados de Control de Caja (Apertura, Salidas a Gerencia, Cierre y Contador)
   const [activeTurno, setActiveTurno] = useState(null);
   const [turnosList, setTurnosList] = useState([]);
+  const [cajasList, setCajasList] = useState([]);
   const [salesList, setSalesList] = useState([]);
   const [isCashOpenModalOpen, setIsCashOpenModalOpen] = useState(false);
   const [isCashCloseModalOpen, setIsCashCloseModalOpen] = useState(false);
   const [isCashMovementModalOpen, setIsCashMovementModalOpen] = useState(false);
   const [isMoneyCounterOpen, setIsMoneyCounterOpen] = useState(false);
+
+  // Privilegio y asignación de caja del usuario actual
+  const userAssignedCajaId = currentUserRealtime?.id_caja_asignada;
+  const isSuperAdmin = currentUserRealtime?.rol === 'SuperAdmin';
+  const canOperatePOS = isSuperAdmin || Boolean(userAssignedCajaId);
+  const userAssignedCaja = cajasList.find(c => c.id === userAssignedCajaId);
+
+  // Computación reactiva del turno abierto para la caja del usuario o sucursal
+  useEffect(() => {
+    if (!turnosList || turnosList.length === 0) {
+      setActiveTurno(null);
+      return;
+    }
+    let abierto = null;
+    if (userAssignedCajaId) {
+      abierto = turnosList.find(t => t.id_caja === userAssignedCajaId && t.estado === 'Abierta');
+    } else if (isSuperAdmin) {
+      abierto = turnosList.find(t => t.sucursal === sucursal && t.estado === 'Abierta');
+    }
+    setActiveTurno(abierto || null);
+  }, [turnosList, userAssignedCajaId, isSuperAdmin, sucursal]);
 
   useEffect(() => {
     const prodRef = ref(rtdb, 'productos');
@@ -210,6 +232,16 @@ export default function POS() {
     const invRef = ref(rtdb, 'inventario');
     const turnosRef = ref(rtdb, 'turnos_caja');
     const ventasRef = ref(rtdb, 'ventas');
+    const cajasRef = ref(rtdb, 'configuracion/cajas');
+
+    const unsubCajas = onValue(cajasRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const val = snapshot.val();
+        setCajasList(Object.keys(val).map(k => ({ id: k, ...val[k] })));
+      } else {
+        setCajasList([]);
+      }
+    });
 
     const unsubTurnos = onValue(turnosRef, (snapshot) => {
       if (snapshot.exists()) {
@@ -219,11 +251,8 @@ export default function POS() {
           ...data[key]
         }));
         setTurnosList(list);
-        const abierto = list.find(t => t.sucursal === sucursal && t.estado === 'Abierta');
-        setActiveTurno(abierto || null);
       } else {
         setTurnosList([]);
-        setActiveTurno(null);
       }
     });
 
@@ -357,6 +386,7 @@ export default function POS() {
       unsubUsr();
       unsubTurnos();
       unsubVentas();
+      unsubCajas();
       unsubPoliticas();
       unsubCurrentUser();
       unsubBanc();
@@ -1002,9 +1032,14 @@ export default function POS() {
   };
 
   const processSale = async () => {
+    // Validar asignación de caja por gerencia
+    if (!canOperatePOS) {
+      return toast.error('⛔ Acceso denegado: Tu usuario no tiene asignada una Caja Registradora por la administración. No puedes facturar en el POS.', { duration: 5500 });
+    }
+
     // Validar que la caja esté abierta para poder facturar
     if (!activeTurno) {
-      toast.error('⚠️ La caja está cerrada en esta sucursal. Debe abrir turno de caja para registrar el fondo inicial antes de facturar.', { duration: 4500 });
+      toast.error('⚠️ La caja está cerrada. Debe abrir turno de caja para registrar el fondo inicial antes de facturar.', { duration: 4500 });
       setIsCashOpenModalOpen(true);
       return;
     }
@@ -1068,6 +1103,13 @@ export default function POS() {
         const branchDescuento = branchItems.reduce((sum, item) => sum + getItemDiscount(item), 0);
         const branchTotal = Math.max(0, branchSubtotal - branchDescuento);
 
+        const branchSubtotalProductos = branchItems
+          .filter(i => i.type !== 'servicio')
+          .reduce((sum, item) => sum + ((item.price * item.qty) - getItemDiscount(item)), 0);
+        const branchSubtotalServicios = branchItems
+          .filter(i => i.type === 'servicio')
+          .reduce((sum, item) => sum + ((item.price * item.qty) - getItemDiscount(item)), 0);
+
         // Obtener número secuencial de factura para esta sucursal (o global)
         const counterRef = ref(rtdb, 'counters/ventas');
         const counterResult = await runTransaction(counterRef, (currentData) => {
@@ -1094,12 +1136,15 @@ export default function POS() {
           numero_factura: humanId,
           id_turno: activeTurno?.id || null,
           numero_turno: activeTurno?.numero_turno || null,
+          id_caja: activeTurno?.id_caja || userAssignedCaja?.id || 'CAJA-01',
+          codigo_caja: activeTurno?.codigo_caja || userAssignedCaja?.codigo || 'CAJA-01',
+          nombre_caja: activeTurno?.nombre_caja || userAssignedCaja?.nombre || 'Caja Mostrador',
           fecha: new Date().toISOString(),
           sucursal: branchId,
           sucursal_nombre: getBranchName(branchId, sucursalesList),
           id_cliente: targetClienteId,
           nombre_cliente: nombreFinalCliente,
-          cajero: user?.nombre || 'Caja POS',
+          cajero: currentUserRealtime?.nombre_completo || user?.nombre || 'Caja POS',
           metodo_pago: metodoPago,
           id_mecanico: selectedMecanico ? selectedMecanico.value : null,
           nombre_mecanico: selectedMecanico ? selectedMecanico.label : null,
@@ -1107,6 +1152,8 @@ export default function POS() {
           subtotal_bruto: branchSubtotal,
           descuento_total: branchDescuento,
           total: branchTotal,
+          total_productos: branchSubtotalProductos,
+          total_servicios: branchSubtotalServicios,
           regalia: (!descuentoEval.aplica && descuentoEval.regalia) ? descuentoEval.regalia : null,
           multisucursal_id: multiVentaId,
           multisucursal_total_operacion: total,
@@ -1359,8 +1406,28 @@ export default function POS() {
             )}
           </div>
 
-          {/* CONTROL DE TURNO DE CAJA (APERTURA, SALIDAS A GERENCIA, CIERRE Y CONTADOR) */}
-          {activeTurno ? (
+          {/* CONTROL DE TURNO Y CAJA REGISTRADORA */}
+          {!canOperatePOS ? (
+            <div className="bg-gradient-to-r from-red-600 via-rose-600 to-red-700 text-white p-4 rounded-2xl shadow-sm flex flex-wrap items-center justify-between gap-3 border border-red-500 animate-in fade-in">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-white/20 rounded-xl shrink-0">
+                  <ShieldAlert size={26} className="text-white" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-black text-sm tracking-wide uppercase">ACCESO BLOQUEADO: SIN CAJA ASIGNADA</span>
+                    <span className="text-[10px] bg-red-950/40 text-red-100 font-bold px-2 py-0.5 rounded-full uppercase">Políticas de Empresa</span>
+                  </div>
+                  <p className="text-xs text-red-100 mt-1 max-w-xl leading-snug">
+                    Por control administrativo, los vendedores/cajeros <strong>solo pueden abrir turno y facturar en su caja asignada</strong>. Si no tienes una caja, el sistema bloquea la facturación. Solicita a la gerencia que te asigne una caja en <em>Control de Usuarios</em> o <em>Configuración de Cajas</em>.
+                  </p>
+                </div>
+              </div>
+              <div className="px-3 py-1.5 bg-black/20 rounded-xl text-xs font-black text-white border border-white/20">
+                🔒 Facturación Deshabilitada
+              </div>
+            </div>
+          ) : activeTurno ? (
             <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white p-3.5 rounded-2xl shadow-sm flex flex-wrap items-center justify-between gap-3 border border-emerald-500 animate-in fade-in">
               <div className="flex items-center gap-3">
                 <div className="flex h-3.5 w-3.5 relative">
@@ -1369,13 +1436,16 @@ export default function POS() {
                 </div>
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-black text-sm tracking-wide">CAJA ABIERTA: {activeTurno.numero_turno}</span>
+                    <span className="font-black text-sm tracking-wide flex items-center gap-1.5">
+                      <Store size={16} className="text-emerald-200" />
+                      {activeTurno.codigo_caja || userAssignedCaja?.codigo || 'CAJA'}: {activeTurno.numero_turno}
+                    </span>
                     <span className="text-[11px] bg-white/20 px-2.5 py-0.5 rounded-full font-bold">
                       Fondo: C$ {Number(activeTurno.total_inicial_cordobas || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
                   </div>
-                  <p className="text-[11px] text-emerald-100">
-                    Cajero: <strong className="text-white">{activeTurno.cajero_nombre}</strong> | Apertura: {new Date(activeTurno.fecha_apertura).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  <p className="text-[11px] text-emerald-100 mt-0.5">
+                    Terminal: <strong>{activeTurno.nombre_caja || userAssignedCaja?.nombre || 'Caja Principal'}</strong> | Cajero: <strong className="text-white">{activeTurno.cajero_nombre}</strong> | Apertura: {new Date(activeTurno.fecha_apertura).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </p>
                 </div>
               </div>
@@ -1416,7 +1486,16 @@ export default function POS() {
               <div className="flex items-center gap-2.5">
                 <AlertTriangle size={22} className="text-amber-100 shrink-0" />
                 <div>
-                  <span className="font-black text-sm tracking-wide block">CAJA CERRADA EN ESTA SUCURSAL</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-black text-sm tracking-wide block uppercase">
+                      CAJA CERRADA
+                    </span>
+                    {userAssignedCaja && (
+                      <span className="text-[11px] bg-white/20 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
+                        <Store size={12} /> {userAssignedCaja.codigo} - {userAssignedCaja.nombre}
+                      </span>
+                    )}
+                  </div>
                   <p className="text-[11px] text-amber-100">
                     Debe registrar el fondo inicial para abrir el turno antes de comenzar a facturar.
                   </p>
@@ -2323,7 +2402,9 @@ export default function POS() {
         isOpen={isCashOpenModalOpen}
         onClose={() => setIsCashOpenModalOpen(false)}
         sucursal={sucursal}
-        currentUser={user}
+        currentUser={currentUserRealtime || user}
+        assignedCaja={userAssignedCaja}
+        availableCajas={cajasList.filter(c => isSuperAdmin || c.id === userAssignedCajaId)}
         onOpenSuccess={(newT) => setActiveTurno(newT)}
       />
 
@@ -2332,7 +2413,7 @@ export default function POS() {
         isOpen={isCashMovementModalOpen}
         onClose={() => setIsCashMovementModalOpen(false)}
         activeTurno={activeTurno}
-        currentUser={user}
+        currentUser={currentUserRealtime || user}
         onMovementAdded={() => {}}
       />
 
@@ -2341,7 +2422,7 @@ export default function POS() {
         isOpen={isCashCloseModalOpen}
         onClose={() => setIsCashCloseModalOpen(false)}
         activeTurno={activeTurno}
-        currentUser={user}
+        currentUser={currentUserRealtime || user}
         salesList={salesList}
         onCloseSuccess={() => setActiveTurno(null)}
       />

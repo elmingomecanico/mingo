@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { ref, onValue, set, push, remove } from 'firebase/database';
+import { ref, onValue, set, push, remove, update } from 'firebase/database';
 import { rtdb } from '../firebase';
-import { ShieldCheck, Plus, Edit2, Trash2, KeyRound } from 'lucide-react';
+import { ShieldCheck, Plus, Edit2, Trash2, KeyRound, Store } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Select from 'react-select';
 import ConfirmModal from '../components/ConfirmModal';
@@ -47,6 +47,8 @@ const TODAS_LOS_PERMISOS = Object.values(PERMISOS_CATEGORIAS).flat().map(p => p.
 
 export default function Usuarios() {
   const [usuarios, setUsuarios] = useState([]);
+  const [cajas, setCajas] = useState([]);
+  const [sucursales, setSucursales] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null });
@@ -63,7 +65,9 @@ export default function Usuarios() {
     permisos: [],
     estado: 'Activo', 
     id_sucursal: 'SUC-01',
-    permite_multisucursal: false
+    permite_multisucursal: false,
+    id_caja_asignada: '',
+    nombre_caja_asignada: ''
   });
 
   useEffect(() => {
@@ -78,7 +82,34 @@ export default function Usuarios() {
       }
       setLoading(false);
     });
-    return () => unsub();
+
+    const cajasRef = ref(rtdb, 'configuracion/cajas');
+    const unsubCajas = onValue(cajasRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const val = snapshot.val();
+        const parsed = Object.keys(val).map(key => ({ id: key, ...val[key] }));
+        setCajas(parsed);
+      } else {
+        setCajas([]);
+      }
+    });
+
+    const sucRef = ref(rtdb, 'configuracion/sucursales');
+    const unsubSuc = onValue(sucRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const val = snapshot.val();
+        const parsed = Object.keys(val).map(key => ({ id: key, ...val[key] }));
+        setSucursales(parsed);
+      } else {
+        setSucursales([]);
+      }
+    });
+
+    return () => {
+      unsub();
+      unsubCajas();
+      unsubSuc();
+    };
   }, []);
 
   const handleOpenModal = (item = null) => {
@@ -97,7 +128,9 @@ export default function Usuarios() {
         tipo_salario: item.tipo_salario || 'Comisión',
         salario_base: item.salario_base || 0,
         porcentaje_comision: item.porcentaje_comision || 50,
-        permite_multisucursal: hasMulti
+        permite_multisucursal: hasMulti,
+        id_caja_asignada: item.id_caja_asignada || '',
+        nombre_caja_asignada: item.nombre_caja_asignada || ''
       });
     } else {
       setEditingId(null);
@@ -113,7 +146,9 @@ export default function Usuarios() {
         tipo_salario: 'Comisión',
         salario_base: 0,
         porcentaje_comision: 50,
-        permite_multisucursal: false
+        permite_multisucursal: false,
+        id_caja_asignada: '',
+        nombre_caja_asignada: ''
       });
     }
     setIsModalOpen(true);
@@ -131,6 +166,7 @@ export default function Usuarios() {
 
     try {
       const itemRef = editingId ? ref(rtdb, `usuarios/${editingId}`) : push(ref(rtdb, 'usuarios'));
+      const userId = editingId || itemRef.key;
       
       // Asegurar que si permite_multisucursal es true, también esté en el array de permisos
       let perms = [...formData.permisos];
@@ -138,6 +174,13 @@ export default function Usuarios() {
         perms.push('FACTURAR_MULTISUCURSAL');
       } else if (!formData.permite_multisucursal && perms.includes('FACTURAR_MULTISUCURSAL')) {
         perms = perms.filter(p => p !== 'FACTURAR_MULTISUCURSAL');
+      }
+
+      // Resolver nombre de la caja asignada
+      let resolvedCajaNombre = '';
+      if (formData.id_caja_asignada) {
+        const foundCaja = cajas.find(c => c.id === formData.id_caja_asignada);
+        resolvedCajaNombre = foundCaja ? `${foundCaja.codigo} - ${foundCaja.nombre}` : formData.nombre_caja_asignada;
       }
 
       const payload = {
@@ -152,10 +195,21 @@ export default function Usuarios() {
         permite_multisucursal: Boolean(formData.permite_multisucursal),
         tipo_salario: formData.tipo_salario,
         salario_base: Number(formData.salario_base) || 0,
-        porcentaje_comision: Number(formData.porcentaje_comision) || 0
+        porcentaje_comision: Number(formData.porcentaje_comision) || 0,
+        id_caja_asignada: formData.id_caja_asignada || '',
+        nombre_caja_asignada: resolvedCajaNombre
       };
 
       await set(itemRef, payload);
+
+      // Si se asignó una caja, sincronizar la asignación en configuracion/cajas
+      if (formData.id_caja_asignada) {
+        await update(ref(rtdb, `configuracion/cajas/${formData.id_caja_asignada}`), {
+          usuario_asignado_id: userId,
+          usuario_asignado_nombre: formData.nombre_completo.trim()
+        });
+      }
+
       toast.success(editingId ? 'Usuario actualizado' : 'Usuario registrado');
       setIsModalOpen(false);
     } catch (error) {
@@ -244,6 +298,15 @@ export default function Usuarios() {
                     <td className="p-4 text-gray-600">
                       <div className="flex flex-col gap-1 items-start">
                         <span className="font-semibold text-gray-800">{user.id_sucursal || 'SUC-01'}</span>
+                        {user.id_caja_asignada ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200">
+                            <Store size={11} /> {user.nombre_caja_asignada || user.id_caja_asignada}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200">
+                            Sin Caja Asignada
+                          </span>
+                        )}
                         {user.permite_multisucursal || user.permisos?.includes('FACTURAR_MULTISUCURSAL') || user.rol === 'SuperAdmin' ? (
                           <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
                             ★ Multisucursal
@@ -449,12 +512,57 @@ export default function Usuarios() {
                   </label>
                 </div>
 
+                {/* ASIGNACIÓN DE CAJA REGISTRADORA (OBLIGATORIA PARA CAJEROS/VENDEDORES) */}
+                <div className="bg-blue-50/80 p-3.5 sm:p-4 rounded-2xl border border-blue-200 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Store size={18} className="text-blue-700" />
+                    <label className="text-xs sm:text-sm font-bold text-blue-950 uppercase">
+                      Caja Registradora Asignada (Requisito POS)
+                    </label>
+                  </div>
+                  <p className="text-[11px] sm:text-xs text-blue-800 leading-snug">
+                    Por control administrativo, los vendedores/cajeros <strong>solo pueden abrir turno y facturar en su caja asignada</strong>. Si no tienen caja, el sistema bloqueará su operación en el punto de venta.
+                  </p>
+                  <select 
+                    value={formData.id_caja_asignada} 
+                    onChange={e => {
+                      const selected = cajas.find(c => c.id === e.target.value);
+                      setFormData({
+                        ...formData, 
+                        id_caja_asignada: e.target.value,
+                        nombre_caja_asignada: selected ? `${selected.codigo} - ${selected.nombre}` : ''
+                      });
+                    }}
+                    className="w-full border border-blue-200 p-2.5 rounded-xl outline-none focus:border-blue-500 text-xs sm:text-sm bg-white font-medium"
+                  >
+                    <option value="">-- Sin Caja Asignada (Bloqueado para facturar en POS) --</option>
+                    {cajas.map(c => {
+                      const ocupadaPor = c.usuario_asignado_nombre && c.usuario_asignado_nombre !== 'Sin Asignar' && c.usuario_asignado_id !== editingId
+                        ? ` [Asignada a: ${c.usuario_asignado_nombre}]` 
+                        : '';
+                      return (
+                        <option key={c.id} value={c.id}>
+                          {c.codigo} - {c.nombre} ({c.sucursal}) {ocupadaPor}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div>
                     <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Sucursal Asignada</label>
                     <select value={formData.id_sucursal} onChange={e => setFormData({...formData, id_sucursal: e.target.value})} className="w-full border p-2.5 rounded-xl outline-none focus:border-blue-500 text-xs sm:text-sm bg-white">
-                      <option value="SUC-01">Sucursal Principal (SUC-01)</option>
-                      <option value="SUC-02">Sucursal Norte (SUC-02)</option>
+                      {sucursales.length > 0 ? (
+                        sucursales.map(s => (
+                          <option key={s.id} value={s.id}>{s.nombre} ({s.id})</option>
+                        ))
+                      ) : (
+                        <>
+                          <option value="SUC-01">Sucursal Principal (SUC-01)</option>
+                          <option value="SUC-02">Sucursal Norte (SUC-02)</option>
+                        </>
+                      )}
                     </select>
                   </div>
                   <div>

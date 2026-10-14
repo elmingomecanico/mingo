@@ -1,14 +1,14 @@
 import React, { forwardRef, useState, useEffect } from 'react';
-import { ref, onValue } from 'firebase/database';
+import { ref as dbRef, onValue } from 'firebase/database';
 import { rtdb } from '../firebase';
 import { DEFAULT_PRINT_CONFIG } from './catalogos/PrintFormatEditor';
 
-const TicketPrinter = forwardRef(({ sale, isPreview = false, customConfig = null }, ref) => {
+const TicketPrinter = forwardRef(({ sale, isPreview = false, customConfig = null }, forwardedRef) => {
   const [dbConfig, setDbConfig] = useState(DEFAULT_PRINT_CONFIG);
 
   useEffect(() => {
     if (customConfig) return;
-    const configRef = ref(rtdb, 'configuracion/formatos_impresion');
+    const configRef = dbRef(rtdb, 'configuracion/formatos_impresion');
     const unsub = onValue(configRef, (snap) => {
       if (snap.exists()) {
         setDbConfig({ ...DEFAULT_PRINT_CONFIG, ...snap.val() });
@@ -33,7 +33,7 @@ const TicketPrinter = forwardRef(({ sale, isPreview = false, customConfig = null
     : `p-3 bg-white text-black font-mono text-[11px] leading-tight w-[${printWidth}] min-h-[90mm] mx-auto`;
 
   return (
-    <div ref={ref} className={containerClasses} style={{ width: isPreview ? '100%' : printWidth }}>
+    <div ref={forwardedRef} className={containerClasses} style={{ width: isPreview ? '100%' : printWidth }}>
       {/* CABECERA COMERCIAL */}
       <div className="text-center pb-2 border-b border-black border-dashed space-y-0.5">
         <h2 className="font-black text-sm uppercase tracking-tight">{cfg.nombre_comercial || 'TALLER EL MINGO'}</h2>
