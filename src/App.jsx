@@ -95,7 +95,7 @@ function AppRouter() {
           <Route path="/reportes" element={<ProtectedRoute perm="VER_REPORTES"><Reportes /></ProtectedRoute>} />
           <Route path="/kardex" element={<ProtectedRoute perm="VER_REPORTES"><Kardex /></ProtectedRoute>} />
           <Route path="/catalogos" element={<ProtectedRoute perm="VER_CATALOGOS"><Catalogos /></ProtectedRoute>} />
-          <Route path="/usuarios" element={<ProtectedRoute perm="VER_USUARIOS"><Usuarios /></ProtectedRoute>} />
+          <Route path="/usuarios" element={<ProtectedRoute perm="VER_USUARIOS"><Navigate to="/rrhh" replace /></ProtectedRoute>} />
           <Route path="/rrhh" element={<ProtectedRoute perm="VER_USUARIOS"><RRHH /></ProtectedRoute>} />
           <Route path="/mi-portal" element={<PortalEmpleado />} />
           <Route path="*" element={<Navigate to="/" replace />} />

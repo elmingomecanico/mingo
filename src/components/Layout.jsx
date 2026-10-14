@@ -44,9 +44,9 @@ export default function Layout({ children }) {
       ]
     },
     {
-      title: 'Recursos Humanos',
+      title: 'Recursos Humanos & Personal',
       items: [
-        { name: 'Gestión RRHH', path: '/rrhh', icon: <Users size={18} />, perm: 'VER_USUARIOS' },
+        { name: 'Personal, RRHH y Accesos', path: '/rrhh', icon: <Users size={18} />, perm: 'VER_USUARIOS' },
         { name: 'Portal Empleado', path: '/mi-portal', icon: <UserCheck size={18} />, perm: 'PUBLICO' },
       ]
     },
@@ -54,7 +54,6 @@ export default function Layout({ children }) {
       title: 'Administración',
       items: [
         { name: 'Configuración del Sistema', path: '/catalogos', icon: <Settings size={18} />, perm: 'VER_CATALOGOS' },
-        { name: 'Usuarios', path: '/usuarios', icon: <ShieldCheck size={18} />, perm: 'VER_USUARIOS' },
       ]
     }
   ];

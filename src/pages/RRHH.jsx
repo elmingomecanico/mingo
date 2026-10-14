@@ -7,10 +7,39 @@ import {
   Palmtree, Clock, FileText, Check, X, AlertCircle, Plus, Eye, Edit3, 
   Search, ShieldAlert, Award, Briefcase, Phone, Mail, MapPin, 
   Calendar, CreditCard, ChevronRight, Sparkles, Filter, CheckCheck,
-  Trash2, CalendarPlus, XCircle, User
+  Trash2, CalendarPlus, XCircle, User, Store, KeyRound, ShieldCheck, UserPlus, Lock
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import TokenizedSearchSelect from '../components/TokenizedSearchSelect';
+
+const PERMISOS_CATEGORIAS = {
+  'Ventas y Facturación': [
+    { id: 'VER_POS', label: 'Acceso a Caja POS' },
+    { id: 'FACTURAR_MULTISUCURSAL', label: 'Facturar desde Todas las Sucursales (Multisucursal)' },
+    { id: 'ANULAR_FACTURA', label: 'Anular Facturas' }
+  ],
+  'Órdenes y Taller': [
+    { id: 'VER_TALLER', label: 'Ver Órdenes de Trabajo' }
+  ],
+  'Inventario y Compras': [
+    { id: 'VER_INVENTARIO', label: 'Ver Inventario' },
+    { id: 'VER_COMPRAS', label: 'Ver Compras' },
+    { id: 'CREAR_PRODUCTO', label: 'Crear/Editar Productos' },
+    { id: 'AJUSTE_INVENTARIO', label: 'Ajustar Stock Manualmente' }
+  ],
+  'Finanzas y Cuentas': [
+    { id: 'VER_CONTABILIDAD', label: 'Acceso a Contabilidad y Libro Diario' },
+    { id: 'VER_CXC', label: 'Ver Cuentas por Cobrar (CxC)' },
+    { id: 'VER_CXP', label: 'Ver Cuentas por Pagar (CxP)' },
+    { id: 'VER_REPORTES', label: 'Ver Reportes y Estadísticas' }
+  ],
+  'Catálogos y Usuarios': [
+    { id: 'VER_CLIENTES', label: 'Ver Clientes' },
+    { id: 'VER_PROVEEDORES', label: 'Ver Proveedores' },
+    { id: 'VER_CATALOGOS', label: 'Acceder a Ajustes / Catálogos' },
+    { id: 'VER_USUARIOS', label: 'Gestionar Usuarios y RRHH' }
+  ]
+};
 
 export default function RRHH() {
   const { user } = useAuth();
@@ -18,12 +47,39 @@ export default function RRHH() {
   
   // Datos principales
   const [usuarios, setUsuarios] = useState([]);
+  const [cajas, setCajas] = useState([]);
+  const [sucursalesList, setSucursalesList] = useState([]);
   const [ordenes, setOrdenes] = useState([]);
   const [deudas, setDeudas] = useState([]);
   const [nominas, setNominas] = useState([]);
   const [solicitudes, setSolicitudes] = useState([]);
   const [asistencias, setAsistencias] = useState({});
   const [loading, setLoading] = useState(true);
+
+  // Modal para registrar nuevo colaborador y usuario del sistema
+  const [isNuevoUsuarioModalOpen, setIsNuevoUsuarioModalOpen] = useState(false);
+  const [nuevoUsuarioForm, setNuevoUsuarioForm] = useState({
+    nombre_completo: '',
+    cedula: '',
+    telefono: '',
+    direccion: '',
+    fecha_ingreso: new Date().toISOString().split('T')[0],
+    usuario: '',
+    password: '',
+    rol: 'Usuario',
+    funcion: 'Mecánico',
+    permisos: [],
+    permite_multisucursal: false,
+    estado: 'Activo',
+    id_sucursal: 'SUC-01',
+    id_caja_asignada: '',
+    nombre_caja_asignada: '',
+    tipo_salario: 'Comisión',
+    salario_base: 0,
+    porcentaje_comision: 50,
+    contacto_emergencia: '',
+    notas_expediente: ''
+  });
 
   // Filtros y búsquedas
   const [sucursal, setSucursal] = useState('SUC-01');
@@ -114,9 +170,29 @@ export default function RRHH() {
       }
     });
 
+    // 6. Cargar Cajas Registradoras
+    const unsubCajas = onValue(ref(rtdb, 'configuracion/cajas'), snap => {
+      if (snap.exists()) {
+        const val = snap.val();
+        setCajas(Object.keys(val).map(k => ({ id: k, ...val[k] })));
+      } else {
+        setCajas([]);
+      }
+    });
+
+    // 7. Cargar Sucursales
+    const unsubSuc = onValue(ref(rtdb, 'configuracion/sucursales'), snap => {
+      if (snap.exists()) {
+        const val = snap.val();
+        setSucursalesList(Object.keys(val).map(k => ({ id: k, ...val[k] })));
+      } else {
+        setSucursalesList([]);
+      }
+    });
+
     setLoading(false);
 
-    return () => { unsubUsr(); unsubOT(); unsubAd(); unsubNom(); unsubSol(); };
+    return () => { unsubUsr(); unsubOT(); unsubAd(); unsubNom(); unsubSol(); unsubCajas(); unsubSuc(); };
   }, []);
 
   // Cargar asistencia de la fecha seleccionada y sucursal
@@ -220,6 +296,7 @@ export default function RRHH() {
   // Abrir Ficha de Expediente
   const handleOpenExpediente = (emp) => {
     setSelectedExpediente(emp);
+    const hasMulti = Boolean(emp.permite_multisucursal || emp.permisos?.includes('FACTURAR_MULTISUCURSAL'));
     setFormExpediente({
       nombre_completo: emp.nombre_completo || '',
       cedula: emp.cedula || '',
@@ -234,7 +311,16 @@ export default function RRHH() {
       porcentaje_comision: emp.porcentaje_comision || 50,
       dias_vacaciones_tomados: emp.dias_vacaciones_tomados || 0,
       contacto_emergencia: emp.contacto_emergencia || '',
-      notas_expediente: emp.notas_expediente || ''
+      notas_expediente: emp.notas_expediente || '',
+      // Acceso al sistema y credenciales
+      usuario: emp.usuario || '',
+      password: emp.password || '',
+      rol: emp.rol || 'Usuario',
+      permisos: emp.permisos || [],
+      permite_multisucursal: hasMulti,
+      // Caja Registradora
+      id_caja_asignada: emp.id_caja_asignada || '',
+      nombre_caja_asignada: emp.nombre_caja_asignada || ''
     });
     setExpedienteTab('general');
     setIsExpedienteModalOpen(true);
@@ -252,11 +338,24 @@ export default function RRHH() {
         ? Number(periodos.reduce((acc, p) => acc + Number(p.dias || 0), 0).toFixed(1))
         : Number(formExpediente.dias_vacaciones_tomados || 0);
 
-      await update(ref(rtdb, `usuarios/${selectedExpediente.id}`), {
+      let perms = [...(formExpediente.permisos || [])];
+      if (formExpediente.permite_multisucursal && !perms.includes('FACTURAR_MULTISUCURSAL')) {
+        perms.push('FACTURAR_MULTISUCURSAL');
+      } else if (!formExpediente.permite_multisucursal && perms.includes('FACTURAR_MULTISUCURSAL')) {
+        perms = perms.filter(p => p !== 'FACTURAR_MULTISUCURSAL');
+      }
+
+      let resolvedCajaNombre = '';
+      if (formExpediente.id_caja_asignada) {
+        const foundCaja = cajas.find(c => c.id === formExpediente.id_caja_asignada);
+        resolvedCajaNombre = foundCaja ? `${foundCaja.codigo} - ${foundCaja.nombre}` : formExpediente.nombre_caja_asignada;
+      }
+
+      const updateData = {
         nombre_completo: formExpediente.nombre_completo.trim(),
-        cedula: formExpediente.cedula.trim(),
-        telefono: formExpediente.telefono.trim(),
-        direccion: formExpediente.direccion.trim(),
+        cedula: formExpediente.cedula ? formExpediente.cedula.trim() : '',
+        telefono: formExpediente.telefono ? formExpediente.telefono.trim() : '',
+        direccion: formExpediente.direccion ? formExpediente.direccion.trim() : '',
         fecha_ingreso: formExpediente.fecha_ingreso || '',
         funcion: formExpediente.funcion,
         id_sucursal: formExpediente.id_sucursal,
@@ -265,14 +364,150 @@ export default function RRHH() {
         salario_base: Number(formExpediente.salario_base) || 0,
         porcentaje_comision: Number(formExpediente.porcentaje_comision) || 0,
         dias_vacaciones_tomados: totalTomados,
-        contacto_emergencia: formExpediente.contacto_emergencia.trim(),
-        notas_expediente: formExpediente.notas_expediente.trim()
-      });
+        contacto_emergencia: formExpediente.contacto_emergencia ? formExpediente.contacto_emergencia.trim() : '',
+        notas_expediente: formExpediente.notas_expediente ? formExpediente.notas_expediente.trim() : '',
+        usuario: formExpediente.usuario ? formExpediente.usuario.trim() : (selectedExpediente.usuario || ''),
+        rol: formExpediente.rol || selectedExpediente.rol || 'Usuario',
+        permisos: perms,
+        permite_multisucursal: Boolean(formExpediente.permite_multisucursal),
+        id_caja_asignada: formExpediente.id_caja_asignada || '',
+        nombre_caja_asignada: resolvedCajaNombre
+      };
 
-      toast.success('Expediente actualizado exitosamente');
+      if (formExpediente.password && formExpediente.password.trim()) {
+        updateData.password = formExpediente.password.trim();
+      }
+
+      await update(ref(rtdb, `usuarios/${selectedExpediente.id}`), updateData);
+
+      // Sincronizar asignación de caja en configuracion/cajas
+      const previousCajaId = selectedExpediente.id_caja_asignada;
+      if (previousCajaId && previousCajaId !== formExpediente.id_caja_asignada) {
+        try {
+          await update(ref(rtdb, `configuracion/cajas/${previousCajaId}`), {
+            usuario_asignado_id: '',
+            usuario_asignado_nombre: 'Sin Asignar'
+          });
+        } catch (e) {
+          console.error("Error liberando caja previa:", e);
+        }
+      }
+
+      if (formExpediente.id_caja_asignada) {
+        try {
+          await update(ref(rtdb, `configuracion/cajas/${formExpediente.id_caja_asignada}`), {
+            usuario_asignado_id: selectedExpediente.id,
+            usuario_asignado_nombre: formExpediente.nombre_completo.trim()
+          });
+        } catch (e) {
+          console.error("Error asignando nueva caja:", e);
+        }
+      }
+
+      toast.success('Expediente y accesos actualizados exitosamente');
       setIsExpedienteModalOpen(false);
     } catch (err) {
       toast.error('Error al actualizar expediente: ' + err.message);
+    }
+  };
+
+  const handleOpenNuevoColaborador = () => {
+    setNuevoUsuarioForm({
+      nombre_completo: '',
+      cedula: '',
+      telefono: '',
+      direccion: '',
+      fecha_ingreso: new Date().toISOString().split('T')[0],
+      usuario: '',
+      password: '',
+      rol: 'Usuario',
+      funcion: 'Mecánico',
+      permisos: [],
+      permite_multisucursal: false,
+      estado: 'Activo',
+      id_sucursal: 'SUC-01',
+      id_caja_asignada: '',
+      nombre_caja_asignada: '',
+      tipo_salario: 'Comisión',
+      salario_base: 0,
+      porcentaje_comision: 50,
+      contacto_emergencia: '',
+      notas_expediente: ''
+    });
+    setIsNuevoUsuarioModalOpen(true);
+  };
+
+  const handleSaveNuevoColaborador = async (e) => {
+    e.preventDefault();
+    if (!nuevoUsuarioForm.nombre_completo.trim()) {
+      return toast.error("El nombre completo es requerido");
+    }
+    if (!nuevoUsuarioForm.usuario.trim() || !nuevoUsuarioForm.password.trim()) {
+      return toast.error("Usuario y contraseña de acceso al sistema son requeridos");
+    }
+
+    if (usuarios.some(u => u.usuario?.toLowerCase() === nuevoUsuarioForm.usuario.trim().toLowerCase())) {
+      return toast.error("El nombre de usuario ya está registrado en el sistema");
+    }
+
+    try {
+      const itemRef = push(ref(rtdb, 'usuarios'));
+      const userId = itemRef.key;
+
+      let perms = [...nuevoUsuarioForm.permisos];
+      if (nuevoUsuarioForm.permite_multisucursal && !perms.includes('FACTURAR_MULTISUCURSAL')) {
+        perms.push('FACTURAR_MULTISUCURSAL');
+      } else if (!nuevoUsuarioForm.permite_multisucursal && perms.includes('FACTURAR_MULTISUCURSAL')) {
+        perms = perms.filter(p => p !== 'FACTURAR_MULTISUCURSAL');
+      }
+
+      let resolvedCajaNombre = '';
+      if (nuevoUsuarioForm.id_caja_asignada) {
+        const foundCaja = cajas.find(c => c.id === nuevoUsuarioForm.id_caja_asignada);
+        resolvedCajaNombre = foundCaja ? `${foundCaja.codigo} - ${foundCaja.nombre}` : nuevoUsuarioForm.nombre_caja_asignada;
+      }
+
+      const payload = {
+        nombre_completo: nuevoUsuarioForm.nombre_completo.trim(),
+        cedula: nuevoUsuarioForm.cedula ? nuevoUsuarioForm.cedula.trim() : '',
+        telefono: nuevoUsuarioForm.telefono ? nuevoUsuarioForm.telefono.trim() : '',
+        direccion: nuevoUsuarioForm.direccion ? nuevoUsuarioForm.direccion.trim() : '',
+        fecha_ingreso: nuevoUsuarioForm.fecha_ingreso || new Date().toISOString().split('T')[0],
+        usuario: nuevoUsuarioForm.usuario.trim(),
+        password: nuevoUsuarioForm.password.trim(),
+        rol: nuevoUsuarioForm.rol,
+        funcion: nuevoUsuarioForm.funcion,
+        permisos: perms,
+        estado: nuevoUsuarioForm.estado,
+        id_sucursal: nuevoUsuarioForm.id_sucursal,
+        permite_multisucursal: Boolean(nuevoUsuarioForm.permite_multisucursal),
+        tipo_salario: nuevoUsuarioForm.tipo_salario,
+        salario_base: Number(nuevoUsuarioForm.salario_base) || 0,
+        porcentaje_comision: Number(nuevoUsuarioForm.porcentaje_comision) || 0,
+        id_caja_asignada: nuevoUsuarioForm.id_caja_asignada || '',
+        nombre_caja_asignada: resolvedCajaNombre,
+        contacto_emergencia: nuevoUsuarioForm.contacto_emergencia ? nuevoUsuarioForm.contacto_emergencia.trim() : '',
+        notas_expediente: nuevoUsuarioForm.notas_expediente ? nuevoUsuarioForm.notas_expediente.trim() : '',
+        dias_vacaciones_tomados: 0
+      };
+
+      await set(itemRef, payload);
+
+      if (nuevoUsuarioForm.id_caja_asignada) {
+        try {
+          await update(ref(rtdb, `configuracion/cajas/${nuevoUsuarioForm.id_caja_asignada}`), {
+            usuario_asignado_id: userId,
+            usuario_asignado_nombre: nuevoUsuarioForm.nombre_completo.trim()
+          });
+        } catch (e) {
+          console.error("Error sincronizando caja:", e);
+        }
+      }
+
+      toast.success("Colaborador y acceso al sistema creados exitosamente");
+      setIsNuevoUsuarioModalOpen(false);
+    } catch (err) {
+      toast.error("Error al registrar colaborador: " + err.message);
     }
   };
 
@@ -757,7 +992,13 @@ export default function RRHH() {
               <Search className="absolute left-3 top-3 text-gray-400" size={16} />
             </div>
 
-            <div className="flex gap-2 text-xs font-bold text-gray-500 w-full sm:w-auto justify-end">
+            <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-gray-500 w-full sm:w-auto justify-end">
+              <button
+                onClick={handleOpenNuevoColaborador}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-md shadow-blue-200 transition-all active:scale-95"
+              >
+                <UserPlus size={16} /> + Nuevo Colaborador / Usuario
+              </button>
               <span className="bg-gray-100 px-3 py-1.5 rounded-lg">
                 Total Personal: <strong>{usuarios.length}</strong>
               </span>
@@ -772,6 +1013,7 @@ export default function RRHH() {
               const { texto: antiguedadTexto } = calcAntiguedad(emp.fecha_ingreso);
               const { diasDisponibles, diasAcumulados } = calcVacaciones(emp);
               const { aguinaldoAcumulado } = calcPrestacionesNicaragua(emp);
+              const cajaAsignadaObj = cajas.find(c => c.id === emp.id_caja_asignada);
 
               return (
                 <div 
@@ -800,20 +1042,38 @@ export default function RRHH() {
                     <div>
                       <span className="text-gray-400 text-[10px] block uppercase font-bold">Esquema</span>
                       <strong className="text-gray-700">
-                        {emp.tipo_salario || 'Comisión'} {emp.tipo_salario === 'Fijo' ? `(C$ ${emp.salario_base || 0})` : `(${emp.porcentaje_comision || 50}%)`}
+                        {emp.tipo_salario === 'Mixto'
+                          ? `Mixto (C$ ${emp.salario_base || 0} + ${emp.porcentaje_comision || 50}%)`
+                          : emp.tipo_salario === 'Fijo'
+                            ? `Fijo (C$ ${emp.salario_base || 0})`
+                            : `Comisión (${emp.porcentaje_comision || 50}%)`}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-gray-400 text-[10px] block uppercase font-bold">Caja Asignada</span>
+                      <strong className={emp.id_caja_asignada ? 'text-blue-700 flex items-center gap-1 truncate' : 'text-gray-400'}>
+                        {emp.id_caja_asignada ? (
+                          <>
+                            <Store size={12} className="shrink-0" /> {cajaAsignadaObj ? `${cajaAsignadaObj.codigo} (${cajaAsignadaObj.nombre})` : emp.nombre_caja_asignada || 'Asignada'}
+                          </>
+                        ) : 'Sin Asignar'}
                       </strong>
                     </div>
                     <div>
                       <span className="text-gray-400 text-[10px] block uppercase font-bold">Antigüedad</span>
                       <strong className="text-gray-700">{antiguedadTexto}</strong>
                     </div>
-                    <div className="mt-1">
+                    <div>
                       <span className="text-gray-400 text-[10px] block uppercase font-bold">Vacaciones Disp.</span>
                       <strong className="text-amber-700">{diasDisponibles} días</strong>
                     </div>
                     <div className="mt-1">
                       <span className="text-gray-400 text-[10px] block uppercase font-bold">Aguinaldo Est.</span>
                       <strong className="text-green-700">C$ {aguinaldoAcumulado}</strong>
+                    </div>
+                    <div className="mt-1">
+                      <span className="text-gray-400 text-[10px] block uppercase font-bold">Rol Sistema</span>
+                      <strong className="text-purple-700 font-bold">{emp.rol || 'Usuario'}</strong>
                     </div>
                   </div>
 
@@ -1268,6 +1528,14 @@ export default function RRHH() {
               >
                 Vacaciones y Prestaciones (Ley)
               </button>
+              <button
+                onClick={() => setExpedienteTab('acceso')}
+                className={`py-3 px-3 text-xs font-bold border-b-2 transition-all whitespace-nowrap flex items-center gap-1.5 ${
+                  expedienteTab === 'acceso' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500'
+                }`}
+              >
+                <ShieldCheck size={14} /> Acceso y Permisos (Sistema)
+              </button>
             </div>
 
             {/* Contenido del expediente */}
@@ -1326,7 +1594,7 @@ export default function RRHH() {
                       <select
                         value={formExpediente.funcion}
                         onChange={e => setFormExpediente({ ...formExpediente, funcion: e.target.value })}
-                        className="w-full border p-2 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                        className="w-full border p-2 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white font-medium"
                       >
                         <option value="Mecánico">Mecánico</option>
                         <option value="Cajero">Cajero</option>
@@ -1341,7 +1609,7 @@ export default function RRHH() {
                       <select
                         value={formExpediente.tipo_salario}
                         onChange={e => setFormExpediente({ ...formExpediente, tipo_salario: e.target.value })}
-                        className="w-full border p-2 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white font-bold"
+                        className="w-full border p-2 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white font-bold text-blue-900"
                       >
                         <option value="Comisión">Comisión (%)</option>
                         <option value="Fijo">Salario Fijo (C$)</option>
@@ -1349,23 +1617,102 @@ export default function RRHH() {
                       </select>
                     </div>
 
+                    {formExpediente.tipo_salario === 'Fijo' && (
+                      <div>
+                        <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Salario Fijo (C$)</label>
+                        <input
+                          type="number"
+                          value={formExpediente.salario_base}
+                          onChange={e => setFormExpediente({ ...formExpediente, salario_base: e.target.value })}
+                          className="w-full border p-2 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 font-bold"
+                          placeholder="0.00"
+                        />
+                      </div>
+                    )}
+
+                    {formExpediente.tipo_salario === 'Comisión' && (
+                      <div>
+                        <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">% Comisión</label>
+                        <input
+                          type="number"
+                          value={formExpediente.porcentaje_comision}
+                          onChange={e => setFormExpediente({ ...formExpediente, porcentaje_comision: e.target.value })}
+                          className="w-full border p-2 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 font-bold"
+                          placeholder="50"
+                        />
+                      </div>
+                    )}
+
+                    {formExpediente.tipo_salario === 'Mixto' && (
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-xs font-bold text-blue-700 mb-1 uppercase">Salario Base (C$)</label>
+                          <input
+                            type="number"
+                            value={formExpediente.salario_base}
+                            onChange={e => setFormExpediente({ ...formExpediente, salario_base: e.target.value })}
+                            className="w-full border border-blue-300 p-2 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 font-bold"
+                            placeholder="0.00"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-blue-700 mb-1 uppercase">% Comisión</label>
+                          <input
+                            type="number"
+                            value={formExpediente.porcentaje_comision}
+                            onChange={e => setFormExpediente({ ...formExpediente, porcentaje_comision: e.target.value })}
+                            className="w-full border border-blue-300 p-2 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 font-bold"
+                            placeholder="50"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">
-                        {formExpediente.tipo_salario === 'Fijo' ? 'Salario Fijo (C$)' : '% Comisión'}
+                      <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Sucursal Asignada</label>
+                      <select
+                        value={formExpediente.id_sucursal || 'SUC-01'}
+                        onChange={e => setFormExpediente({ ...formExpediente, id_sucursal: e.target.value })}
+                        className="w-full border p-2 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                      >
+                        {sucursalesList.map(s => (
+                          <option key={s.id} value={s.id}>{s.nombre} ({s.id})</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-gray-600 mb-1 uppercase flex items-center gap-1.5 text-blue-700">
+                        <Store size={15} /> Caja Registradora Asignada
                       </label>
-                      <input
-                        type="number"
-                        value={formExpediente.tipo_salario === 'Fijo' ? formExpediente.salario_base : formExpediente.porcentaje_comision}
+                      <select
+                        value={formExpediente.id_caja_asignada || ''}
                         onChange={e => {
                           const val = e.target.value;
-                          if (formExpediente.tipo_salario === 'Fijo') {
-                            setFormExpediente({ ...formExpediente, salario_base: val });
-                          } else {
-                            setFormExpediente({ ...formExpediente, porcentaje_comision: val });
-                          }
+                          const foundC = cajas.find(c => c.id === val);
+                          setFormExpediente({
+                            ...formExpediente,
+                            id_caja_asignada: val,
+                            nombre_caja_asignada: foundC ? `${foundC.codigo} - ${foundC.nombre}` : ''
+                          });
                         }}
-                        className="w-full border p-2 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 font-bold"
-                      />
+                        className="w-full border border-blue-300 bg-blue-50/40 p-2 rounded-xl text-sm font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">-- Sin Caja Asignada --</option>
+                        {cajas.map(c => {
+                          const enUso = c.usuario_asignado_id && c.usuario_asignado_id !== selectedExpediente?.id;
+                          return (
+                            <option key={c.id} value={c.id}>
+                              {c.codigo} - {c.nombre} ({c.sucursal_id || 'SUC-01'}) {enUso ? `[En uso por: ${c.usuario_asignado_nombre}]` : ''}
+                            </option>
+                          );
+                        })}
+                      </select>
+                      <p className="text-[10px] text-gray-400 mt-0.5">
+                        Si no tiene caja asignada, no podrá realizar apertura ni facturar en el POS.
+                      </p>
                     </div>
                   </div>
 
@@ -1626,6 +1973,132 @@ export default function RRHH() {
                           {antigModal.tieneFecha ? `Equivalente a ${prestModal.mesesIndemnizacion} meses de salario` : 'Requiere fecha de ingreso'}
                         </p>
                       </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {expedienteTab === 'acceso' && (
+                <div className="space-y-5">
+                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-4">
+                    <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                      <KeyRound size={18} className="text-blue-600" /> Credenciales y Rol del Sistema
+                    </h4>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Usuario (Login)</label>
+                        <input
+                          type="text"
+                          value={formExpediente.usuario || ''}
+                          onChange={e => setFormExpediente({ ...formExpediente, usuario: e.target.value })}
+                          className="w-full border p-2 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 font-mono font-bold"
+                          placeholder="ej. carlos.mendez"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Cambiar Contraseña</label>
+                        <input
+                          type="password"
+                          value={formExpediente.password || ''}
+                          onChange={e => setFormExpediente({ ...formExpediente, password: e.target.value })}
+                          className="w-full border p-2 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="Dejar vacío para no cambiar"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Rol en el Sistema</label>
+                        <select
+                          value={formExpediente.rol || 'Usuario'}
+                          onChange={e => setFormExpediente({ ...formExpediente, rol: e.target.value })}
+                          className="w-full border p-2 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white font-bold"
+                        >
+                          <option value="SuperAdmin">SuperAdmin (Acceso Total)</option>
+                          <option value="Administrador">Administrador</option>
+                          <option value="Cajero">Cajero</option>
+                          <option value="Mecánico">Mecánico</option>
+                          <option value="Vendedor">Vendedor</option>
+                          <option value="Usuario">Usuario General</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="p-3 bg-white rounded-xl border border-blue-100 flex items-center justify-between">
+                      <div>
+                        <span className="text-xs font-bold text-gray-800 block">Facturación Multi-Sucursal</span>
+                        <p className="text-[11px] text-gray-500">
+                          Permite a este cajero/vendedor emitir facturas consumiendo inventario de cualquier sucursal sin salir de la pantalla.
+                        </p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(formExpediente.permite_multisucursal)}
+                        onChange={e => setFormExpediente({ ...formExpediente, permite_multisucursal: e.target.checked })}
+                        className="w-5 h-5 text-blue-600 rounded cursor-pointer"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Checklist de Permisos Granulares */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-bold text-gray-800 text-sm flex items-center gap-2">
+                        <ShieldCheck size={18} className="text-blue-600" /> Permisos Granulares por Módulo
+                      </h4>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const todos = Object.values(PERMISOS_CATEGORIAS).flat().map(p => p.id);
+                            setFormExpediente({ ...formExpediente, permisos: todos });
+                          }}
+                          className="text-[11px] font-bold text-blue-600 hover:underline"
+                        >
+                          Marcar Todos
+                        </button>
+                        <span className="text-gray-300">|</span>
+                        <button
+                          type="button"
+                          onClick={() => setFormExpediente({ ...formExpediente, permisos: [] })}
+                          className="text-[11px] font-bold text-gray-500 hover:underline"
+                        >
+                          Desmarcar Todos
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {Object.entries(PERMISOS_CATEGORIAS).map(([catNombre, permsList]) => (
+                        <div key={catNombre} className="bg-gray-50 p-3 rounded-xl border border-gray-100">
+                          <h5 className="text-xs font-bold text-gray-700 uppercase mb-2 border-b border-gray-200 pb-1">
+                            {catNombre}
+                          </h5>
+                          <div className="space-y-1.5">
+                            {permsList.map(p => {
+                              const checked = (formExpediente.permisos || []).includes(p.id);
+                              return (
+                                <label key={p.id} className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer hover:bg-white p-1 rounded transition-colors">
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={e => {
+                                      const current = formExpediente.permisos || [];
+                                      const updated = e.target.checked
+                                        ? [...current, p.id]
+                                        : current.filter(x => x !== p.id);
+                                      setFormExpediente({ ...formExpediente, permisos: updated });
+                                    }}
+                                    className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                                  />
+                                  <span>{p.label}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>
@@ -1935,6 +2408,390 @@ export default function RRHH() {
                 Sí, Eliminar Período
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL REGISTRAR NUEVO COLABORADOR Y ACCESO AL SISTEMA */}
+      {isNuevoUsuarioModalOpen && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm animate-in fade-in duration-200 overflow-hidden">
+          <div className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-4xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 max-h-[94vh] flex flex-col">
+            <div className="p-4 sm:p-6 bg-gradient-to-r from-blue-900 to-indigo-900 text-white flex justify-between items-center shrink-0">
+              <div>
+                <h3 className="font-black text-lg sm:text-xl flex items-center gap-2">
+                  <UserPlus className="text-blue-300" size={22} />
+                  Nuevo Colaborador y Acceso al Sistema
+                </h3>
+                <p className="text-xs text-blue-200 mt-0.5">
+                  Registro integral de RRHH, expediente laboral, asignación de caja y credenciales de usuario
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsNuevoUsuarioModalOpen(false)}
+                className="text-white/70 hover:text-white p-1 rounded-full hover:bg-white/10 text-xl font-bold leading-none"
+              >
+                &times;
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveNuevoColaborador} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="p-4 sm:p-6 overflow-y-auto space-y-6 flex-1">
+                
+                {/* 1. DATOS PERSONALES */}
+                <div className="space-y-3">
+                  <h4 className="font-black text-sm text-gray-800 uppercase tracking-wider flex items-center gap-2 border-b pb-2">
+                    <User size={16} className="text-blue-600" /> 1. Datos Personales y de Identificación
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Nombre Completo *</label>
+                      <input
+                        required
+                        type="text"
+                        placeholder="Ej. Juan Pérez López"
+                        value={nuevoUsuarioForm.nombre_completo}
+                        onChange={e => setNuevoUsuarioForm({ ...nuevoUsuarioForm, nombre_completo: e.target.value })}
+                        className="w-full border p-2 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 font-semibold"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Cédula de Identidad</label>
+                      <input
+                        type="text"
+                        placeholder="001-000000-0000A"
+                        value={nuevoUsuarioForm.cedula}
+                        onChange={e => setNuevoUsuarioForm({ ...nuevoUsuarioForm, cedula: e.target.value })}
+                        className="w-full border p-2 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Teléfono</label>
+                      <input
+                        type="text"
+                        placeholder="+505 8888-8888"
+                        value={nuevoUsuarioForm.telefono}
+                        onChange={e => setNuevoUsuarioForm({ ...nuevoUsuarioForm, telefono: e.target.value })}
+                        className="w-full border p-2 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Fecha de Ingreso Laboral *</label>
+                      <input
+                        required
+                        type="date"
+                        value={nuevoUsuarioForm.fecha_ingreso}
+                        onChange={e => setNuevoUsuarioForm({ ...nuevoUsuarioForm, fecha_ingreso: e.target.value })}
+                        className="w-full border p-2 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 font-bold"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Contacto de Emergencia</label>
+                      <input
+                        type="text"
+                        placeholder="Nombre y teléfono..."
+                        value={nuevoUsuarioForm.contacto_emergencia}
+                        onChange={e => setNuevoUsuarioForm({ ...nuevoUsuarioForm, contacto_emergencia: e.target.value })}
+                        className="w-full border p-2 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Dirección Domiciliar</label>
+                    <input
+                      type="text"
+                      placeholder="Dirección del colaborador..."
+                      value={nuevoUsuarioForm.direccion}
+                      onChange={e => setNuevoUsuarioForm({ ...nuevoUsuarioForm, direccion: e.target.value })}
+                      className="w-full border p-2 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+
+                {/* 2. DATOS LABORALES Y SALARIO */}
+                <div className="space-y-3">
+                  <h4 className="font-black text-sm text-gray-800 uppercase tracking-wider flex items-center gap-2 border-b pb-2">
+                    <Briefcase size={16} className="text-indigo-600" /> 2. Cargo, Esquema Salarial y Caja
+                  </h4>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Puesto / Función *</label>
+                      <select
+                        value={nuevoUsuarioForm.funcion}
+                        onChange={e => setNuevoUsuarioForm({ ...nuevoUsuarioForm, funcion: e.target.value })}
+                        className="w-full border p-2 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white font-medium"
+                      >
+                        <option value="Mecánico">Mecánico</option>
+                        <option value="Cajero">Cajero</option>
+                        <option value="Vendedor">Vendedor</option>
+                        <option value="Gerente">Gerente</option>
+                        <option value="Auxiliar">Auxiliar</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Sucursal Base</label>
+                      <select
+                        value={nuevoUsuarioForm.id_sucursal}
+                        onChange={e => setNuevoUsuarioForm({ ...nuevoUsuarioForm, id_sucursal: e.target.value })}
+                        className="w-full border p-2 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                      >
+                        {sucursalesList.map(s => (
+                          <option key={s.id} value={s.id}>{s.nombre} ({s.id})</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Esquema Salarial</label>
+                      <select
+                        value={nuevoUsuarioForm.tipo_salario}
+                        onChange={e => setNuevoUsuarioForm({ ...nuevoUsuarioForm, tipo_salario: e.target.value })}
+                        className="w-full border p-2 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white font-bold text-blue-900"
+                      >
+                        <option value="Comisión">Comisión (%)</option>
+                        <option value="Fijo">Salario Fijo (C$)</option>
+                        <option value="Mixto">Mixto (Fijo + Comisión)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Campos salariales dinámicos */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                    {nuevoUsuarioForm.tipo_salario === 'Fijo' && (
+                      <div className="sm:col-span-2">
+                        <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Salario Fijo Mensual (C$)</label>
+                        <input
+                          type="number"
+                          value={nuevoUsuarioForm.salario_base}
+                          onChange={e => setNuevoUsuarioForm({ ...nuevoUsuarioForm, salario_base: e.target.value })}
+                          className="w-full border p-2 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 font-bold"
+                          placeholder="0.00"
+                        />
+                      </div>
+                    )}
+
+                    {nuevoUsuarioForm.tipo_salario === 'Comisión' && (
+                      <div className="sm:col-span-2">
+                        <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">% Comisión sobre Servicios / Ventas</label>
+                        <input
+                          type="number"
+                          value={nuevoUsuarioForm.porcentaje_comision}
+                          onChange={e => setNuevoUsuarioForm({ ...nuevoUsuarioForm, porcentaje_comision: e.target.value })}
+                          className="w-full border p-2 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 font-bold"
+                          placeholder="50"
+                        />
+                      </div>
+                    )}
+
+                    {nuevoUsuarioForm.tipo_salario === 'Mixto' && (
+                      <>
+                        <div>
+                          <label className="block text-xs font-bold text-blue-800 mb-1 uppercase">Salario Base Fijo (C$)</label>
+                          <input
+                            type="number"
+                            value={nuevoUsuarioForm.salario_base}
+                            onChange={e => setNuevoUsuarioForm({ ...nuevoUsuarioForm, salario_base: e.target.value })}
+                            className="w-full border border-blue-300 p-2 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 font-bold"
+                            placeholder="0.00"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-blue-800 mb-1 uppercase">% Comisión por Servicios</label>
+                          <input
+                            type="number"
+                            value={nuevoUsuarioForm.porcentaje_comision}
+                            onChange={e => setNuevoUsuarioForm({ ...nuevoUsuarioForm, porcentaje_comision: e.target.value })}
+                            className="w-full border border-blue-300 p-2 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 font-bold"
+                            placeholder="50"
+                          />
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Asignación de caja registradora */}
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1 uppercase flex items-center gap-1.5 text-blue-700">
+                      <Store size={15} /> Caja Registradora Asignada
+                    </label>
+                    <select
+                      value={nuevoUsuarioForm.id_caja_asignada}
+                      onChange={e => {
+                        const val = e.target.value;
+                        const cSel = cajas.find(c => c.id === val);
+                        setNuevoUsuarioForm({
+                          ...nuevoUsuarioForm,
+                          id_caja_asignada: val,
+                          nombre_caja_asignada: cSel ? `${cSel.codigo} - ${cSel.nombre}` : ''
+                        });
+                      }}
+                      className="w-full border border-blue-300 bg-blue-50/40 p-2 rounded-xl text-sm font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">-- Sin Caja Asignada (No podrá facturar en POS) --</option>
+                      {cajas.map(c => {
+                        const enUso = c.usuario_asignado_id && c.usuario_asignado_nombre;
+                        return (
+                          <option key={c.id} value={c.id}>
+                            {c.codigo} - {c.nombre} ({c.sucursal_id || 'SUC-01'}) {enUso ? `[En uso por: ${c.usuario_asignado_nombre}]` : ''}
+                          </option>
+                        );
+                      })}
+                    </select>
+                    <p className="text-[11px] text-gray-500 mt-1">
+                      Si el colaborador operará el POS (Cajero o Vendedor), es requisito vincular una caja para que pueda aperturar turno y emitir recibos.
+                    </p>
+                  </div>
+                </div>
+
+                {/* 3. ACCESO AL SISTEMA Y PERMISOS */}
+                <div className="space-y-3">
+                  <h4 className="font-black text-sm text-gray-800 uppercase tracking-wider flex items-center gap-2 border-b pb-2">
+                    <KeyRound size={16} className="text-emerald-600" /> 3. Credenciales de Acceso y Permisos (Sistema)
+                  </h4>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Usuario (Login) *</label>
+                      <input
+                        required
+                        type="text"
+                        placeholder="ej. juan.perez"
+                        value={nuevoUsuarioForm.usuario}
+                        onChange={e => setNuevoUsuarioForm({ ...nuevoUsuarioForm, usuario: e.target.value })}
+                        className="w-full border p-2 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 font-mono font-bold"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Contraseña Inicial *</label>
+                      <input
+                        required
+                        type="password"
+                        placeholder="Contraseña de acceso"
+                        value={nuevoUsuarioForm.password}
+                        onChange={e => setNuevoUsuarioForm({ ...nuevoUsuarioForm, password: e.target.value })}
+                        className="w-full border p-2 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Rol de Sistema</label>
+                      <select
+                        value={nuevoUsuarioForm.rol}
+                        onChange={e => setNuevoUsuarioForm({ ...nuevoUsuarioForm, rol: e.target.value })}
+                        className="w-full border p-2 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white font-bold"
+                      >
+                        <option value="SuperAdmin">SuperAdmin (Acceso Total)</option>
+                        <option value="Administrador">Administrador</option>
+                        <option value="Cajero">Cajero</option>
+                        <option value="Mecánico">Mecánico</option>
+                        <option value="Vendedor">Vendedor</option>
+                        <option value="Usuario">Usuario General</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-blue-50/50 rounded-xl border border-blue-200 flex items-center justify-between">
+                    <div>
+                      <span className="text-xs font-bold text-blue-900 block">Facturación Multi-Sucursal</span>
+                      <p className="text-[11px] text-blue-700">
+                        Habilitar la opción de facturar productos con existencias en otras sucursales sin salir de la factura.
+                      </p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(nuevoUsuarioForm.permite_multisucursal)}
+                      onChange={e => setNuevoUsuarioForm({ ...nuevoUsuarioForm, permite_multisucursal: e.target.checked })}
+                      className="w-5 h-5 text-blue-600 rounded cursor-pointer"
+                    />
+                  </div>
+
+                  {/* Checklist permisos */}
+                  <div className="space-y-3 pt-2">
+                    <div className="flex items-center justify-between">
+                      <h5 className="font-bold text-gray-800 text-xs uppercase flex items-center gap-1.5">
+                        <ShieldCheck size={16} className="text-blue-600" /> Permisos por Módulo
+                      </h5>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const todos = Object.values(PERMISOS_CATEGORIAS).flat().map(p => p.id);
+                            setNuevoUsuarioForm({ ...nuevoUsuarioForm, permisos: todos });
+                          }}
+                          className="text-[11px] font-bold text-blue-600 hover:underline"
+                        >
+                          Marcar Todos
+                        </button>
+                        <span className="text-gray-300">|</span>
+                        <button
+                          type="button"
+                          onClick={() => setNuevoUsuarioForm({ ...nuevoUsuarioForm, permisos: [] })}
+                          className="text-[11px] font-bold text-gray-500 hover:underline"
+                        >
+                          Desmarcar Todos
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {Object.entries(PERMISOS_CATEGORIAS).map(([catNombre, permsList]) => (
+                        <div key={catNombre} className="bg-gray-50 p-3 rounded-xl border border-gray-100">
+                          <h6 className="text-[11px] font-bold text-gray-600 uppercase mb-2 border-b border-gray-200 pb-1">
+                            {catNombre}
+                          </h6>
+                          <div className="space-y-1.5">
+                            {permsList.map(p => {
+                              const checked = (nuevoUsuarioForm.permisos || []).includes(p.id);
+                              return (
+                                <label key={p.id} className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer hover:bg-white p-1 rounded transition-colors">
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={e => {
+                                      const current = nuevoUsuarioForm.permisos || [];
+                                      const updated = e.target.checked
+                                        ? [...current, p.id]
+                                        : current.filter(x => x !== p.id);
+                                      setNuevoUsuarioForm({ ...nuevoUsuarioForm, permisos: updated });
+                                    }}
+                                    className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                                  />
+                                  <span>{p.label}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+              <div className="p-3 sm:p-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsNuevoUsuarioModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-gray-600 text-sm font-medium hover:bg-gray-100"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-2 rounded-xl text-sm shadow-md shadow-blue-200 transition-all flex items-center gap-2"
+                >
+                  <UserPlus size={16} /> Crear Colaborador y Acceso
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
