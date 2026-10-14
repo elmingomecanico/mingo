@@ -1778,13 +1778,13 @@ export default function POS() {
                               <span className="font-mono text-xs font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded shrink-0">
                                 {p.id}
                               </span>
-                              <p className="font-bold text-gray-800 text-sm truncate">
+                              <p className="font-bold text-gray-800 text-sm break-words">
                                 {isService ? '🔧 ' : ''}{p.name}
                               </p>
                             </div>
 
                             {p.compatibilidad && p.compatibilidad.length > 0 && (
-                              <p className="text-[11px] text-blue-600 font-medium truncate mt-0.5">
+                              <p className="text-[11px] text-blue-600 font-medium break-words mt-0.5">
                                 Compat: {p.compatibilidad.join(', ')}
                               </p>
                             )}
@@ -2048,9 +2048,9 @@ export default function POS() {
             <h2 className="font-black text-gray-400 uppercase tracking-wider text-xs">Resumen de Factura</h2>
             
             <div className="space-y-2 text-sm text-gray-600 border-b border-gray-100 pb-3">
-              <div className="flex justify-between">
+              <div className="flex justify-between items-center gap-2">
                 <span>Cliente:</span>
-                <span className="font-bold text-gray-800 truncate max-w-[150px]">
+                <span className="font-bold text-gray-800 break-words text-right max-w-[200px]">
                   {clienteActualObj?.nombre || selectedCliente?.label || 'CLIENTE DE MOSTRADOR'}
                 </span>
               </div>
@@ -2106,9 +2106,9 @@ export default function POS() {
               </div>
             )}
 
-            <div className="flex justify-between text-3xl font-black pt-3 border-t border-gray-100 text-blue-900">
+            <div className="flex justify-between items-center text-2xl sm:text-3xl font-black pt-3 border-t border-gray-100 text-blue-900 flex-wrap gap-2">
               <span>TOTAL:</span>
-              <span>C$ {total.toFixed(2)}</span>
+              <span className="break-words">C$ {total.toFixed(2)}</span>
             </div>
           </div>
 

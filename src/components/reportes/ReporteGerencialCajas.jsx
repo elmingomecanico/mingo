@@ -375,7 +375,9 @@ export default function ReporteGerencialCajas({ user }) {
             <span className="p-1.5 bg-blue-50 text-blue-600 rounded-xl"><DollarSign size={16} /></span>
           </div>
           <div className="mt-2">
-            <span className="text-lg font-black text-gray-800 block">C$ {granTotalAperturas.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            <span className="text-base sm:text-lg font-black text-gray-800 block break-words leading-tight">
+              C$ {granTotalAperturas.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
             <span className="text-[10px] text-gray-400 font-medium block mt-0.5">Efectivo base de apertura</span>
           </div>
         </div>
@@ -387,7 +389,9 @@ export default function ReporteGerencialCajas({ user }) {
             <span className="p-1.5 bg-amber-50 text-amber-600 rounded-xl"><Package size={16} /></span>
           </div>
           <div className="mt-2">
-            <span className="text-lg font-black text-amber-700 block">C$ {granTotalProductos.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            <span className="text-base sm:text-lg font-black text-amber-700 block break-words leading-tight">
+              C$ {granTotalProductos.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
             <span className="text-[10px] text-gray-400 font-medium block mt-0.5">Repuestos e insumos</span>
           </div>
         </div>
@@ -399,7 +403,9 @@ export default function ReporteGerencialCajas({ user }) {
             <span className="p-1.5 bg-indigo-50 text-indigo-600 rounded-xl"><Wrench size={16} /></span>
           </div>
           <div className="mt-2">
-            <span className="text-lg font-black text-indigo-700 block">C$ {granTotalServicios.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            <span className="text-base sm:text-lg font-black text-indigo-700 block break-words leading-tight">
+              C$ {granTotalServicios.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
             <span className="text-[10px] text-gray-400 font-medium block mt-0.5">Mano de obra taller</span>
           </div>
         </div>
@@ -411,7 +417,9 @@ export default function ReporteGerencialCajas({ user }) {
             <span className="p-1.5 bg-rose-50 text-rose-600 rounded-xl"><ArrowUpRight size={16} /></span>
           </div>
           <div className="mt-2">
-            <span className="text-lg font-black text-rose-600 block">C$ {granTotalGastosSalidas.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            <span className="text-base sm:text-lg font-black text-rose-600 block break-words leading-tight">
+              C$ {granTotalGastosSalidas.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
             <span className="text-[10px] text-gray-400 font-medium block mt-0.5">Egresos de mostrador</span>
           </div>
         </div>
@@ -423,7 +431,9 @@ export default function ReporteGerencialCajas({ user }) {
             <span className="p-1.5 bg-white/20 text-white rounded-xl"><TrendingUp size={16} /></span>
           </div>
           <div className="mt-2">
-            <span className="text-xl font-black text-white block">C$ {granTotalEfectivoEnCajas.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            <span className="text-lg sm:text-xl font-black text-white block break-words leading-tight">
+              C$ {granTotalEfectivoEnCajas.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
             <span className="text-[10px] text-emerald-200 block mt-0.5">Saldo físico teórico actual</span>
           </div>
         </div>
@@ -516,8 +526,8 @@ export default function ReporteGerencialCajas({ user }) {
                     <span className="text-[10px] font-bold uppercase tracking-wider text-blue-800 block mb-1">
                       Fondo Inicial de Apertura
                     </span>
-                    <div className="flex justify-between items-baseline">
-                      <span className="text-xl font-black text-blue-900">
+                    <div className="flex justify-between items-baseline flex-wrap gap-1">
+                      <span className="text-lg sm:text-xl font-black text-blue-900 break-words leading-tight">
                         C$ {montoApertura.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                       <div className="text-[11px] text-blue-700 text-right">
@@ -537,22 +547,22 @@ export default function ReporteGerencialCajas({ user }) {
                     <div className="grid grid-cols-2 gap-2 text-xs">
                       <div className="bg-amber-50/80 p-2.5 rounded-xl border border-amber-100">
                         <span className="text-[10px] font-bold text-amber-800 block">📦 Productos</span>
-                        <span className="text-sm font-black text-amber-900 block mt-0.5">
+                        <span className="text-xs sm:text-sm font-black text-amber-900 block mt-0.5 break-words leading-tight">
                           C$ {totalProductos.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span>
                       </div>
 
                       <div className="bg-indigo-50/80 p-2.5 rounded-xl border border-indigo-100">
                         <span className="text-[10px] font-bold text-indigo-800 block">🔧 Servicios (Taller)</span>
-                        <span className="text-sm font-black text-indigo-900 block mt-0.5">
+                        <span className="text-xs sm:text-sm font-black text-indigo-900 block mt-0.5 break-words leading-tight">
                           C$ {totalServicios.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span>
                       </div>
                     </div>
 
-                    <div className="flex justify-between items-center bg-gray-50 p-2.5 rounded-xl text-xs">
+                    <div className="flex justify-between items-center bg-gray-50 p-2.5 rounded-xl text-xs flex-wrap gap-1">
                       <span className="font-bold text-gray-700">Total Facturado en Caja:</span>
-                      <strong className="text-sm font-black text-gray-900">
+                      <strong className="text-xs sm:text-sm font-black text-gray-900 break-words">
                         C$ {totalFacturado.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </strong>
                     </div>
@@ -592,8 +602,8 @@ export default function ReporteGerencialCajas({ user }) {
                         Ver Detalle ({salidasList.length})
                       </button>
                     </div>
-                    <div className="mt-1 flex justify-between items-baseline">
-                      <span className="text-base font-black text-rose-700">
+                    <div className="mt-1 flex justify-between items-baseline flex-wrap gap-1">
+                      <span className="text-sm sm:text-base font-black text-rose-700 break-words leading-tight">
                         C$ {totalGastosSalidas.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                       <span className="text-[10px] text-rose-600">
@@ -604,12 +614,12 @@ export default function ReporteGerencialCajas({ user }) {
                 </div>
 
                 {/* EFECTIVO TEORICO ACTUAL */}
-                <div className="pt-3 border-t border-gray-100 flex justify-between items-center bg-gray-50/50 -mx-5 -mb-5 p-4 rounded-b-2xl">
+                <div className="pt-3 border-t border-gray-100 flex justify-between items-center bg-gray-50/50 -mx-5 -mb-5 p-4 rounded-b-2xl flex-wrap gap-2">
                   <div>
                     <span className="text-[10px] font-bold uppercase text-gray-400 block">Efectivo Teórico en Gaveta</span>
                     <span className="text-xs text-gray-500">(Fondo + Efectivo - Gastos)</span>
                   </div>
-                  <span className="text-lg font-black text-emerald-700">
+                  <span className="text-base sm:text-lg font-black text-emerald-700 break-words">
                     C$ {efectivoTeoricoEnCaja.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
@@ -632,9 +642,9 @@ export default function ReporteGerencialCajas({ user }) {
             </p>
           </div>
 
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-bold text-emerald-800">
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-bold text-emerald-800 flex-wrap">
             <span>Total Comisiones Hoy:</span>
-            <strong className="text-sm font-black text-emerald-700">
+            <strong className="text-sm font-black text-emerald-700 break-words">
               C$ {totalComisionesMecanicosHoy.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </strong>
           </div>

@@ -209,7 +209,7 @@ export default function Clientes() {
                           <Phone size={13} className="text-gray-400" /> 
                           {cliente.telefono1 || 'Sin teléfono'}
                         </div>
-                        <div className="text-xs text-gray-400 mt-0.5 truncate max-w-[180px]">
+                        <div className="text-xs text-gray-400 mt-0.5 break-words max-w-[220px]">
                           {cliente.direccion || 'Sin dirección'}
                         </div>
                       </td>

@@ -896,7 +896,7 @@ export default function Compras() {
                                   <span className="font-mono text-xs font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded shrink-0">
                                     {p.id}
                                   </span>
-                                  <p className="font-bold text-gray-800 text-sm truncate">{p.name}</p>
+                                  <p className="font-bold text-gray-800 text-sm break-words">{p.name}</p>
                                 </div>
                                 <div className="flex items-center gap-2 mt-0.5 text-[11px] text-gray-500">
                                   {p.cat && <span className="text-gray-600 font-medium">{p.cat}</span>}
@@ -999,7 +999,7 @@ export default function Compras() {
                                 <span className="font-mono text-xs font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
                                   {item.id}
                                 </span>
-                                <p className="font-bold text-gray-900 text-sm truncate">{item.name}</p>
+                                <p className="font-bold text-gray-900 text-sm break-words">{item.name}</p>
                                 <button
                                   type="button"
                                   onClick={() => openEditProductModal(item)}
@@ -1229,7 +1229,7 @@ export default function Compras() {
               <div className="p-3 bg-gray-50 rounded-xl border border-gray-100 text-xs space-y-1">
                 <div className="flex justify-between">
                   <span className="text-gray-400 font-bold uppercase">Proveedor:</span>
-                  <span className="font-bold text-gray-800 truncate max-w-[170px]">
+                  <span className="font-bold text-gray-800 break-words text-right max-w-[200px]">
                     {selectedProveedor ? selectedProveedor.label : 'Sin seleccionar'}
                   </span>
                 </div>

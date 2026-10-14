@@ -163,7 +163,7 @@ export default function Proveedores() {
                         {prov.telefono || 'Sin teléfono'}
                       </div>
                       {prov.email && (
-                        <div className="text-xs text-indigo-600 mt-0.5 truncate">
+                        <div className="text-xs text-indigo-600 mt-0.5 break-words">
                           {prov.email}
                         </div>
                       )}

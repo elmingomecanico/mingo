@@ -148,34 +148,46 @@ export default function Reportes() {
 
       {/* Tarjetas de Métricas para Historial de Ventas y Cierres */}
       {activeTab !== 'gerencial' && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex items-center gap-5">
-            <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-emerald-50">
-              <DollarSign size={24} className="text-emerald-500" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
+          <div className="bg-white rounded-2xl p-5 sm:p-6 shadow-sm border border-gray-100 flex flex-col justify-between gap-3 hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between">
+              <p className="text-gray-500 font-bold text-xs uppercase tracking-wider">Ingresos de Hoy</p>
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center bg-emerald-50 text-emerald-600 shrink-0">
+                <DollarSign size={22} />
+              </div>
             </div>
-            <div>
-              <p className="text-gray-500 font-medium text-xs uppercase tracking-wider">Ingresos de Hoy</p>
-              <h3 className="text-2xl font-black text-gray-800">C$ {ingresosHoy.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h3>
+            <div className="mt-1">
+              <h3 className="text-xl sm:text-2xl font-black text-gray-800 break-words leading-tight">
+                C$ {ingresosHoy.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </h3>
             </div>
           </div>
           
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex items-center gap-5">
-            <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-blue-50">
-              <ShoppingBag size={24} className="text-blue-500" />
+          <div className="bg-white rounded-2xl p-5 sm:p-6 shadow-sm border border-gray-100 flex flex-col justify-between gap-3 hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between">
+              <p className="text-gray-500 font-bold text-xs uppercase tracking-wider">Facturas Emitidas Hoy</p>
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center bg-blue-50 text-blue-600 shrink-0">
+                <ShoppingBag size={22} />
+              </div>
             </div>
-            <div>
-              <p className="text-gray-500 font-medium text-xs uppercase tracking-wider">Facturas Emitidas Hoy</p>
-              <h3 className="text-2xl font-black text-gray-800">{ventasHoy.length}</h3>
+            <div className="mt-1">
+              <h3 className="text-xl sm:text-2xl font-black text-gray-800 break-words leading-tight">
+                {ventasHoy.length}
+              </h3>
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex items-center gap-5">
-            <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-amber-50">
-              <FileText size={24} className="text-amber-500" />
+          <div className="bg-white rounded-2xl p-5 sm:p-6 shadow-sm border border-gray-100 flex flex-col justify-between gap-3 hover:shadow-md transition-shadow sm:col-span-2 md:col-span-1">
+            <div className="flex items-center justify-between">
+              <p className="text-gray-500 font-bold text-xs uppercase tracking-wider">Total Facturado Histórico</p>
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center bg-amber-50 text-amber-600 shrink-0">
+                <FileText size={22} />
+              </div>
             </div>
-            <div>
-              <p className="text-gray-500 font-medium text-xs uppercase tracking-wider">Total Facturado Histórico</p>
-              <h3 className="text-2xl font-black text-gray-800">C$ {totalIngresos.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h3>
+            <div className="mt-1">
+              <h3 className="text-xl sm:text-2xl font-black text-gray-800 break-words leading-tight">
+                C$ {totalIngresos.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </h3>
             </div>
           </div>
         </div>
@@ -240,7 +252,7 @@ export default function Reportes() {
                         <td className="p-4 text-gray-700 font-semibold text-xs">
                           {venta.metodo_pago || 'Efectivo'}
                         </td>
-                        <td className="p-4 text-gray-600 truncate max-w-xs" title={itemsSummary}>
+                        <td className="p-4 text-gray-600 break-words max-w-xs" title={itemsSummary}>
                           {itemsSummary}
                         </td>
                         <td className="p-4 text-right font-black text-blue-700 font-mono">
@@ -319,7 +331,7 @@ export default function Reportes() {
                             </div>
                           )}
                         </td>
-                        <td className="p-4 text-xs font-bold text-gray-800 truncate max-w-[140px]">
+                        <td className="p-4 text-xs font-bold text-gray-800 break-words max-w-[140px]">
                           {turno.cajero_nombre || 'Cajero'}
                         </td>
                         <td className="p-4 text-gray-600">

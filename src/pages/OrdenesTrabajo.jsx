@@ -150,9 +150,11 @@ export default function OrdenesTrabajo() {
 
         <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between">
           <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Mano de Obra Facturada</span>
-          <div className="flex items-center justify-between mt-2">
-            <span className="text-lg sm:text-xl font-black text-gray-800">C$ {kpiTotalManoObra.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-            <div className="p-2 bg-gray-100 rounded-xl text-gray-600"><DollarSign size={18} /></div>
+          <div className="flex items-center justify-between mt-2 gap-2">
+            <span className="text-base sm:text-lg font-black text-gray-800 break-words leading-tight">
+              C$ {kpiTotalManoObra.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+            <div className="p-2 bg-gray-100 rounded-xl text-gray-600 shrink-0"><DollarSign size={18} /></div>
           </div>
         </div>
 
@@ -161,7 +163,9 @@ export default function OrdenesTrabajo() {
             <Award size={14} /> Comisiones Ganadas
           </span>
           <div className="mt-2">
-            <span className="text-xl sm:text-2xl font-black text-white">C$ {kpiTotalComisiones.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            <span className="text-lg sm:text-xl font-black text-white break-words leading-tight block">
+              C$ {kpiTotalComisiones.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
             <span className="text-[10px] text-emerald-200 block mt-0.5">Listas para pago en nómina</span>
           </div>
         </div>
@@ -231,7 +235,7 @@ export default function OrdenesTrabajo() {
                 </div>
 
                 {ot.nombre_cliente && (
-                  <p className="text-xs text-gray-500 mb-3 truncate">
+                  <p className="text-xs text-gray-500 mb-3 break-words">
                     Cliente: <strong className="text-gray-700">{ot.nombre_cliente}</strong>
                   </p>
                 )}

@@ -237,38 +237,38 @@ export default function AsientoApertura({
 
         {/* TARJETAS RESUMEN DE LA ECUACIÓN CONTABLE */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+          <div className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between">
             <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">
               1. Total Activo Inicial
             </span>
-            <span className="text-2xl font-black text-emerald-700 block mt-1">
+            <span className="text-xl sm:text-2xl font-black text-emerald-700 block mt-1 break-words leading-tight">
               C$ {act.toLocaleString('es-NI', { minimumFractionDigits: 2 })}
             </span>
-            <span className="text-[11px] text-gray-500 font-medium mt-0.5 block">
+            <span className="text-[11px] text-gray-500 font-medium mt-1 block">
               Cajas + Bancos + Inventario + CxC
             </span>
           </div>
 
-          <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+          <div className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between">
             <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">
               2. Total Pasivo Inicial
             </span>
-            <span className="text-2xl font-black text-rose-600 block mt-1">
+            <span className="text-xl sm:text-2xl font-black text-rose-600 block mt-1 break-words leading-tight">
               C$ {pas.toLocaleString('es-NI', { minimumFractionDigits: 2 })}
             </span>
-            <span className="text-[11px] text-gray-500 font-medium mt-0.5 block">
+            <span className="text-[11px] text-gray-500 font-medium mt-1 block">
               Deudas pendientes a Proveedores (CxP)
             </span>
           </div>
 
-          <div className="bg-gradient-to-br from-blue-900 to-indigo-950 text-white p-5 rounded-2xl shadow-md">
+          <div className="bg-gradient-to-br from-blue-900 to-indigo-950 text-white p-4 sm:p-5 rounded-2xl shadow-md flex flex-col justify-between">
             <span className="text-xs font-bold text-blue-200 uppercase tracking-wider block">
               3. Capital Social / Patrimonio
             </span>
-            <span className="text-2xl font-black text-white block mt-1">
+            <span className="text-xl sm:text-2xl font-black text-white block mt-1 break-words leading-tight">
               C$ {pat.toLocaleString('es-NI', { minimumFractionDigits: 2 })}
             </span>
-            <span className="text-[11px] text-blue-300 font-medium mt-0.5 block">
+            <span className="text-[11px] text-blue-300 font-medium mt-1 block">
               Activo - Pasivo = Aporte Neto de Socios
             </span>
           </div>

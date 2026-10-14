@@ -1041,7 +1041,7 @@ export default function RRHH() {
                   <div className="grid grid-cols-2 gap-2 text-xs bg-gray-50 p-3 rounded-xl border border-gray-100">
                     <div>
                       <span className="text-gray-400 text-[10px] block uppercase font-bold">Esquema</span>
-                      <strong className="text-gray-700">
+                      <strong className="text-gray-700 break-words">
                         {emp.tipo_salario === 'Mixto'
                           ? `Mixto (C$ ${emp.salario_base || 0} + ${emp.porcentaje_comision || 50}%)`
                           : emp.tipo_salario === 'Fijo'
@@ -1051,7 +1051,7 @@ export default function RRHH() {
                     </div>
                     <div>
                       <span className="text-gray-400 text-[10px] block uppercase font-bold">Caja Asignada</span>
-                      <strong className={emp.id_caja_asignada ? 'text-blue-700 flex items-center gap-1 truncate' : 'text-gray-400'}>
+                      <strong className={emp.id_caja_asignada ? 'text-blue-700 flex items-center gap-1 break-words' : 'text-gray-400'}>
                         {emp.id_caja_asignada ? (
                           <>
                             <Store size={12} className="shrink-0" /> {cajaAsignadaObj ? `${cajaAsignadaObj.codigo} (${cajaAsignadaObj.nombre})` : emp.nombre_caja_asignada || 'Asignada'}

@@ -1042,7 +1042,7 @@ export default function Inventario() {
                               )}
                               <div>
                                 <span className="font-mono text-[10px] text-gray-400 font-bold block">{p.id}</span>
-                                <span className="font-bold text-gray-900 block max-w-xs truncate" title={p.name}>{p.name}</span>
+                                <span className="font-bold text-gray-900 block max-w-xs break-words" title={p.name}>{p.name}</span>
                                 <span className="text-[10px] text-gray-400">{p.cat || 'General'}</span>
                               </div>
                             </div>

@@ -706,60 +706,70 @@ export default function Contabilidad() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         
         {/* Total Ingresos */}
-        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-            <ArrowUpRight size={26} />
+        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Ingresos ({filtroPeriodo})</p>
+            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+              <ArrowUpRight size={22} />
+            </div>
           </div>
-          <div className="min-w-0">
-            <p className="text-xs font-bold text-gray-500 uppercase">Ingresos ({filtroPeriodo})</p>
-            <h3 className="text-2xl font-black text-gray-900 truncate">
+          <div className="mt-2">
+            <h3 className="text-xl sm:text-2xl font-black text-gray-900 break-words leading-tight">
               C$ {totalIngresos.toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </h3>
-            <p className="text-[11px] text-emerald-600 font-semibold mt-0.5">Ventas y cobros</p>
+            <p className="text-[11px] text-emerald-600 font-semibold mt-1">Ventas y cobros</p>
           </div>
         </div>
 
         {/* Total Egresos */}
-        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
-            <ArrowDownRight size={26} />
+        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Egresos ({filtroPeriodo})</p>
+            <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+              <ArrowDownRight size={22} />
+            </div>
           </div>
-          <div className="min-w-0">
-            <p className="text-xs font-bold text-gray-500 uppercase">Egresos ({filtroPeriodo})</p>
-            <h3 className="text-2xl font-black text-gray-900 truncate">
+          <div className="mt-2">
+            <h3 className="text-xl sm:text-2xl font-black text-gray-900 break-words leading-tight">
               C$ {totalEgresos.toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </h3>
-            <p className="text-[11px] text-rose-600 font-semibold mt-0.5">Gastos y pagos</p>
+            <p className="text-[11px] text-rose-600 font-semibold mt-1">Gastos y pagos</p>
           </div>
         </div>
 
         {/* Flujo Neto */}
-        <div className={`bg-white p-5 rounded-2xl border shadow-sm flex items-center gap-4 ${flujoNeto >= 0 ? 'border-emerald-200' : 'border-rose-200'}`}>
-          <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${flujoNeto >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
-            <DollarSign size={26} />
+        <div className={`bg-white p-4 sm:p-5 rounded-2xl border shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow ${flujoNeto >= 0 ? 'border-emerald-200' : 'border-rose-200'}`}>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Flujo Neto / Balance</p>
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${flujoNeto >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+              <DollarSign size={22} />
+            </div>
           </div>
-          <div className="min-w-0">
-            <p className="text-xs font-bold text-gray-500 uppercase">Flujo Neto / Balance</p>
-            <h3 className={`text-2xl font-black truncate ${flujoNeto >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+          <div className="mt-2">
+            <h3 className={`text-xl sm:text-2xl font-black break-words leading-tight ${flujoNeto >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
               C$ {flujoNeto.toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </h3>
-            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${flujoNeto >= 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
-              {flujoNeto >= 0 ? 'Superávit Operativo' : 'Déficit del Período'}
-            </span>
+            <div className="mt-1">
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full inline-block ${flujoNeto >= 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
+                {flujoNeto >= 0 ? 'Superávit Operativo' : 'Déficit del Período'}
+              </span>
+            </div>
           </div>
         </div>
 
         {/* CxP Pendiente a Proveedores */}
-        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
-            <CreditCard size={26} />
+        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">CxP Pendiente</p>
+            <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+              <CreditCard size={22} />
+            </div>
           </div>
-          <div className="min-w-0">
-            <p className="text-xs font-bold text-gray-500 uppercase">CxP Pendiente</p>
-            <h3 className="text-2xl font-black text-gray-900 truncate">
+          <div className="mt-2">
+            <h3 className="text-xl sm:text-2xl font-black text-gray-900 break-words leading-tight">
               C$ {totalDeudaCxP.toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </h3>
-            <p className="text-[11px] text-amber-600 font-semibold mt-0.5">Deuda a proveedores</p>
+            <p className="text-[11px] text-amber-600 font-semibold mt-1">Deuda a proveedores</p>
           </div>
         </div>
 
@@ -964,7 +974,7 @@ export default function Contabilidad() {
                               {t.categoria}
                             </span>
                           </td>
-                          <td className="p-3.5 font-medium text-gray-800 max-w-xs truncate" title={t.concepto}>
+                          <td className="p-3.5 font-medium text-gray-800 max-w-xs break-words" title={t.concepto}>
                             {t.concepto}
                           </td>
                           <td className="p-3.5 font-mono text-xs text-gray-500">

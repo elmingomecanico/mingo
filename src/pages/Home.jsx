@@ -135,19 +135,21 @@ export default function Home() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
         {stats.map((stat, i) => (
-          <div key={i} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex flex-col gap-4 hover:shadow-md transition-shadow relative overflow-hidden group">
-            <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${stat.color}`}>
-              {stat.icon}
+          <div key={i} className="bg-white rounded-2xl p-5 sm:p-6 shadow-sm border border-gray-100 flex flex-col justify-between gap-3 hover:shadow-md transition-shadow relative overflow-hidden group">
+            <div className="flex items-center justify-between">
+              <p className="text-gray-500 font-bold text-xs sm:text-sm uppercase tracking-wider">{stat.label}</p>
+              <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0 ${stat.color}`}>
+                {stat.icon}
+              </div>
             </div>
-            <div>
-              <p className="text-gray-500 font-bold text-sm mb-1">{stat.label}</p>
-              <h3 className="text-2xl font-black text-gray-800">{stat.value}</h3>
+            <div className="mt-1">
+              <h3 className="text-xl sm:text-2xl font-black text-gray-800 break-words leading-tight">{stat.value}</h3>
               <p className="text-xs text-gray-400 mt-1 font-medium">{stat.sub}</p>
             </div>
             {/* Decal de fondo */}
-            <div className={`absolute -bottom-6 -right-6 opacity-5 group-hover:scale-125 transition-transform duration-500`}>
+            <div className={`absolute -bottom-6 -right-6 opacity-5 group-hover:scale-125 transition-transform duration-500 pointer-events-none`}>
               {stat.icon}
             </div>
           </div>

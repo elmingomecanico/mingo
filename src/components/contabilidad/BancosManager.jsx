@@ -535,47 +535,53 @@ export default function BancosManager({ cuentasBancarias = [], movimientosBancar
 
       {/* TARJETAS RESUMEN DE LIQUIDEZ BANCARIA */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        <div className="bg-gradient-to-br from-blue-900 to-indigo-900 text-white p-5 rounded-2xl shadow-md flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-white/10 backdrop-blur-xs flex items-center justify-center shrink-0">
-            <Landmark size={28} className="text-blue-200" />
-          </div>
-          <div>
+        <div className="bg-gradient-to-br from-blue-900 to-indigo-900 text-white p-4 sm:p-5 rounded-2xl shadow-md flex flex-col justify-between hover:shadow-lg transition-shadow">
+          <div className="flex items-center justify-between gap-2">
             <p className="text-xs font-bold text-blue-200 uppercase tracking-wider">Liquidez Bancaria (C$)</p>
-            <h3 className="text-2xl sm:text-3xl font-black tracking-tight mt-0.5">
+            <div className="w-10 h-10 rounded-xl bg-white/10 backdrop-blur-xs flex items-center justify-center shrink-0">
+              <Landmark size={24} className="text-blue-200" />
+            </div>
+          </div>
+          <div className="mt-2">
+            <h3 className="text-xl sm:text-2xl lg:text-3xl font-black tracking-tight break-words leading-tight">
               C$ {totalBancosCordobas.toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </h3>
-            <p className="text-[11px] text-blue-300 font-medium mt-0.5">
+            <p className="text-[11px] text-blue-300 font-medium mt-1">
               {cuentasBancarias.filter(c => c.moneda === 'NIO').length} cuentas en Córdobas
             </p>
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-emerald-800 to-teal-900 text-white p-5 rounded-2xl shadow-md flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-white/10 backdrop-blur-xs flex items-center justify-center shrink-0">
-            <DollarSign size={28} className="text-emerald-200" />
-          </div>
-          <div>
+        <div className="bg-gradient-to-br from-emerald-800 to-teal-900 text-white p-4 sm:p-5 rounded-2xl shadow-md flex flex-col justify-between hover:shadow-lg transition-shadow">
+          <div className="flex items-center justify-between gap-2">
             <p className="text-xs font-bold text-emerald-200 uppercase tracking-wider">Liquidez Bancaria ($ USD)</p>
-            <h3 className="text-2xl sm:text-3xl font-black tracking-tight mt-0.5">
+            <div className="w-10 h-10 rounded-xl bg-white/10 backdrop-blur-xs flex items-center justify-center shrink-0">
+              <DollarSign size={24} className="text-emerald-200" />
+            </div>
+          </div>
+          <div className="mt-2">
+            <h3 className="text-xl sm:text-2xl lg:text-3xl font-black tracking-tight break-words leading-tight">
               $ {totalBancosDolares.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </h3>
-            <p className="text-[11px] text-emerald-300 font-medium mt-0.5">
+            <p className="text-[11px] text-emerald-300 font-medium mt-1">
               {cuentasBancarias.filter(c => c.moneda === 'USD').length} cuentas en Dólares
             </p>
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center shrink-0">
-            <CreditCard size={28} />
-          </div>
-          <div className="min-w-0">
+        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between gap-2">
             <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Cuentas Vinculadas a POS</p>
-            <p className="text-sm font-black text-gray-800 truncate mt-0.5">
-              💳 Tarjetas: {cuentasBancarias.find(c => c.recibir_tarjetas_pos)?.alias || 'Sin asignar'}
+            <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center shrink-0">
+              <CreditCard size={24} />
+            </div>
+          </div>
+          <div className="mt-2 space-y-1">
+            <p className="text-xs sm:text-sm font-black text-gray-800 break-words">
+              💳 Tarjetas: <span className="text-blue-700">{cuentasBancarias.find(c => c.recibir_tarjetas_pos)?.alias || 'Sin asignar'}</span>
             </p>
-            <p className="text-xs font-bold text-gray-600 truncate mt-0.5">
-              📱 Transf: {cuentasBancarias.find(c => c.recibir_transferencias_pos)?.alias || 'Sin asignar'}
+            <p className="text-xs sm:text-sm font-bold text-gray-700 break-words">
+              📱 Transf: <span className="text-emerald-700">{cuentasBancarias.find(c => c.recibir_transferencias_pos)?.alias || 'Sin asignar'}</span>
             </p>
           </div>
         </div>

@@ -119,12 +119,14 @@ export default function CxC() {
           <p className="text-gray-500 text-sm">Gestiona los créditos otorgados a clientes y registra abonos.</p>
         </div>
         <div className="bg-amber-100 px-4 py-2 rounded-xl flex items-center gap-3 shadow-sm border border-amber-200">
-          <div className="bg-amber-500 p-2 rounded-lg text-white">
+          <div className="bg-amber-500 p-2 rounded-lg text-white shrink-0">
             <DollarSign size={20} />
           </div>
           <div>
             <p className="text-xs text-amber-700 font-bold uppercase">Total por Cobrar</p>
-            <p className="text-xl font-black text-amber-900">C$ {totalPendienteGlobal.toFixed(2)}</p>
+            <p className="text-lg sm:text-xl font-black text-amber-900 break-words">
+              C$ {totalPendienteGlobal.toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </p>
           </div>
         </div>
       </div>

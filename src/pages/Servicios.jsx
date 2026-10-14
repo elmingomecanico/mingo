@@ -192,7 +192,7 @@ export default function Servicios() {
                       </div>
                     </td>
                     <td className="p-4 font-bold text-gray-800">{serv.nombre}</td>
-                    <td className="p-4 text-gray-500 truncate max-w-[300px]">
+                    <td className="p-4 text-gray-500 break-words max-w-[300px]">
                       {serv.descripcion || 'Sin descripción'}
                     </td>
                     <td className="p-4 text-right font-bold text-emerald-600">
