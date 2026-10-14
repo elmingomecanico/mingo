@@ -205,26 +205,70 @@ export default function POS() {
   const [isCashMovementModalOpen, setIsCashMovementModalOpen] = useState(false);
   const [isMoneyCounterOpen, setIsMoneyCounterOpen] = useState(false);
 
-  // Privilegio y asignación de caja del usuario actual
+  // 1. Identificación del usuario y privilegios
+  const currentUserId = currentUserRealtime?.id || user?.id;
   const userAssignedCajaId = currentUserRealtime?.id_caja_asignada;
   const isSuperAdmin = currentUserRealtime?.rol === 'SuperAdmin';
-  const canOperatePOS = isSuperAdmin || Boolean(userAssignedCajaId);
-  const userAssignedCaja = cajasList.find(c => c.id === userAssignedCajaId);
 
-  // Computación reactiva del turno abierto para la caja del usuario o sucursal
+  // 2. Determinar la caja asignada directa a este usuario (por id_caja_asignada o por usuario_asignado_id)
+  const userAssignedCaja = cajasList.find(c => 
+    (userAssignedCajaId && c.id === userAssignedCajaId) || 
+    (c.usuario_asignado_id && c.usuario_asignado_id === currentUserId)
+  );
+
+  // 3. Cajas que este usuario tiene derecho a operar en la sucursal actual:
+  // - Si el usuario (cajero o SuperAdmin) tiene una caja asignada a su nombre, SOLO opera su caja asignada.
+  // - Si el usuario es SuperAdmin y NO tiene caja asignada a su nombre, SOLO puede operar cajas LIBRES
+  //   (sin asignar a ningún otro empleado: usuario_asignado_id vacío o 'Sin Asignar').
+  // - NUNCA jamás se permite operar o abrir una caja asignada a otro empleado, protegiendo la integridad del personal.
+  const myOperableCajas = cajasList.filter(c => {
+    if (c.estado === 'Inactiva') return false;
+    if (c.sucursal && c.sucursal !== sucursal) return false;
+
+    // Caja asignada directamente a este usuario
+    if (userAssignedCaja && c.id === userAssignedCaja.id) return true;
+    if (c.usuario_asignado_id && c.usuario_asignado_id === currentUserId) return true;
+
+    // Si es SuperAdmin y NO tiene caja asignada a su nombre: solo cajas LIBRES (sin asignar a otro colaborador)
+    if (isSuperAdmin && !userAssignedCaja) {
+      const assignedToOther = Boolean(
+        c.usuario_asignado_id && 
+        c.usuario_asignado_id !== '' && 
+        c.usuario_asignado_id !== 'Sin Asignar' && 
+        c.usuario_asignado_id !== currentUserId
+      );
+      return !assignedToOther;
+    }
+
+    return false;
+  });
+
+  // Solo puede operar POS si tiene una caja asignada a él o al menos una caja libre disponible
+  const canOperatePOS = myOperableCajas.length > 0;
+
+  // 4. Computación reactiva del turno abierto para este usuario y su caja operable:
+  // NUNCA se asocia al turno de otro cajero.
   useEffect(() => {
-    if (!turnosList || turnosList.length === 0) {
+    if (!turnosList || turnosList.length === 0 || myOperableCajas.length === 0) {
       setActiveTurno(null);
       return;
     }
-    let abierto = null;
-    if (userAssignedCajaId) {
-      abierto = turnosList.find(t => t.id_caja === userAssignedCajaId && t.estado === 'Abierta');
-    } else if (isSuperAdmin) {
-      abierto = turnosList.find(t => t.sucursal === sucursal && t.estado === 'Abierta');
-    }
+    const operableCajaIds = myOperableCajas.map(c => c.id);
+    const abierto = turnosList.find(t => {
+      if (t.estado !== 'Abierta') return false;
+      if (!operableCajaIds.includes(t.id_caja)) return false;
+
+      // Si el usuario tiene caja asignada directa, el turno debe pertenecer a su caja
+      if (userAssignedCaja) {
+        return t.id_caja === userAssignedCaja.id;
+      }
+
+      // Si es SuperAdmin en caja libre, el turno debe haber sido abierto por él mismo
+      return t.cajero_id === currentUserId;
+    });
+
     setActiveTurno(abierto || null);
-  }, [turnosList, userAssignedCajaId, isSuperAdmin, sucursal]);
+  }, [turnosList, myOperableCajas, userAssignedCaja, currentUserId]);
 
   useEffect(() => {
     const prodRef = ref(rtdb, 'productos');
@@ -1415,11 +1459,11 @@ export default function POS() {
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="font-black text-sm tracking-wide uppercase">ACCESO BLOQUEADO: SIN CAJA ASIGNADA</span>
+                    <span className="font-black text-sm tracking-wide uppercase">ACCESO BLOQUEADO: SIN CAJA ASIGNADA O DISPONIBLE</span>
                     <span className="text-[10px] bg-red-950/40 text-red-100 font-bold px-2 py-0.5 rounded-full uppercase">Políticas de Empresa</span>
                   </div>
-                  <p className="text-xs text-red-100 mt-1 max-w-xl leading-snug">
-                    Por control administrativo, los vendedores/cajeros <strong>solo pueden abrir turno y facturar en su caja asignada</strong>. Si no tienes una caja, el sistema bloquea la facturación. Solicita a la gerencia que te asigne una caja en <em>Control de Usuarios</em> o <em>Configuración de Cajas</em>.
+                  <p className="text-xs text-red-100 mt-1 max-w-2xl leading-snug">
+                    Por políticas de protección a la integridad del personal, <strong>no es posible facturar ni abrir turnos en cajas asignadas a otros colaboradores</strong> para evitar alteraciones en sus arqueos. {isSuperAdmin ? 'Como SuperAdmin, todas las cajas existentes en esta sucursal están asignadas a otros empleados. Si requieres facturar, debes asignarte una caja o crear una caja nueva e independiente para ti en Catálogos > Cajas.' : 'Solicita a la gerencia que te asigne una caja registradora en el módulo de Personal (RRHH) o Catálogos > Cajas.'}
                   </p>
                 </div>
               </div>
@@ -1490,9 +1534,13 @@ export default function POS() {
                     <span className="font-black text-sm tracking-wide block uppercase">
                       CAJA CERRADA
                     </span>
-                    {userAssignedCaja && (
+                    {userAssignedCaja ? (
                       <span className="text-[11px] bg-white/20 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
                         <Store size={12} /> {userAssignedCaja.codigo} - {userAssignedCaja.nombre}
+                      </span>
+                    ) : (
+                      <span className="text-[11px] bg-white/20 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
+                        <Store size={12} /> {myOperableCajas.length} Caja(s) Libre(s) Disponible(s)
                       </span>
                     )}
                   </div>
@@ -2404,7 +2452,7 @@ export default function POS() {
         sucursal={sucursal}
         currentUser={currentUserRealtime || user}
         assignedCaja={userAssignedCaja}
-        availableCajas={cajasList.filter(c => isSuperAdmin || c.id === userAssignedCajaId)}
+        availableCajas={myOperableCajas}
         onOpenSuccess={(newT) => setActiveTurno(newT)}
       />
 

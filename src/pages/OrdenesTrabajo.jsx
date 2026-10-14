@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { ref, onValue, update } from 'firebase/database';
+import { ref, onValue, update, remove } from 'firebase/database';
 import { rtdb } from '../firebase';
-import { Wrench, Clock, CheckCircle2, AlertCircle, User, FileText, DollarSign, Award, Sparkles } from 'lucide-react';
+import { Wrench, Clock, CheckCircle2, AlertCircle, User, FileText, DollarSign, Award, Sparkles, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 
@@ -78,6 +78,19 @@ export default function OrdenesTrabajo() {
       toast.success(`Orden marcada como ${nuevoEstado}. Comisión: C$ ${comisionMonto.toFixed(2)}`);
     } catch (error) {
       toast.error('Error al actualizar estado: ' + error.message);
+    }
+  };
+
+  const handleDeleteOT = async (ot) => {
+    const num = ot.numero_factura || ot.id;
+    if (!window.confirm(`¿Estás seguro de eliminar la Orden de Trabajo de la factura ${num}? Esta acción eliminará el registro de prueba.`)) {
+      return;
+    }
+    try {
+      await remove(ref(rtdb, `ordenes_trabajo/${ot.id}`));
+      toast.success(`Orden de Trabajo eliminada correctamente`);
+    } catch (err) {
+      toast.error('Error al eliminar orden: ' + err.message);
     }
   };
 
@@ -229,9 +242,19 @@ export default function OrdenesTrabajo() {
                     <FileText className="text-gray-400" size={18} />
                     <span className="font-bold text-gray-800">{ot.numero_factura}</span>
                   </div>
-                  <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${getStatusColor(ot.estado)}`}>
-                    {ot.estado}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${getStatusColor(ot.estado)}`}>
+                      {ot.estado}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteOT(ot)}
+                      className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      title="Eliminar Orden de Trabajo de prueba"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
                 </div>
 
                 {ot.nombre_cliente && (

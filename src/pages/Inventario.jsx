@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { ref, onValue, set, push, update, runTransaction } from 'firebase/database';
+import { ref, onValue, set, push, update, remove, runTransaction } from 'firebase/database';
 import { rtdb } from '../firebase';
 import { 
-  Search, Plus, Edit2, Package, History, Maximize2, ScanBarcode, 
+  Search, Plus, Edit2, Trash2, Package, History, Maximize2, ScanBarcode, 
   Sliders, ShieldCheck, AlertTriangle, CheckCircle2, Percent, 
   RotateCcw, Sparkles, AlertCircle, Building2, Layers, Check, X,
   Hash, Lock
@@ -287,6 +287,19 @@ export default function Inventario() {
       });
     }
     setIsModalOpen(true);
+  };
+
+  const handleDeleteProduct = async (id, name) => {
+    if (!window.confirm(`¿Estás seguro de eliminar el producto "${name}"? Se eliminará de la base de datos y del inventario.`)) {
+      return;
+    }
+    try {
+      await remove(ref(rtdb, `productos/${id}`));
+      await remove(ref(rtdb, `inventario/${id}`));
+      toast.success(`Producto "${name}" eliminado correctamente`);
+    } catch (error) {
+      toast.error('Error al eliminar producto: ' + error.message);
+    }
   };
 
   const handleRegenerateProductCode = () => {
@@ -630,13 +643,22 @@ export default function Inventario() {
                         </td>
                         <td className="p-4 text-gray-500">{inv.ubicacion || '-'}</td>
                         <td className="p-4 text-center">
-                          <button 
-                            onClick={() => handleOpenModal(prod)}
-                            className="text-blue-500 hover:text-blue-700 hover:bg-blue-50 p-2 rounded transition-colors"
-                            title="Editar Producto"
-                          >
-                            <Edit2 size={18} />
-                          </button>
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button 
+                              onClick={() => handleOpenModal(prod)}
+                              className="text-blue-500 hover:text-blue-700 hover:bg-blue-50 p-2 rounded transition-colors"
+                              title="Editar Producto"
+                            >
+                              <Edit2 size={18} />
+                            </button>
+                            <button 
+                              onClick={() => handleDeleteProduct(prod.id, prod.name)}
+                              className="text-red-500 hover:text-red-700 hover:bg-red-50 p-2 rounded transition-colors"
+                              title="Eliminar Producto"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     )

@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ref, onValue } from 'firebase/database';
+import { ref, onValue, remove } from 'firebase/database';
 import { rtdb } from '../firebase';
-import { BarChart2, DollarSign, ShoppingBag, Calendar, FileText, Lock, Printer, ArrowUpRight, CheckCircle2, AlertTriangle, Eye, X, Store } from 'lucide-react';
+import { BarChart2, DollarSign, ShoppingBag, Calendar, FileText, Lock, Printer, ArrowUpRight, CheckCircle2, AlertTriangle, Eye, X, Store, Trash2 } from 'lucide-react';
 import { useReactToPrint } from 'react-to-print';
+import toast from 'react-hot-toast';
 import CashTicketPrinter from '../components/CashTicketPrinter';
 import ReporteGerencialCajas from '../components/reportes/ReporteGerencialCajas';
 import { useAuth } from '../context/AuthContext';
@@ -23,6 +24,32 @@ export default function Reportes() {
     documentTitle: `Acta_Cierre_${selectedTurnoPrint?.numero_turno || 'POS'}`,
     pageStyle: `@page { size: 80mm auto; margin: 0; } @media print { body { -webkit-print-color-adjust: exact; } }`
   });
+
+  const handleDeleteVenta = async (venta) => {
+    const num = venta.numero_factura || venta.id;
+    if (!window.confirm(`¿Estás seguro de anular/eliminar la venta ${num}? Esta opción es ideal para depurar registros de prueba.`)) {
+      return;
+    }
+    try {
+      await remove(ref(rtdb, `ventas/${venta.id}`));
+      toast.success(`Venta ${num} eliminada correctamente`);
+    } catch (err) {
+      toast.error('Error al eliminar venta: ' + err.message);
+    }
+  };
+
+  const handleDeleteTurno = async (turno) => {
+    const num = turno.numero_turno || turno.id;
+    if (!window.confirm(`¿Estás seguro de eliminar el registro de turno de caja ${num}? Se eliminará el acta de arqueo.`)) {
+      return;
+    }
+    try {
+      await remove(ref(rtdb, `turnos_caja/${turno.id}`));
+      toast.success(`Turno ${num} eliminado correctamente`);
+    } catch (err) {
+      toast.error('Error al eliminar turno: ' + err.message);
+    }
+  };
 
   useEffect(() => {
     const ventasRef = ref(rtdb, 'ventas');
@@ -213,16 +240,17 @@ export default function Reportes() {
                   <th className="p-4">Productos / Servicios</th>
                   <th className="p-4 text-right">Total</th>
                   <th className="p-4 text-center">Estado</th>
+                  <th className="p-4 text-center">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {loading ? (
                   <tr>
-                    <td colSpan="8" className="p-8 text-center text-gray-400">Cargando reporte de ventas...</td>
+                    <td colSpan="9" className="p-8 text-center text-gray-400">Cargando reporte de ventas...</td>
                   </tr>
                 ) : filteredVentas.length === 0 ? (
                   <tr>
-                    <td colSpan="8" className="p-8 text-center text-gray-400">No hay ventas registradas.</td>
+                    <td colSpan="9" className="p-8 text-center text-gray-400">No hay ventas registradas.</td>
                   </tr>
                 ) : (
                   filteredVentas.map(venta => {
@@ -262,6 +290,15 @@ export default function Reportes() {
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full font-bold text-xs bg-emerald-100 text-emerald-800">
                             {venta.estado || 'Completado'}
                           </span>
+                        </td>
+                        <td className="p-4 text-center">
+                          <button
+                            onClick={() => handleDeleteVenta(venta)}
+                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Anular / Eliminar Venta de prueba"
+                          >
+                            <Trash2 size={16} />
+                          </button>
                         </td>
                       </tr>
                     );
@@ -377,19 +414,27 @@ export default function Reportes() {
                           </span>
                         </td>
                         <td className="p-4 text-center">
-                          {isClosed ? (
+                          <div className="flex items-center justify-center gap-1.5">
+                            {isClosed && (
+                              <button
+                                type="button"
+                                onClick={() => setSelectedTurnoPrint(turno)}
+                                className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors"
+                                title="Ver y reimprimir Acta de Cierre"
+                              >
+                                <Printer size={13} />
+                                Acta
+                              </button>
+                            )}
                             <button
                               type="button"
-                              onClick={() => setSelectedTurnoPrint(turno)}
-                              className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-bold flex items-center gap-1 mx-auto transition-colors"
-                              title="Ver y reimprimir Acta de Cierre"
+                              onClick={() => handleDeleteTurno(turno)}
+                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Eliminar turno de caja de prueba"
                             >
-                              <Printer size={13} />
-                              Acta
+                              <Trash2 size={14} />
                             </button>
-                          ) : (
-                            <span className="text-[11px] text-gray-400">-</span>
-                          )}
+                          </div>
                         </td>
                       </tr>
                     );

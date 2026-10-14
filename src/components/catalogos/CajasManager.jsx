@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { ref, onValue, set, update } from 'firebase/database';
+import { ref, onValue, set, update, remove } from 'firebase/database';
 import { rtdb } from '../../firebase';
 import { 
-  Store, Plus, Edit2, CheckCircle2, XCircle, UserCheck, 
+  Store, Plus, Edit2, Trash2, CheckCircle2, XCircle, UserCheck, 
   UserX, ShieldCheck, Sparkles, AlertCircle, Building2, Lock, LockOpen 
 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -270,6 +270,29 @@ export default function CajasManager({ user }) {
     }
   };
 
+  const handleDeleteCaja = async (caja) => {
+    if (turnosAbiertos[caja.id]) {
+      return toast.error(`No puedes eliminar "${caja.nombre}" porque tiene un turno de caja abierto en este momento.`);
+    }
+    if (!window.confirm(`¿Estás seguro de eliminar la caja registradora "${caja.nombre}" (${caja.codigo})? Esta acción no se puede deshacer.`)) {
+      return;
+    }
+
+    try {
+      if (caja.usuario_asignado_id) {
+        await update(ref(rtdb, `usuarios/${caja.usuario_asignado_id}`), {
+          id_caja_asignada: '',
+          nombre_caja_asignada: '',
+          codigo_caja_asignada: ''
+        });
+      }
+      await remove(ref(rtdb, `configuracion/cajas/${caja.id}`));
+      toast.success(`Caja "${caja.nombre}" eliminada correctamente`);
+    } catch (err) {
+      toast.error('Error al eliminar caja: ' + err.message);
+    }
+  };
+
   return (
     <div className="space-y-6">
       
@@ -394,16 +417,26 @@ export default function CajasManager({ user }) {
                       isActiva ? 'text-amber-700 hover:text-amber-900' : 'text-emerald-700 hover:text-emerald-900'
                     }`}
                   >
-                    {isActiva ? 'Desactivar Caja' : 'Reactivar Caja'}
+                    {isActiva ? 'Desactivar' : 'Reactivar'}
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={() => handleOpenModal(c)}
-                    className="text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 p-1 hover:bg-blue-50 rounded-lg transition-colors"
-                  >
-                    <Edit2 size={14} /> Editar
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenModal(c)}
+                      className="text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 p-1 hover:bg-blue-50 rounded-lg transition-colors"
+                    >
+                      <Edit2 size={14} /> Editar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteCaja(c)}
+                      className="text-red-500 hover:text-red-700 p-1 hover:bg-red-50 rounded-lg transition-colors"
+                      title="Eliminar Caja"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 </div>
               </div>
             );

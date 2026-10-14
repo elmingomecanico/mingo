@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ref, onValue, push, set, runTransaction } from 'firebase/database';
+import { ref, onValue, push, set, remove, runTransaction } from 'firebase/database';
 import { rtdb } from '../firebase';
 import { 
   ShoppingBag, Search, Plus, Trash2, AlertCircle, TrendingDown, CheckCircle2,
@@ -604,6 +604,19 @@ export default function Compras() {
     } catch (error) {
       console.error(error);
       toast.error("Error al procesar compra: " + error.message, { id: toastId });
+    }
+  };
+
+  const handleDeleteCompra = async (compra) => {
+    const num = compra.numero_factura || compra.id;
+    if (!window.confirm(`¿Estás seguro de anular/eliminar la compra "${num}" de ${compra.nombre_proveedor}? Se eliminará el registro de compras.`)) {
+      return;
+    }
+    try {
+      await remove(ref(rtdb, `compras/${compra.id}`));
+      toast.success(`Compra "${num}" eliminada correctamente`);
+    } catch (err) {
+      toast.error('Error al eliminar compra: ' + err.message);
     }
   };
 
@@ -1385,13 +1398,14 @@ export default function Compras() {
                   <th className="p-4 text-center">Condición</th>
                   <th className="p-4 text-center">Unidades</th>
                   <th className="p-4 text-right">Total Factura</th>
+                  <th className="p-4 text-center">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {loading ? (
-                  <tr><td colSpan="6" className="p-8 text-center text-gray-400 font-medium">Cargando compras...</td></tr>
+                  <tr><td colSpan="7" className="p-8 text-center text-gray-400 font-medium">Cargando compras...</td></tr>
                 ) : compras.length === 0 ? (
-                  <tr><td colSpan="6" className="p-8 text-center text-gray-400 font-medium">No hay compras registradas aún.</td></tr>
+                  <tr><td colSpan="7" className="p-8 text-center text-gray-400 font-medium">No hay compras registradas aún.</td></tr>
                 ) : (
                   compras.map(comp => (
                     <tr key={comp.id} className="hover:bg-gray-50 transition-colors">
@@ -1414,6 +1428,15 @@ export default function Compras() {
                       </td>
                       <td className="p-4 text-right font-black text-gray-900 text-sm">
                         C$ {Number(comp.total || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="p-4 text-center">
+                        <button
+                          onClick={() => handleDeleteCompra(comp)}
+                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Anular / Eliminar compra de prueba"
+                        >
+                          <Trash2 size={16} />
+                        </button>
                       </td>
                     </tr>
                   ))

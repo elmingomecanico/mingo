@@ -33,16 +33,41 @@ export default function CashOpenModal({
 
   if (!isOpen) return null;
 
+  // Si no hay ninguna caja asignada ni cajas libres operables
+  const hasOperableCaja = Boolean(assignedCaja) || availableCajas.length > 0;
+  if (!hasOperableCaja) {
+    return (
+      <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+        <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-red-100 text-center space-y-4">
+          <div className="w-16 h-16 bg-red-100 text-red-600 rounded-2xl flex items-center justify-center mx-auto">
+            <AlertCircle size={32} />
+          </div>
+          <h3 className="text-lg font-black text-gray-900">Acceso a Caja Bloqueado</h3>
+          <p className="text-xs text-gray-600 leading-relaxed">
+            No tienes una caja registradora asignada a tu usuario y todas las cajas existentes en esta sucursal están asignadas a otros colaboradores.
+            <br /><br />
+            <strong>Por políticas de empresa y protección a la integridad del empleado</strong>, no puedes abrir turnos ni facturar en cajas asignadas a terceros.
+            <br /><br />
+            Para poder facturar, solicita que se te asigne una caja en <em>RRHH</em> o crea una nueva caja independiente en <em>Catálogos &gt; Cajas</em>.
+          </p>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-full py-2.5 bg-gray-900 text-white rounded-xl text-xs font-bold hover:bg-black transition-all"
+          >
+            Entendido, Cerrar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const nioVal = parseFloat(montoCordobas) || 0;
   const usdVal = parseFloat(montoDolares) || 0;
   const tcVal = parseFloat(tipoCambio) || 36.62;
   const totalInicial = nioVal + (usdVal * tcVal);
 
-  const activeCaja = availableCajas.find(c => c.id === selectedCajaId) || assignedCaja || {
-    id: 'CAJA-01',
-    codigo: 'CAJA-01',
-    nombre: 'Caja Principal'
-  };
+  const activeCaja = availableCajas.find(c => c.id === selectedCajaId) || assignedCaja || availableCajas[0];
 
   const handleApplyCounter = (result) => {
     setMontoCordobas(result.cordobas.toString());
