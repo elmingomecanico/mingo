@@ -1463,60 +1463,22 @@ export default function POS() {
 
   return (
     <div className="min-h-screen bg-gray-100 p-4 md:p-6 animate-in fade-in duration-500">
-      <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6">
-        
-        {/* Lado Izquierdo (Operativo de Caja) */}
-        <div className="md:col-span-2 space-y-4">
+      
+      {/* VISTA 1: CAJA SIN TURNO ACTIVO (BLOQUEADA O CERRADA) */}
+      {!activeTurno ? (
+        <div className="max-w-4xl mx-auto space-y-5">
           
-          {/* TAB BAR ESTILO NAVEGADOR */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
-            {tabs.map((t) => (
-              <div 
-                key={t.id} 
-                onClick={() => setActiveTabId(t.id)}
-                className={`flex items-center gap-2 px-3 py-2 rounded-t-xl border-t border-x cursor-pointer transition-all ${activeTabId === t.id ? 'bg-white border-white shadow-sm font-bold text-blue-600' : 'bg-gray-200 border-gray-300 text-gray-500 hover:bg-gray-100'}`}
-              >
-                <input 
-                  type="text"
-                  value={t.name}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setTabs(tabs.map(tab => tab.id === t.id ? { ...tab, name: val } : tab));
-                  }}
-                  className="bg-transparent border-none outline-none min-w-[70px] max-w-[150px] text-sm font-bold truncate p-0 m-0 cursor-text"
-                  placeholder="Nombre pestaña..."
-                />
-                {tabs.length > 1 && (
-                  <button 
-                    onClick={(e) => closeTab(t.id, e)} 
-                    className="p-1 rounded-full hover:bg-red-100 hover:text-red-500 text-gray-400 transition-colors"
-                    title="Cerrar pestaña"
-                  >
-                    <X size={14} />
-                  </button>
-                )}
-              </div>
-            ))}
-            <button 
-              onClick={addNewTab}
-              className="flex items-center justify-center p-2 rounded-t-xl bg-blue-100 text-blue-600 hover:bg-blue-200 transition-colors shadow-sm"
-              title="Nueva factura en paralelo (+)"
-            >
-              <Plus size={18} />
-            </button>
-          </div>
-
           {/* BARRA SUPERIOR CAJA & SUCURSAL */}
-          <div className="bg-white p-4 rounded-xl rounded-tl-none shadow-sm flex items-center justify-between -mt-4 relative z-10 border border-gray-100">
+          <div className="bg-white p-4 sm:p-5 rounded-2xl shadow-sm flex items-center justify-between border border-gray-100">
             <h1 className="text-xl font-black text-gray-800 flex items-center gap-2">
-              <ShoppingCart className="text-blue-600" size={22} />
+              <ShoppingCart className="text-blue-600" size={24} />
               Caja POS
             </h1>
             {puedeFacturarMultisucursal ? (
               <select 
                 value={sucursal}
                 onChange={(e) => setSucursal(e.target.value)}
-                className="border border-gray-200 p-2 rounded-lg bg-gray-50 font-bold text-sm text-gray-700 outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                className="border border-gray-200 p-2 sm:p-2.5 rounded-xl bg-gray-50 font-bold text-xs sm:text-sm text-gray-700 outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
               >
                 {sucursalesList.map(s => (
                   <option key={s.id} value={s.id}>{s.nombre || s.name} ({s.id})</option>
@@ -1530,28 +1492,206 @@ export default function POS() {
             )}
           </div>
 
-          {/* CONTROL DE TURNO Y CAJA REGISTRADORA */}
+          {/* SUB-VISTA A: ACCESO BLOQUEADO (SIN CAJA ASIGNADA O DISPONIBLE) */}
           {!canOperatePOS ? (
-            <div className="bg-gradient-to-r from-red-600 via-rose-600 to-red-700 text-white p-4 rounded-2xl shadow-sm flex flex-wrap items-center justify-between gap-3 border border-red-500 animate-in fade-in">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-white/20 rounded-xl shrink-0">
-                  <ShieldAlert size={26} className="text-white" />
+            <div className="bg-white rounded-3xl p-6 sm:p-10 shadow-sm border border-red-100 text-center space-y-6 animate-in fade-in duration-300">
+              <div className="w-16 h-16 sm:w-20 sm:h-20 bg-red-50 text-red-600 rounded-3xl flex items-center justify-center mx-auto border border-red-100 shadow-inner">
+                <ShieldAlert size={40} />
+              </div>
+
+              <div className="space-y-2">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-50 text-red-700 text-xs font-bold border border-red-200">
+                  <span>🔒 Facturación Deshabilitada</span>
+                  <span>•</span>
+                  <span>Políticas de Empresa</span>
+                </div>
+                <h2 className="text-xl sm:text-2xl font-black text-gray-900">
+                  Sin Caja Registradora Asignada o Disponible
+                </h2>
+                <p className="text-xs sm:text-sm text-gray-600 max-w-xl mx-auto leading-relaxed">
+                  Por políticas de protección a la integridad del personal, <strong>no es posible facturar ni abrir turnos en cajas asignadas a otros colaboradores</strong> para evitar alteraciones en sus arqueos o descuadres de dinero.
+                </p>
+              </div>
+
+              {/* Ficha Informativa del Usuario y Sucursal */}
+              <div className="bg-gray-50 rounded-2xl p-4 text-xs text-gray-600 grid grid-cols-1 sm:grid-cols-3 gap-3 border border-gray-200/80 text-left">
+                <div>
+                  <span className="text-gray-400 block uppercase font-bold text-[10px]">Usuario Actual</span>
+                  <span className="font-extrabold text-gray-800 text-sm truncate block">{currentUserRealtime?.nombre_completo || user?.nombre_completo || 'Usuario'}</span>
                 </div>
                 <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-black text-sm tracking-wide uppercase">ACCESO BLOQUEADO: SIN CAJA ASIGNADA O DISPONIBLE</span>
-                    <span className="text-[10px] bg-red-950/40 text-red-100 font-bold px-2 py-0.5 rounded-full uppercase">Políticas de Empresa</span>
-                  </div>
-                  <p className="text-xs text-red-100 mt-1 max-w-2xl leading-snug">
-                    Por políticas de protección a la integridad del personal, <strong>no es posible facturar ni abrir turnos en cajas asignadas a otros colaboradores</strong> para evitar alteraciones en sus arqueos. {isSuperAdmin ? 'Como SuperAdmin, todas las cajas existentes en esta sucursal están asignadas a otros empleados. Si requieres facturar, debes asignarte una caja o crear una caja nueva e independiente para ti en Catálogos > Cajas.' : 'Solicita a la gerencia que te asigne una caja registradora en el módulo de Personal (RRHH) o Catálogos > Cajas.'}
-                  </p>
+                  <span className="text-gray-400 block uppercase font-bold text-[10px]">Rol de Sistema</span>
+                  <span className="font-bold text-gray-700 block">{currentUserRealtime?.rol || user?.rol || 'Empleado'}</span>
+                </div>
+                <div>
+                  <span className="text-gray-400 block uppercase font-bold text-[10px]">Sede / Sucursal</span>
+                  <span className="font-bold text-blue-700 block">{getBranchName(sucursal, sucursalesList)}</span>
                 </div>
               </div>
-              <div className="px-3 py-1.5 bg-black/20 rounded-xl text-xs font-black text-white border border-white/20">
-                🔒 Facturación Deshabilitada
+
+              {/* Instrucción clara según rol */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-amber-50/90 border border-amber-200 text-amber-900 text-xs sm:text-sm text-left leading-relaxed">
+                {isSuperAdmin ? (
+                  <div className="space-y-1.5">
+                    <p className="font-black flex items-center gap-1.5 text-amber-950">
+                      <span>⚙️ Indicación para SuperAdministrador:</span>
+                    </p>
+                    <p>
+                      Todas las cajas registradoras de esta sucursal están asignadas a colaboradores específicos. Para que puedas facturar como administrador sin interferir en los arqueos del personal, debes <strong>asignarte una caja</strong> en el módulo de <strong>Personal (RRHH)</strong> o registrar una <strong>caja nueva e independiente</strong> para tu uso exclusivo en <strong>Catálogos &gt; Cajas</strong>.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    <p className="font-black flex items-center gap-1.5 text-amber-950">
+                      <span>ℹ️ Indicación para el Personal:</span>
+                    </p>
+                    <p>
+                      Tu usuario no cuenta con una caja registradora asignada en esta sucursal. Comunícate con la administración o gerencia para que se te asigne un terminal de cobro en el sistema.
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
-          ) : activeTurno ? (
+          ) : (
+            /* SUB-VISTA B: CAJA ASIGNADA/DISPONIBLE PERO CERRADA (REQUISITO: ABRIR TURNO) */
+            <div className="bg-white rounded-3xl p-6 sm:p-10 shadow-sm border border-amber-100 text-center space-y-6 animate-in fade-in duration-300">
+              <div className="w-16 h-16 sm:w-20 sm:h-20 bg-amber-50 text-amber-600 rounded-3xl flex items-center justify-center mx-auto border border-amber-100 shadow-inner">
+                <Store size={40} />
+              </div>
+
+              <div className="space-y-2">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-50 text-amber-700 text-xs font-bold border border-amber-200">
+                  <span>⚠️ Caja Cerrada</span>
+                  <span>•</span>
+                  <span>Apertura Requerida</span>
+                </div>
+                <h2 className="text-xl sm:text-2xl font-black text-gray-900">
+                  Apertura de Turno Requerida para Facturar
+                </h2>
+                <p className="text-xs sm:text-sm text-gray-600 max-w-xl mx-auto leading-relaxed">
+                  Para habilitar la selección de clientes, búsqueda de productos y emisión de facturas, debes registrar el fondo inicial e iniciar formalmente tu turno de caja.
+                </p>
+              </div>
+
+              {/* Ficha de la Caja Operable */}
+              <div className="bg-gray-50 rounded-2xl p-4 text-xs text-gray-600 grid grid-cols-1 sm:grid-cols-3 gap-3 border border-gray-200/80 text-left">
+                <div>
+                  <span className="text-gray-400 block uppercase font-bold text-[10px]">Caja Asignada / Operable</span>
+                  <span className="font-extrabold text-gray-800 text-sm truncate block">
+                    {userAssignedCaja 
+                      ? `${userAssignedCaja.codigo} - ${userAssignedCaja.nombre}` 
+                      : (myOperableCajas[0] ? `${myOperableCajas[0].codigo} - ${myOperableCajas[0].nombre} (Caja Libre)` : 'Caja Principal')}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-gray-400 block uppercase font-bold text-[10px]">Cajero Responsable</span>
+                  <span className="font-bold text-gray-700 truncate block">{currentUserRealtime?.nombre_completo || user?.nombre_completo || 'Cajero'}</span>
+                </div>
+                <div>
+                  <span className="text-gray-400 block uppercase font-bold text-[10px]">Sede / Sucursal</span>
+                  <span className="font-bold text-blue-700 block">{getBranchName(sucursal, sucursalesList)}</span>
+                </div>
+              </div>
+
+              {/* Botones de Apertura y Arqueo Previo */}
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsMoneyCounterOpen(true)}
+                  className="w-full sm:w-auto px-5 py-3.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-2xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all active:scale-95"
+                  title="Contador de billetes y monedas"
+                >
+                  <Calculator size={18} className="text-gray-500" />
+                  Contador de Dinero
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsCashOpenModalOpen(true)}
+                  className="w-full sm:w-auto px-7 py-3.5 bg-amber-600 hover:bg-amber-700 text-white rounded-2xl text-xs sm:text-sm font-black flex items-center justify-center gap-2 shadow-lg shadow-amber-200 transition-all active:scale-95"
+                >
+                  <LockOpen size={20} />
+                  Abrir Caja (Iniciar Turno)
+                </button>
+              </div>
+
+              <p className="text-[11px] text-gray-400 italic">
+                * El fondo inicial y todos los cobros de la jornada quedarán asentados bajo tu usuario para el arqueo y cuadre de cierre.
+              </p>
+            </div>
+          )}
+
+        </div>
+      ) : (
+        /* VISTA 2: CAJA ABIERTA CON TURNO ACTIVO (FACTURACIÓN HABILITADA) */
+        <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6">
+          
+          {/* Lado Izquierdo (Operativo de Caja) */}
+          <div className="md:col-span-2 space-y-4">
+            
+            {/* TAB BAR ESTILO NAVEGADOR */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
+              {tabs.map((t) => (
+                <div 
+                  key={t.id} 
+                  onClick={() => setActiveTabId(t.id)}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-t-xl border-t border-x cursor-pointer transition-all ${activeTabId === t.id ? 'bg-white border-white shadow-sm font-bold text-blue-600' : 'bg-gray-200 border-gray-300 text-gray-500 hover:bg-gray-100'}`}
+                >
+                  <input 
+                    type="text"
+                    value={t.name}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setTabs(tabs.map(tab => tab.id === t.id ? { ...tab, name: val } : tab));
+                    }}
+                    className="bg-transparent border-none outline-none min-w-[70px] max-w-[150px] text-sm font-bold truncate p-0 m-0 cursor-text"
+                    placeholder="Nombre pestaña..."
+                  />
+                  {tabs.length > 1 && (
+                    <button 
+                      onClick={(e) => closeTab(t.id, e)} 
+                      className="p-1 rounded-full hover:bg-red-100 hover:text-red-500 text-gray-400 transition-colors"
+                      title="Cerrar pestaña"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button 
+                onClick={addNewTab}
+                className="flex items-center justify-center p-2 rounded-t-xl bg-blue-100 text-blue-600 hover:bg-blue-200 transition-colors shadow-sm"
+                title="Nueva factura en paralelo (+)"
+              >
+                <Plus size={18} />
+              </button>
+            </div>
+
+            {/* BARRA SUPERIOR CAJA & SUCURSAL */}
+            <div className="bg-white p-4 rounded-xl rounded-tl-none shadow-sm flex items-center justify-between -mt-4 relative z-10 border border-gray-100">
+              <h1 className="text-xl font-black text-gray-800 flex items-center gap-2">
+                <ShoppingCart className="text-blue-600" size={22} />
+                Caja POS
+              </h1>
+              {puedeFacturarMultisucursal ? (
+                <select 
+                  value={sucursal}
+                  onChange={(e) => setSucursal(e.target.value)}
+                  className="border border-gray-200 p-2 rounded-lg bg-gray-50 font-bold text-sm text-gray-700 outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                >
+                  {sucursalesList.map(s => (
+                    <option key={s.id} value={s.id}>{s.nombre || s.name} ({s.id})</option>
+                  ))}
+                </select>
+              ) : (
+                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 border border-gray-200 rounded-lg text-xs font-bold text-gray-700 shadow-inner">
+                  <span className="text-gray-400">🔒 Sede Asignada:</span>
+                  <span className="text-blue-700 font-extrabold">{getBranchName(sucursal, sucursalesList)}</span>
+                </div>
+              )}
+            </div>
+
+            {/* BANNER VERDE: TURNO ACTIVO */}
             <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white p-3.5 rounded-2xl shadow-sm flex flex-wrap items-center justify-between gap-3 border border-emerald-500 animate-in fade-in">
               <div className="flex items-center gap-3">
                 <div className="flex h-3.5 w-3.5 relative">
@@ -1605,55 +1745,9 @@ export default function POS() {
                 </button>
               </div>
             </div>
-          ) : (
-            <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white p-3.5 rounded-2xl shadow-sm flex flex-wrap items-center justify-between gap-3 border border-amber-400 animate-in fade-in">
-              <div className="flex items-center gap-2.5">
-                <AlertTriangle size={22} className="text-amber-100 shrink-0" />
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-black text-sm tracking-wide block uppercase">
-                      CAJA CERRADA
-                    </span>
-                    {userAssignedCaja ? (
-                      <span className="text-[11px] bg-white/20 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
-                        <Store size={12} /> {userAssignedCaja.codigo} - {userAssignedCaja.nombre}
-                      </span>
-                    ) : (
-                      <span className="text-[11px] bg-white/20 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
-                        <Store size={12} /> {myOperableCajas.length} Caja(s) Libre(s) Disponible(s)
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-[11px] text-amber-100">
-                    Debe registrar el fondo inicial para abrir el turno antes de comenzar a facturar.
-                  </p>
-                </div>
-              </div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsMoneyCounterOpen(true)}
-                  className="px-3 py-1.5 bg-white/15 hover:bg-white/25 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 backdrop-blur-sm transition-all"
-                  title="Contador de billetes y monedas"
-                >
-                  <Calculator size={15} />
-                  Contador de Dinero
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsCashOpenModalOpen(true)}
-                  className="px-4 py-2 bg-white text-amber-900 hover:bg-amber-50 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-md transition-all active:scale-95"
-                >
-                  <LockOpen size={16} className="text-amber-700" />
-                  Abrir Caja (Iniciar Turno)
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* DATOS DE LA VENTA (CLIENTE, PAGO, BUSCADOR) */}
-          <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 space-y-4">
+            {/* DATOS DE LA VENTA (CLIENTE, PAGO, BUSCADOR) */}
+            <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 space-y-4">
             
             {/* Cliente y Método de Pago */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -2251,6 +2345,7 @@ export default function POS() {
         </div>
 
       </div>
+      )}
 
       {/* Modal Creación Rápida de Cliente por Cajero */}
       {isNewClientModalOpen && (
