@@ -4,9 +4,11 @@ import { rtdb } from '../../firebase';
 import { 
   Printer, Save, RotateCcw, Check, Eye, FileText, 
   Settings, CheckSquare, Square, Building2, Phone, 
-  MapPin, Hash, Sparkles, ShieldCheck
+  MapPin, Hash, Sparkles, ShieldCheck, LayoutGrid,
+  Columns, AlignLeft, AlignCenter, Split, CheckCircle2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import TicketPrinter from '../TicketPrinter';
 
 export const DEFAULT_PRINT_CONFIG = {
   nombre_comercial: 'TALLER EL MINGO',
@@ -16,6 +18,17 @@ export const DEFAULT_PRINT_CONFIG = {
   direccion: 'Managua, Nicaragua',
   ancho_papel: '80mm', // '80mm' | '58mm'
   tamano_letra: 'normal', // 'compacta' | 'normal' | 'grande'
+  
+  // Opciones de Ubicación y Diseño de Artículos / Precios
+  estilo_items: 'dos_lineas', // 'dos_lineas' | 'columnas_separadas' | 'compacto'
+  separacion_precios: 'amplia', // 'amplia' | 'barra' | 'estandar'
+  posicion_sku: 'arriba', // 'arriba' | 'junto' | 'abajo' | 'oculto'
+  alineacion_cabecera: 'centro', // 'centro' | 'izquierda'
+  estilo_divisor: 'guiones', // 'guiones' | 'puntos' | 'solido' | 'doble'
+  mostrar_espacio_moneda: true, // "C$ 1,429.00"
+  decimales_pu: true, // 2 decimales en P.U.
+  
+  // Toggles de Metadatos
   mostrar_sucursal: true,
   mostrar_cajero: true,
   mostrar_mecanico: true,
@@ -25,9 +38,48 @@ export const DEFAULT_PRINT_CONFIG = {
   mostrar_regalias: true,
   mostrar_metodo_pago: true,
   mostrar_total_letras: false,
+  
+  // Mensajes de Pie
   mensaje_agradecimiento: '¡GRACIAS POR SU PREFERENCIA!',
   terminos_garantia: 'Garantía de repuestos de 30 días con su factura. No se aceptan cambios en partes eléctricas.',
   mensaje_despedida: 'Impreso por Sistema Taller El Mingo'
+};
+
+const demoSale = {
+  id: 'DEMO-0001',
+  numero_factura: 'M-0001',
+  fecha: new Date().toISOString(),
+  sucursal: 'SUC-01',
+  sucursal_nombre: 'Repuestos El Mingo',
+  nombre_cliente: 'Santos Rayo',
+  cliente_cedula: '001-120590-0023K',
+  cajero: 'Administrador del Sistema',
+  nombre_mecanico: 'Reynaldo Taleno',
+  metodo_pago: 'Crédito',
+  regalia: 'Cambio de aceite gratis',
+  multisucursal_id: 'MS-MVALNTR1',
+  items: [
+    {
+      id_producto: 'PROD-0001',
+      codigo_visible: 'PROD-0001',
+      nombre: 'Llanta Delantera Doble propósito 2/75/18 Super Run',
+      cantidad: 1,
+      precio_unitario: 1429.00,
+      descuento: 0,
+      subtotal: 1429.00
+    },
+    {
+      id_producto: 'PROD-0042',
+      codigo_visible: 'PROD-0042',
+      nombre: 'Aceite 20W50 4T Castrol Actevo',
+      cantidad: 2,
+      precio_unitario: 250.00,
+      descuento: 30.00,
+      subtotal: 470.00
+    }
+  ],
+  descuento_total: 30.00,
+  total: 1899.00
 };
 
 export default function PrintFormatEditor({ user }) {
@@ -83,8 +135,6 @@ export default function PrintFormatEditor({ user }) {
     window.print();
   };
 
-  const is58mm = config.ancho_papel === '58mm';
-
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       
@@ -96,7 +146,7 @@ export default function PrintFormatEditor({ user }) {
             Editor de Formatos Imprimibles (Tickets y Facturas)
           </h2>
           <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
-            Personaliza el encabezado, políticas de garantía y qué campos mostrar u ocultar en los tickets.
+            Personaliza el encabezado, la separación de precios (P.U. vs Total), estilos de línea y qué campos mostrar u ocultar.
           </p>
         </div>
 
@@ -134,12 +184,165 @@ export default function PrintFormatEditor({ user }) {
         
         {/* LADO IZQUIERDO: CONTROLES DEL EDITOR */}
         <div className="lg:col-span-7 space-y-5">
-          
-          {/* SECCIÓN 1: DATOS DE CABECERA COMERCIAL */}
+
+          {/* SECCIÓN 1: DISEÑO Y UBICACIÓN DE ARTÍCULOS Y PRECIOS (P.U. VS TOTAL) */}
+          <div className="bg-white p-5 rounded-2xl border-2 border-blue-100 shadow-sm space-y-4">
+            <div className="flex items-center justify-between border-b pb-2.5">
+              <h3 className="text-sm font-black text-gray-900 flex items-center gap-2">
+                <Columns size={18} className="text-blue-600" />
+                1. Ubicación y Separación de Artículos y Precios (P.U. vs Total)
+              </h3>
+              <span className="text-[10px] font-black uppercase bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200">
+                Visualización
+              </span>
+            </div>
+
+            {/* Selector de Estilo de Artículos */}
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-gray-700 uppercase">
+                Estilo de Presentación de los Artículos en el Ticket
+              </label>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                {/* Opción 1: Dos Líneas */}
+                <div
+                  onClick={() => setConfig({ ...config, estilo_items: 'dos_lineas' })}
+                  className={`p-3 rounded-xl border-2 cursor-pointer transition-all select-none flex flex-col justify-between ${
+                    config.estilo_items === 'dos_lineas'
+                      ? 'border-blue-600 bg-blue-50/60 shadow-xs'
+                      : 'border-gray-200 hover:border-gray-300 bg-white'
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-black text-gray-900">En 2 Líneas</span>
+                      {config.estilo_items === 'dos_lineas' && (
+                        <CheckCircle2 size={16} className="text-blue-600" />
+                      )}
+                    </div>
+                    <p className="text-[11px] text-gray-500 leading-snug">
+                      Nombre arriba a lo ancho. Cant × P.U. a la izquierda y Total a la derecha.
+                    </p>
+                  </div>
+                  <span className="text-[9px] font-bold text-emerald-700 mt-2 bg-emerald-50 px-1.5 py-0.5 rounded inline-block w-fit">
+                    ★ Recomendado
+                  </span>
+                </div>
+
+                {/* Opción 2: Columnas Separadas */}
+                <div
+                  onClick={() => setConfig({ ...config, estilo_items: 'columnas_separadas' })}
+                  className={`p-3 rounded-xl border-2 cursor-pointer transition-all select-none flex flex-col justify-between ${
+                    config.estilo_items === 'columnas_separadas'
+                      ? 'border-blue-600 bg-blue-50/60 shadow-xs'
+                      : 'border-gray-200 hover:border-gray-300 bg-white'
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-black text-gray-900">Tabla en Columnas</span>
+                      {config.estilo_items === 'columnas_separadas' && (
+                        <CheckCircle2 size={16} className="text-blue-600" />
+                      )}
+                    </div>
+                    <p className="text-[11px] text-gray-500 leading-snug">
+                      Tabla clásica: Cant | Descripción | P.U. | Total con espaciado amplio.
+                    </p>
+                  </div>
+                  <span className="text-[9px] font-bold text-gray-600 mt-2 bg-gray-100 px-1.5 py-0.5 rounded inline-block w-fit">
+                    Tradicional
+                  </span>
+                </div>
+
+                {/* Opción 3: Compacto */}
+                <div
+                  onClick={() => setConfig({ ...config, estilo_items: 'compacto' })}
+                  className={`p-3 rounded-xl border-2 cursor-pointer transition-all select-none flex flex-col justify-between ${
+                    config.estilo_items === 'compacto'
+                      ? 'border-blue-600 bg-blue-50/60 shadow-xs'
+                      : 'border-gray-200 hover:border-gray-300 bg-white'
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-black text-gray-900">Modo Compacto</span>
+                      {config.estilo_items === 'compacto' && (
+                        <CheckCircle2 size={16} className="text-blue-600" />
+                      )}
+                    </div>
+                    <p className="text-[11px] text-gray-500 leading-snug">
+                      1 línea por producto con P.U. integrado como subtexto discreto.
+                    </p>
+                  </div>
+                  <span className="text-[9px] font-bold text-purple-700 mt-2 bg-purple-50 px-1.5 py-0.5 rounded inline-block w-fit">
+                    Ahorro Papel
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Separación de Precios y Divisor (Especial para modo tabla o 2 líneas) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
+                  Separador entre P.U. y Total (Modo Tabla)
+                </label>
+                <select
+                  value={config.separacion_precios || 'amplia'}
+                  onChange={e => setConfig({ ...config, separacion_precios: e.target.value })}
+                  className="w-full border p-2.5 rounded-xl bg-gray-50 text-xs font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="amplia">Espacio Amplio (Sin pegarse)</option>
+                  <option value="barra">Barra Vertical Separadora (│)</option>
+                  <option value="estandar">Espaciado Estándar</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
+                  Ubicación del Código / SKU del Producto
+                </label>
+                <select
+                  value={config.posicion_sku || 'arriba'}
+                  onChange={e => setConfig({ ...config, posicion_sku: e.target.value })}
+                  className="w-full border p-2.5 rounded-xl bg-gray-50 text-xs font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="arriba">Arriba del Nombre [PROD-0001]</option>
+                  <option value="junto">Junto al Nombre ([PROD-0001] Llanta...)</option>
+                  <option value="abajo">Abajo en letra pequeña (SKU: ...)</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Opciones de Formato Numérico */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-gray-100">
+              <label className="flex items-center gap-2.5 p-2.5 rounded-xl border border-gray-100 hover:bg-gray-50 cursor-pointer text-xs font-medium text-gray-700 select-none">
+                <input
+                  type="checkbox"
+                  checked={config.mostrar_espacio_moneda !== false}
+                  onChange={e => setConfig({ ...config, mostrar_espacio_moneda: e.target.checked })}
+                  className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
+                />
+                <span>Separar símbolo con espacio (ej: <strong>C$ 1,429.00</strong>)</span>
+              </label>
+
+              <label className="flex items-center gap-2.5 p-2.5 rounded-xl border border-gray-100 hover:bg-gray-50 cursor-pointer text-xs font-medium text-gray-700 select-none">
+                <input
+                  type="checkbox"
+                  checked={config.decimales_pu !== false}
+                  onChange={e => setConfig({ ...config, decimales_pu: e.target.checked })}
+                  className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
+                />
+                <span>Mostrar 2 decimales en P.U. (ej: <strong>C$ 1,429.00</strong>)</span>
+              </label>
+            </div>
+          </div>
+
+          {/* SECCIÓN 2: CABECERA COMERCIAL DE LA EMPRESA */}
           <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-4">
             <h3 className="text-sm font-black text-gray-800 border-b pb-2.5 flex items-center gap-2">
               <Building2 size={16} className="text-blue-600" />
-              1. Cabecera Comercial de la Empresa
+              2. Cabecera Comercial de la Empresa
             </h3>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -207,18 +410,18 @@ export default function PrintFormatEditor({ user }) {
             </div>
           </div>
 
-          {/* SECCIÓN 2: DIMENSIONES Y CAMPOS VISIBLES (TOGGLES) */}
+          {/* SECCIÓN 3: FORMATO DEL PAPEL, LÍNEAS Y CABECERA */}
           <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-4">
             <h3 className="text-sm font-black text-gray-800 border-b pb-2.5 flex items-center gap-2">
               <Settings size={16} className="text-emerald-600" />
-              2. Dimensiones y Campos a Mostrar u Ocultar
+              3. Dimensiones de Papel, Estilo de Líneas y Alineación
             </h3>
 
             {/* Selector de Ancho de Papel */}
             <div className="p-3 bg-gray-50 rounded-xl flex items-center justify-between">
               <div>
                 <span className="text-xs font-bold text-gray-800 block">Ancho del Papel de la Impresora</span>
-                <span className="text-[11px] text-gray-500">80mm para impresoras térmicas de mostrador o 58mm para portátiles.</span>
+                <span className="text-[11px] text-gray-500">80mm para impresoras de mostrador o 58mm para portátiles.</span>
               </div>
               <div className="flex items-center gap-1.5 bg-white p-1 rounded-lg border border-gray-200">
                 <button
@@ -238,8 +441,56 @@ export default function PrintFormatEditor({ user }) {
               </div>
             </div>
 
+            {/* Estilo de Líneas y Alineación */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-gray-600 uppercase mb-1">
+                  Líneas Divisoras
+                </label>
+                <select
+                  value={config.estilo_divisor || 'guiones'}
+                  onChange={e => setConfig({ ...config, estilo_divisor: e.target.value })}
+                  className="w-full border p-2.5 rounded-xl bg-gray-50 text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="guiones">Guiones ( - - - - )</option>
+                  <option value="puntos">Puntos ( · · · · )</option>
+                  <option value="solido">Línea Sólida ( ──── )</option>
+                  <option value="doble">Línea Doble ( ════ )</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-600 uppercase mb-1">
+                  Alineación Cabecera
+                </label>
+                <select
+                  value={config.alineacion_cabecera || 'centro'}
+                  onChange={e => setConfig({ ...config, alineacion_cabecera: e.target.value })}
+                  className="w-full border p-2.5 rounded-xl bg-gray-50 text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="centro">Centrada</option>
+                  <option value="izquierda">Alineada a la Izquierda</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-600 uppercase mb-1">
+                  Tamaño de Fuente
+                </label>
+                <select
+                  value={config.tamano_letra || 'normal'}
+                  onChange={e => setConfig({ ...config, tamano_letra: e.target.value })}
+                  className="w-full border p-2.5 rounded-xl bg-gray-50 text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="compacta">Compacta (Ahorro)</option>
+                  <option value="normal">Normal (Estándar)</option>
+                  <option value="grande">Grande (Legible)</option>
+                </select>
+              </div>
+            </div>
+
             {/* Cuadrícula de Toggles de Campos */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-gray-100">
               {[
                 { key: 'mostrar_sucursal', label: 'Mostrar Nombre de Sucursal' },
                 { key: 'mostrar_cajero', label: 'Mostrar Nombre del Cajero' },
@@ -266,11 +517,11 @@ export default function PrintFormatEditor({ user }) {
             </div>
           </div>
 
-          {/* SECCIÓN 3: PIE DE TICKET Y POLÍTICAS DE GARANTÍA */}
+          {/* SECCIÓN 4: PIE DE TICKET Y POLÍTICAS DE GARANTÍA */}
           <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-4">
             <h3 className="text-sm font-black text-gray-800 border-b pb-2.5 flex items-center gap-2">
               <ShieldCheck size={16} className="text-purple-600" />
-              3. Mensaje de Despedida y Términos de Garantía
+              4. Mensaje de Despedida y Términos de Garantía
             </h3>
 
             <div>
@@ -315,9 +566,9 @@ export default function PrintFormatEditor({ user }) {
 
         {/* LADO DERECHO: VISTA PREVIA EN VIVO (SIMULADOR DE TICKET TÉRMICO) */}
         <div className="lg:col-span-5 sticky top-6">
-          <div className="bg-gray-800 p-3 sm:p-4 rounded-2xl shadow-xl space-y-3">
+          <div className="bg-gray-900 p-3 sm:p-4 rounded-2xl shadow-xl space-y-3">
             
-            <div className="flex items-center justify-between text-white border-b border-gray-700 pb-2">
+            <div className="flex items-center justify-between text-white border-b border-gray-800 pb-2">
               <span className="text-xs font-black tracking-wider uppercase flex items-center gap-1.5 text-blue-300">
                 <Eye size={16} /> Vista Previa en Vivo ({config.ancho_papel})
               </span>
@@ -326,160 +577,18 @@ export default function PrintFormatEditor({ user }) {
               </span>
             </div>
 
-            {/* SIMULADOR DE TICKET TÉRMICO */}
-            <div className="overflow-x-auto flex justify-center py-2">
-              <div 
+            {/* SIMULADOR EXACTO EN VIVO USANDO TICKETPRINTER */}
+            <div className="overflow-x-auto flex justify-center py-2 bg-gray-950/50 rounded-xl p-2">
+              <TicketPrinter
                 ref={previewRef}
-                style={{ width: is58mm ? '58mm' : '80mm', minWidth: is58mm ? '58mm' : '80mm' }}
-                className="bg-white text-black p-4 font-mono text-[11px] shadow-2xl rounded-sm border border-gray-300 space-y-2 select-none"
-              >
-                {/* CABECERA */}
-                <div className="text-center pb-2 border-b border-black border-dashed">
-                  <h2 className="font-black text-sm uppercase tracking-tight">
-                    {config.nombre_comercial || 'TALLER EL MINGO'}
-                  </h2>
-                  {config.eslogan && (
-                    <p className="text-[10px] font-bold">{config.eslogan}</p>
-                  )}
-                  {config.ruc && (
-                    <p className="text-[9px]">RUC: {config.ruc}</p>
-                  )}
-                  {config.telefono && (
-                    <p className="text-[9px]">Tel: {config.telefono}</p>
-                  )}
-                  {config.direccion && (
-                    <p className="text-[9px]">{config.direccion}</p>
-                  )}
-                  {config.mostrar_sucursal && (
-                    <p className="text-[9px] font-bold mt-1">Sucursal: Principal (SUC-01)</p>
-                  )}
-                </div>
-
-                {/* METADATOS FACTURA */}
-                <div className="py-1.5 border-b border-black border-dashed text-[10px] space-y-0.5">
-                  <div className="flex justify-between">
-                    <span><strong>FACTURA:</strong></span>
-                    <span className="font-bold font-mono">FAC-0001</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>FECHA:</span>
-                    <span>{new Date().toLocaleDateString('es-NI')} {new Date().toLocaleTimeString('es-NI', { hour: '2-digit', minute: '2-digit' })}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>CLIENTE:</span>
-                    <span className="font-bold truncate max-w-[130px]">Juan Carlos Mendoza</span>
-                  </div>
-                  {config.mostrar_cliente_cedula && (
-                    <div className="flex justify-between">
-                      <span>CÉDULA/RUC:</span>
-                      <span className="font-mono">001-120590-0023K</span>
-                    </div>
-                  )}
-                  {config.mostrar_cajero && (
-                    <div className="flex justify-between text-gray-700">
-                      <span>CAJERO:</span>
-                      <span>María Cajera</span>
-                    </div>
-                  )}
-                  {config.mostrar_mecanico && (
-                    <div className="flex justify-between text-gray-700">
-                      <span>MECÁNICO:</span>
-                      <span>Pedro Mecánico</span>
-                    </div>
-                  )}
-                  {config.mostrar_metodo_pago && (
-                    <div className="flex justify-between">
-                      <span>PAGO:</span>
-                      <span className="font-bold">Efectivo</span>
-                    </div>
-                  )}
-                  {config.mostrar_regalias && (
-                    <div className="flex justify-between font-bold border-t border-black border-dotted pt-0.5 mt-0.5">
-                      <span>REGALÍA:</span>
-                      <span className="truncate max-w-[130px]">Revisión de frenos gratis</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* DETALLE ARTÍCULOS DE EJEMPLO */}
-                <table className="w-full text-[10px] my-1">
-                  <thead>
-                    <tr className="border-b border-black">
-                      <th className="text-left py-0.5 w-5">Cant</th>
-                      <th className="text-left py-0.5">Descripción</th>
-                      <th className="text-right py-0.5">P.U.</th>
-                      <th className="text-right py-0.5">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200 divide-dashed">
-                    <tr>
-                      <td className="py-1 align-top">2</td>
-                      <td className="py-1 align-top pr-1">
-                        <div>Aceite 20W50 4T Castrol</div>
-                        {config.mostrar_codigo_producto && (
-                          <div className="text-[8px] text-gray-500 font-mono">SKU: PROD-0042</div>
-                        )}
-                        {config.mostrar_descuentos && (
-                          <div className="text-[8px] text-red-600 font-bold">Desc: -C$ 30.00</div>
-                        )}
-                      </td>
-                      <td className="py-1 align-top text-right">C$250</td>
-                      <td className="py-1 align-top text-right font-bold">C$470.00</td>
-                    </tr>
-                    <tr>
-                      <td className="py-1 align-top">1</td>
-                      <td className="py-1 align-top pr-1">
-                        <div>Cambio de Aceite y Filtro</div>
-                        {config.mostrar_codigo_producto && (
-                          <div className="text-[8px] text-gray-500 font-mono">SKU: SRV-0010</div>
-                        )}
-                      </td>
-                      <td className="py-1 align-top text-right">C$150</td>
-                      <td className="py-1 align-top text-right font-bold">C$150.00</td>
-                    </tr>
-                  </tbody>
-                </table>
-
-                {/* TOTALES */}
-                <div className="border-t border-black border-dashed pt-1.5 space-y-0.5 text-[10px]">
-                  {config.mostrar_descuentos && (
-                    <>
-                      <div className="flex justify-between">
-                        <span>Subtotal:</span>
-                        <span>C$ 650.00</span>
-                      </div>
-                      <div className="flex justify-between text-red-700 font-bold">
-                        <span>Descuento Otorgado:</span>
-                        <span>-C$ 30.00</span>
-                      </div>
-                    </>
-                  )}
-                  <div className="flex justify-between text-xs font-black border-t border-black pt-1">
-                    <span>TOTAL A PAGAR:</span>
-                    <span>C$ 620.00</span>
-                  </div>
-                </div>
-
-                {/* PIE Y GARANTÍA */}
-                <div className="text-center text-[9px] mt-3 pt-2 border-t border-black border-dashed space-y-1">
-                  {config.mensaje_agradecimiento && (
-                    <p className="font-bold text-[10px]">{config.mensaje_agradecimiento}</p>
-                  )}
-                  {config.terminos_garantia && (
-                    <p className="text-[8px] leading-tight text-gray-700 italic">
-                      {config.terminos_garantia}
-                    </p>
-                  )}
-                  {config.mensaje_despedida && (
-                    <p className="opacity-60 text-[8px] pt-0.5">{config.mensaje_despedida}</p>
-                  )}
-                </div>
-
-              </div>
+                sale={demoSale}
+                isPreview={true}
+                customConfig={config}
+              />
             </div>
 
             <p className="text-[10px] text-gray-400 text-center">
-              Los cambios se reflejan en vivo en el simulador y se aplican a todas las ventas de mostrador al guardar.
+              Cualquier cambio de estilo, separación o texto se refleja de inmediato en el simulador. Al hacer clic en <strong>"Guardar Formato"</strong> se aplicará a todas las impresiones físicas de la empresa.
             </p>
 
           </div>
@@ -490,3 +599,4 @@ export default function PrintFormatEditor({ user }) {
     </div>
   );
 }
+
