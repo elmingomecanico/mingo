@@ -4,10 +4,12 @@ import { rtdb } from '../firebase';
 import { Wrench, Plus, Edit2, Trash2, Search, DollarSign, Hash, Lock, Sparkles } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { DEFAULT_CONSECUTIVOS, formatConsecutive } from '../components/catalogos/ConsecutivosManager';
+import { consumeNextConsecutiveAtomic, checkDuplicateCodigoVisible } from '../utils/consecutivosService';
 
 export default function Servicios() {
   const [servicios, setServicios] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [search, setSearch] = useState('');
   const [consecutivosConfig, setConsecutivosConfig] = useState(DEFAULT_CONSECUTIVOS);
 
@@ -78,14 +80,38 @@ export default function Servicios() {
 
   const handleSave = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
     if (!formData.nombre.trim()) return toast.error("El nombre del servicio es requerido");
 
+    setIsSubmitting(true);
     try {
       const itemRef = editingId ? ref(rtdb, `servicios/${editingId}`) : push(ref(rtdb, 'servicios'));
-      const codigoFinal = formData.codigo_visible?.trim() || (editingId || itemRef.key);
-      
+      const targetId = editingId || itemRef.key;
+      let codigoFinal = formData.codigo_visible?.trim() || '';
+
+      const srvCfg = consecutivosConfig?.servicios || DEFAULT_CONSECUTIVOS.servicios;
+      const suggestedDefault = formatConsecutive(srvCfg, srvCfg.siguiente_numero || 1);
+
+      if (!editingId && (!codigoFinal || codigoFinal === suggestedDefault)) {
+        const consumed = await consumeNextConsecutiveAtomic('servicios');
+        codigoFinal = consumed.codigoFormateado;
+      } else if (!codigoFinal) {
+        codigoFinal = targetId;
+      }
+
+      const dupCheck = await checkDuplicateCodigoVisible('servicios', codigoFinal, targetId);
+      if (dupCheck.isDuplicate) {
+        if (!editingId) {
+          const nextAtomic = await consumeNextConsecutiveAtomic('servicios');
+          codigoFinal = nextAtomic.codigoFormateado;
+        } else {
+          setIsSubmitting(false);
+          return toast.error(`El código "${codigoFinal}" ya pertenece al servicio "${dupCheck.conflictItem?.nombre}".`);
+        }
+      }
+
       const payload = {
-        id: editingId || itemRef.key,
+        id: targetId,
         codigo_visible: codigoFinal,
         nombre: formData.nombre.trim(),
         descripcion: formData.descripcion.trim(),
@@ -94,16 +120,12 @@ export default function Servicios() {
 
       await set(itemRef, payload);
 
-      if (!editingId) {
-        await runTransaction(ref(rtdb, 'configuracion/consecutivos/servicios/siguiente_numero'), (cur) => {
-          return (Number(cur) || 1) + 1;
-        });
-      }
-
-      toast.success(editingId ? 'Servicio actualizado' : 'Servicio registrado');
+      toast.success(editingId ? 'Servicio actualizado' : `Servicio registrado (${codigoFinal})`);
       setIsModalOpen(false);
     } catch (error) {
       toast.error('Error al guardar: ' + error.message);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 

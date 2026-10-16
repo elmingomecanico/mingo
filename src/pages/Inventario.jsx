@@ -13,6 +13,9 @@ import BarcodeScannerModal from '../components/BarcodeScannerModal';
 import ImagePreviewModal from '../components/ImagePreviewModal';
 import { DEFAULT_CONSECUTIVOS, formatConsecutive } from '../components/catalogos/ConsecutivosManager';
 import ProductCatalogsManager from '../components/inventario/ProductCatalogsManager';
+import { compressImageToWebP, saveProductImage, subscribeProductImages, resolveProductImage } from '../utils/storageService';
+import { consumeNextConsecutiveAtomic, checkDuplicateCodigoVisible } from '../utils/consecutivosService';
+import { deleteProductCleanly } from '../utils/integrityService';
 
 export const canSellNegative = (product, globalPoliticas) => {
   if (!product) return false;
@@ -39,14 +42,24 @@ export const getMaxAllowedDiscount = (product, globalPoliticas) => {
 
 export default function Inventario() {
   const [activeTab, setActiveTab] = useState('catalogo'); // 'catalogo' | 'ajustes' | 'politicas' | 'tablas_catalogos'
-  const [products, setProducts] = useState([]);
+  const [rawProducts, setRawProducts] = useState([]);
+  const [productImagesMap, setProductImagesMap] = useState({});
   const [inventory, setInventory] = useState({});
   const [allInventory, setAllInventory] = useState({});
   const [ajustes, setAjustes] = useState([]);
   const [search, setSearch] = useState('');
   const [sucursal, setSucursal] = useState('SUC-01');
   const [loading, setLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [consecutivosConfig, setConsecutivosConfig] = useState(DEFAULT_CONSECUTIVOS);
+
+  // Hidratar productos con su imagen desde el nodo independiente WebP o R2
+  const products = React.useMemo(() => {
+    return rawProducts.map(p => ({
+      ...p,
+      image: resolveProductImage(p, productImagesMap)
+    }));
+  }, [rawProducts, productImagesMap]);
   
   // Políticas de Inventario y Venta en Negativo
   const [politicas, setPoliticas] = useState({
@@ -123,11 +136,13 @@ export default function Inventario() {
     const unsubProds = onValue(prodsRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
-        setProducts(Object.keys(data).map(key => ({ id: key, ...data[key] })));
+        setRawProducts(Object.keys(data).map(key => ({ id: key, ...data[key] })));
       } else {
-        setProducts([]);
+        setRawProducts([]);
       }
     });
+
+    const unsubImgs = subscribeProductImages(setProductImagesMap);
 
     const unsubInv = onValue(invRef, (snapshot) => {
       if (snapshot.exists()) setInventory(snapshot.val());
@@ -174,7 +189,7 @@ export default function Inventario() {
     });
 
     return () => {
-      unsubProds(); unsubInv(); unsubAllInv(); unsubPoliticas(); unsubCat(); unsubUbi(); unsubMod(); unsubAjustes(); unsubCons();
+      unsubProds(); unsubImgs(); unsubInv(); unsubAllInv(); unsubPoliticas(); unsubCat(); unsubUbi(); unsubMod(); unsubAjustes(); unsubCons();
     };
   }, [sucursal]);
 
@@ -290,13 +305,12 @@ export default function Inventario() {
   };
 
   const handleDeleteProduct = async (id, name) => {
-    if (!window.confirm(`¿Estás seguro de eliminar el producto "${name}"? Se eliminará de la base de datos y del inventario.`)) {
+    if (!window.confirm(`¿Estás seguro de eliminar el producto "${name}"? Se eliminará del catálogo, del nodo de imágenes y del inventario de todas las sucursales.`)) {
       return;
     }
     try {
-      await remove(ref(rtdb, `productos/${id}`));
-      await remove(ref(rtdb, `inventario/${id}`));
-      toast.success(`Producto "${name}" eliminado correctamente`);
+      await deleteProductCleanly(id);
+      toast.success(`Producto "${name}" eliminado limpiamente de todas las sucursales`);
     } catch (error) {
       toast.error('Error al eliminar producto: ' + error.message);
     }
@@ -310,72 +324,81 @@ export default function Inventario() {
     toast.success(`Código sugerido: ${suggestedCode}`, { icon: '✨' });
   };
 
-  const handleImageUpload = (e) => {
+  const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) return toast.error('Seleccione un archivo de imagen válido');
-    
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const MAX_SIZE = 400;
-        let width = img.width;
-        let height = img.height;
 
-        if (width > height) {
-          if (width > MAX_SIZE) {
-            height *= MAX_SIZE / width;
-            width = MAX_SIZE;
-          }
-        } else {
-          if (height > MAX_SIZE) {
-            width *= MAX_SIZE / height;
-            height = MAX_SIZE;
-          }
-        }
-
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, width, height);
-        
-        const base64Str = canvas.toDataURL('image/jpeg', 0.7);
-        setFormData({ ...formData, image: base64Str });
-      };
-      img.src = event.target.result;
-    };
-    reader.readAsDataURL(file);
+    try {
+      const webpDataUrl = await compressImageToWebP(file, 420, 0.72);
+      setFormData(prev => ({ ...prev, image: webpDataUrl }));
+      toast.success('Imagen comprimida a WebP ultraligero (Lista para nodo independiente / R2)');
+    } catch (err) {
+      toast.error('Error al procesar imagen: ' + err.message);
+    }
   };
 
   const handleSave = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+
     try {
       let prodId = editingId;
       if (!prodId) {
-        // Garantizar UUID interno único e irrepetible para Firebase
         prodId = push(ref(rtdb, 'productos')).key;
       }
 
-      const codigoFinal = formData.codigo_visible?.trim() || prodId;
+      let codigoFinal = formData.codigo_visible?.trim() || '';
+
+      // Si es nuevo producto y el código coincide con el sugerido automático (o está vacío),
+      // reservar atómicamente el consecutivo en el instante de guardar para evitar duplicados simultáneos
+      const prodCfg = consecutivosConfig?.productos || DEFAULT_CONSECUTIVOS.productos;
+      const suggestedDefault = formatConsecutive(prodCfg, prodCfg.siguiente_numero || 1);
+
+      if (!editingId && (!codigoFinal || codigoFinal === suggestedDefault)) {
+        const consumed = await consumeNextConsecutiveAtomic('productos');
+        codigoFinal = consumed.codigoFormateado;
+      } else if (!codigoFinal) {
+        codigoFinal = prodId;
+      }
+
+      // Verificar que ningún otro producto tenga el mismo código visible
+      const dupCheck = await checkDuplicateCodigoVisible('productos', codigoFinal, prodId);
+      if (dupCheck.isDuplicate) {
+        if (!editingId) {
+          // Si otro usuario acaba de tomar ese código simultáneamente, asignamos el siguiente correlativo libre
+          const nextAtomic = await consumeNextConsecutiveAtomic('productos');
+          codigoFinal = nextAtomic.codigoFormateado;
+        } else {
+          setIsSubmitting(false);
+          return toast.error(`El código visible "${codigoFinal}" ya está asignado al producto "${dupCheck.conflictItem?.name}". Elija un código único.`);
+        }
+      }
+
+      // Guardar la imagen comprimida WebP en el nodo independiente `productos_imagenes/{prodId}` (o Cloudflare R2)
+      let imgMeta = { has_image: false, image_url: '' };
+      if (formData.image) {
+        imgMeta = await saveProductImage(prodId, formData.image);
+      }
 
       const prodRef = ref(rtdb, `productos/${prodId}`);
       await set(prodRef, {
         id: prodId,
         codigo_visible: codigoFinal,
-        name: formData.name,
+        name: formData.name.trim(),
         price: Number(formData.price),
         cost: Number(formData.cost),
         cat: formData.cat,
-        compatibilidad: formData.compatibilidad,
-        image: formData.image,
+        compatibilidad: formData.compatibilidad || [],
+        has_image: imgMeta.has_image,
+        image_url: imgMeta.image_url || '',
+        image: '', // El Base64 WebP vive en `productos_imagenes/{prodId}` para mantener ligero el árbol de productos
         permitir_negativo: formData.permitir_negativo || 'heredar',
         permite_descuento: formData.permite_descuento !== undefined ? Boolean(formData.permite_descuento) : true,
         descuento_maximo: Number(formData.descuento_maximo) || 15
       });
 
-      // Solo si es nuevo, guardar el stock. Si estamos editando, el stock no se toca por aquí.
       const invRef = ref(rtdb, `inventario/${sucursal}/${prodId}`);
       if (!editingId) {
         await set(invRef, {
@@ -383,85 +406,86 @@ export default function Inventario() {
           stock_minimo: Number(formData.stock_minimo),
           ubicacion: formData.ubicacion
         });
-
-        // Actualizar el correlativo sugerido para productos
-        await runTransaction(ref(rtdb, 'configuracion/consecutivos/productos/siguiente_numero'), (cur) => {
-          return (Number(cur) || 1) + 1;
-        });
       } else {
-        // Actualizar solo ubicacion y minimo si estamos editando
-        const currentInv = inventory[prodId] || { stock_actual: 0 };
-        await set(invRef, {
-          stock_actual: currentInv.stock_actual,
+        // IMPORTANTE: Usar update() únicamente en stock_minimo y ubicacion para JAMÁS pisar stock_actual en ventas simultáneas
+        await update(invRef, {
           stock_minimo: Number(formData.stock_minimo),
           ubicacion: formData.ubicacion
         });
       }
 
-      toast.success(editingId ? 'Producto actualizado' : 'Producto creado con UUID interno y código visible');
+      toast.success(editingId ? 'Producto actualizado sin alterar stock en curso' : `Producto creado (${codigoFinal})`);
       setIsModalOpen(false);
     } catch (error) {
       toast.error('Error al guardar: ' + error.message);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleSaveAjuste = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
     if (!ajusteForm.id_producto || ajusteForm.nuevo_stock === '' || !ajusteForm.motivo) {
       return toast.error("Complete todos los campos del ajuste");
     }
 
+    setIsSubmitting(true);
     try {
       const pid = ajusteForm.id_producto.value;
       const pname = ajusteForm.id_producto.label;
       const nuevo = Number(ajusteForm.nuevo_stock);
-      const anterior = inventory[pid]?.stock_actual || 0;
-      const diff = nuevo - anterior;
-
-      if (diff === 0) return toast.error("El nuevo stock es igual al anterior.");
-
       const currentUser = JSON.parse(localStorage.getItem('mingo_user') || '{}');
 
-      // 1. Guardar registro
-      await push(ref(rtdb, `ajustes_inventario/${sucursal}`), {
-        id_producto: pid,
-        nombre_producto: pname,
-        stock_anterior: anterior,
-        stock_nuevo: nuevo,
-        diferencia: diff,
-        motivo: ajusteForm.motivo,
-        fecha: new Date().toISOString(),
-        usuario: currentUser.nombre_completo || 'Sistema'
+      // Ejecutar transacción atómica sobre stock_actual para conocer el stock anterior real en servidor
+      let stockAnteriorReal = 0;
+      const stockRef = ref(rtdb, `inventario/${sucursal}/${pid}/stock_actual`);
+      await runTransaction(stockRef, (cur) => {
+        stockAnteriorReal = Number(cur) || 0;
+        return nuevo;
       });
 
-      // 2. Registrar en Kardex
-      const kardexRef = push(ref(rtdb, 'kardex'));
-      await set(kardexRef, {
-        fecha: new Date().toISOString(),
-        id_sucursal: sucursal,
-        id_producto: pid,
-        nombre_producto: pname,
-        tipo_movimiento: diff > 0 ? 'Entrada por Ajuste' : 'Salida por Ajuste',
-        cantidad: Math.abs(diff),
-        id_referencia: `Ajuste (${ajusteForm.motivo})`,
-        stock_anterior: anterior,
-        stock_nuevo: nuevo,
-        usuario: currentUser.nombre_completo || 'Sistema'
+      const diff = nuevo - stockAnteriorReal;
+      if (diff === 0) {
+        setIsSubmitting(false);
+        return toast.error("El nuevo stock es igual al stock actual en servidor.");
+      }
+
+      const ajusteKey = push(ref(rtdb, `ajustes_inventario/${sucursal}`)).key;
+      const kardexKey = push(ref(rtdb, 'kardex')).key;
+
+      await update(ref(rtdb), {
+        [`ajustes_inventario/${sucursal}/${ajusteKey}`]: {
+          id_producto: pid,
+          nombre_producto: pname,
+          stock_anterior: stockAnteriorReal,
+          stock_nuevo: nuevo,
+          diferencia: diff,
+          motivo: ajusteForm.motivo,
+          fecha: new Date().toISOString(),
+          usuario: currentUser.nombre_completo || 'Sistema'
+        },
+        [`kardex/${kardexKey}`]: {
+          fecha: new Date().toISOString(),
+          id_sucursal: sucursal,
+          id_producto: pid,
+          nombre_producto: pname,
+          tipo_movimiento: diff > 0 ? 'Entrada por Ajuste' : 'Salida por Ajuste',
+          cantidad: Math.abs(diff),
+          id_referencia: `Ajuste (${ajusteForm.motivo})`,
+          stock_anterior: stockAnteriorReal,
+          stock_nuevo: nuevo,
+          usuario: currentUser.nombre_completo || 'Sistema'
+        }
       });
 
-      // 3. Actualizar inventario
-      const invRef = ref(rtdb, `inventario/${sucursal}/${pid}`);
-      const invData = inventory[pid] || {};
-      await set(invRef, {
-        ...invData,
-        stock_actual: nuevo
-      });
-
-      toast.success("Ajuste de inventario guardado");
+      toast.success("Ajuste de inventario aplicado atómicamente");
       setIsAjusteModalOpen(false);
       setAjusteForm({ id_producto: null, nuevo_stock: '', motivo: '' });
     } catch (error) {
       toast.error("Error al guardar ajuste: " + error.message);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 

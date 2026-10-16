@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import CashTicketPrinter from '../components/CashTicketPrinter';
 import ReporteGerencialCajas from '../components/reportes/ReporteGerencialCajas';
 import { useAuth } from '../context/AuthContext';
+import { reverseAndDeleteSale } from '../utils/integrityService';
 
 export default function Reportes() {
   const { user } = useAuth();
@@ -27,14 +28,15 @@ export default function Reportes() {
 
   const handleDeleteVenta = async (venta) => {
     const num = venta.numero_factura || venta.id;
-    if (!window.confirm(`¿Estás seguro de anular/eliminar la venta ${num}? Esta opción es ideal para depurar registros de prueba.`)) {
+    if (!window.confirm(`¿Estás seguro de anular/eliminar la factura ${num}?\n\nEsta acción ejecutará una reversión completa en cascada:\n• Devolverá el stock físico de los repuestos vendidos a la bodega\n• Registrará la entrada por anulación en el Kardex\n• Eliminará la Cuenta por Cobrar (CxC), Orden de Trabajo (OT) o Deuda de Empleado asociada\n• Revertirá el ingreso en el turno de caja o cuenta bancaria.`)) {
       return;
     }
+    const toastId = toast.loading(`Anulando venta ${num} y revirtiendo registros...`);
     try {
-      await remove(ref(rtdb, `ventas/${venta.id}`));
-      toast.success(`Venta ${num} eliminada correctamente`);
+      await reverseAndDeleteSale(venta, user?.nombre_completo || 'SuperAdmin');
+      toast.success(`Venta ${num} anulada y stock/saldos revertidos con éxito`, { id: toastId });
     } catch (err) {
-      toast.error('Error al eliminar venta: ' + err.message);
+      toast.error('Error al anular venta: ' + err.message, { id: toastId });
     }
   };
 

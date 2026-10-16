@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { ref, onValue, push, set, remove, runTransaction } from 'firebase/database';
+import React, { useState, useEffect, useMemo } from 'react';
+import { ref, onValue, push, set, update, remove, runTransaction } from 'firebase/database';
 import { rtdb } from '../firebase';
 import { 
   ShoppingBag, Search, Plus, Trash2, AlertCircle, TrendingDown, CheckCircle2,
@@ -12,6 +12,9 @@ import ConfirmModal from '../components/ConfirmModal';
 import BarcodeScannerModal from '../components/BarcodeScannerModal';
 import ImagePreviewModal from '../components/ImagePreviewModal';
 import TokenizedSearchSelect from '../components/TokenizedSearchSelect';
+import { subscribeProductImages, resolveProductImage } from '../utils/storageService';
+import { consumeNextConsecutiveAtomic, checkDuplicateCodigoVisible } from '../utils/consecutivosService';
+import { reverseAndDeletePurchase } from '../utils/integrityService';
 
 export default function Compras() {
   const [activeTab, setActiveTab] = useState('nueva'); // 'nueva' | 'historial' | 'sugerencias'
@@ -20,13 +23,23 @@ export default function Compras() {
   const [sugerencias, setSugerencias] = useState([]);
   
   const [proveedores, setProveedores] = useState([]);
-  const [productos, setProductos] = useState([]);
+  const [rawProductos, setRawProductos] = useState([]);
+  const [imagesMap, setImagesMap] = useState({});
   const [inventario, setInventario] = useState({});
   const [categorias, setCategorias] = useState([]);
   const [ubicaciones, setUbicaciones] = useState([]);
   const [sucursal, setSucursal] = useState('SUC-01');
   
   const [loading, setLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Hidratar productos con imágenes desde productos_imagenes o Cloudflare R2
+  const productos = useMemo(() => {
+    return rawProductos.map(p => ({
+      ...p,
+      image: resolveProductImage(p, imagesMap)
+    }));
+  }, [rawProductos, imagesMap]);
 
   // ================= ESTADO DE NUEVA COMPRA / FACTURA DE PROVEEDOR =================
   const [cart, setCart] = useState([]);
@@ -98,8 +111,12 @@ export default function Compras() {
 
     const unsubProd = onValue(prodRef, (snapshot) => {
       if (snapshot.exists()) {
-        setProductos(Object.keys(snapshot.val()).map(key => ({ id: key, ...snapshot.val()[key] })));
-      } else setProductos([]);
+        setRawProductos(Object.keys(snapshot.val()).map(key => ({ id: key, ...snapshot.val()[key] })));
+      } else setRawProductos([]);
+    });
+
+    const unsubImages = subscribeProductImages((map) => {
+      setImagesMap(map);
     });
 
     const unsubInv = onValue(invRef, (snapshot) => {
@@ -131,7 +148,7 @@ export default function Compras() {
     });
 
     return () => { 
-      unsubProv(); unsubProd(); unsubInv(); unsubComp(); unsubCat(); unsubUbi(); 
+      unsubProv(); unsubProd(); unsubImages(); unsubInv(); unsubComp(); unsubCat(); unsubUbi(); 
     };
   }, [sucursal]);
 
@@ -354,9 +371,10 @@ export default function Compras() {
 
   const handleSaveEditedProduct = async (e) => {
     e.preventDefault();
-    if (!editingProduct) return;
+    if (!editingProduct || isSubmitting) return;
     if (!editProductForm.name.trim()) return toast.error('El nombre no puede estar vacío');
 
+    setIsSubmitting(true);
     try {
       const compatList = editProductForm.compatibilidadText
         .split(',')
@@ -367,13 +385,13 @@ export default function Compras() {
         name: editProductForm.name.trim(),
         cat: editProductForm.cat,
         ubicacion: editProductForm.ubicacion,
-        compatibilidad: compatList,
-        image: editProductForm.image
+        compatibilidad: compatList
       };
 
-      // 1. Actualizar en Firebase RTDB
-      await runTransaction(ref(rtdb, `productos/${editingProduct.id}`), (curr) => {
-        return { ...curr, ...updates };
+      // 1. Actualizar sólo campos editados en Firebase RTDB
+      await update(ref(rtdb, `productos/${editingProduct.id}`), updates);
+      await update(ref(rtdb, `inventario/${sucursal}/${editingProduct.id}`), {
+        ubicacion: editProductForm.ubicacion || ''
       });
 
       // 2. Actualizar en la lista local de la compra
@@ -384,44 +402,60 @@ export default function Compras() {
       setEditingProduct(null);
     } catch (err) {
       toast.error('Error al editar producto: ' + err.message);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   // Guardar nuevo producto maestro y agregarlo a la factura
   const handleSaveNewProduct = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
     if (!newProductForm.name.trim()) return toast.error('Ingrese el nombre del producto');
 
+    setIsSubmitting(true);
     try {
-      let prodId = newProductForm.id.trim();
+      const internalUuid = typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `uuid-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+
+      let prodId = newProductForm.id.trim().toUpperCase();
       if (!prodId) {
-        const num = productos.length + 1;
-        prodId = `PROD-${num.toString().padStart(4, '0')}`;
-        if (productos.find(p => p.id === prodId)) {
-          prodId = push(ref(rtdb, 'productos')).key;
-        }
+        prodId = await consumeNextConsecutiveAtomic('productos');
+      }
+
+      const isDup = await checkDuplicateCodigoVisible('productos', prodId);
+      if (isDup) {
+        toast.error(`Ya existe un producto con el código "${prodId}".`);
+        setIsSubmitting(false);
+        return;
       }
 
       const costNum = Number(newProductForm.cost) || 0;
       const priceNum = Number(newProductForm.price) || (costNum > 0 ? Number((costNum * 1.35).toFixed(2)) : 0);
 
       const newProdData = {
+        uuid: internalUuid,
+        codigo_visible: prodId,
         name: newProductForm.name.trim(),
         cost: costNum,
         price: priceNum,
         cat: newProductForm.cat || categorias[0] || 'Repuestos',
         stock_minimo: Number(newProductForm.stock_minimo) || 5,
         ubicacion: newProductForm.ubicacion || '',
-        image: newProductForm.image || '',
+        has_image: false,
         compatibilidad: newProductForm.compatibilidad || []
       };
 
-      await set(ref(rtdb, `productos/${prodId}`), newProdData);
-      await set(ref(rtdb, `inventario/${sucursal}/${prodId}`), {
+      const atomicNewProd = {};
+      atomicNewProd[`productos/${prodId}`] = newProdData;
+      atomicNewProd[`inventario/${sucursal}/${prodId}`] = {
         stock_actual: 0,
         stock_minimo: Number(newProductForm.stock_minimo) || 5,
         ubicacion: newProductForm.ubicacion || ''
-      });
+      };
+
+      await update(ref(rtdb), atomicNewProd);
 
       handleAddToCart({ id: prodId, ...newProdData });
 
@@ -433,6 +467,8 @@ export default function Compras() {
       });
     } catch (err) {
       toast.error('Error al crear producto: ' + err.message);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -463,6 +499,7 @@ export default function Compras() {
 
   // Procesar y confirmar la orden de compra
   const processPurchase = async () => {
+    if (isSubmitting) return;
     if (cart.length === 0) return toast.error("Agregue al menos un producto a la compra");
     if (!selectedProveedor) return toast.error("Seleccione un proveedor");
     if (!numeroFactura.trim()) return toast.error("Ingrese el número de factura física del proveedor");
@@ -476,17 +513,38 @@ export default function Compras() {
   };
 
   const executePurchase = async () => {
+    if (isSubmitting) return;
     setConfirmModal({ ...confirmModal, isOpen: false });
-    const toastId = toast.loading("Procesando factura y actualizando inventario...");
+    setIsSubmitting(true);
+    const toastId = toast.loading("Procesando factura y actualizando inventario de forma atómica...");
     
     try {
       const compraRef = push(ref(rtdb, 'compras'));
       const compraId = compraRef.key;
-      
+      const nowIso = new Date().toISOString();
+      const fechaFacturaIso = new Date(fechaFactura).toISOString();
+
+      // 1. Aumentar Inventario atómicamente con runTransaction y capturar saldos exactos
+      const stockSnapshots = {};
+      for (const item of cart) {
+        const m = calculateItemMetrics(item);
+        const itemInvRef = ref(rtdb, `inventario/${sucursal}/${item.id}/stock_actual`);
+        let stockBefore = 0;
+        const txRes = await runTransaction(itemInvRef, (currentStock) => {
+          stockBefore = Number(currentStock) || 0;
+          return stockBefore + m.totalUnidadesFisicas;
+        });
+        const stockAfter = Number(txRes.snapshot.val()) || 0;
+        stockSnapshots[item.id] = { stockBefore, stockAfter };
+      }
+
+      // 2. Construir lote atómico multi-ruta
+      const atomicBatch = {};
+
       const newCompra = {
         id: compraId,
-        fecha: new Date(fechaFactura).toISOString(),
-        fecha_registro: new Date().toISOString(),
+        fecha: fechaFacturaIso,
+        fecha_registro: nowIso,
         sucursal,
         id_proveedor: selectedProveedor.value,
         nombre_proveedor: selectedProveedor.label,
@@ -517,29 +575,28 @@ export default function Compras() {
           };
         })
       };
-      await set(compraRef, newCompra);
+      atomicBatch[`compras/${compraId}`] = newCompra;
 
-      // 1. Si es Crédito, registrar en CxP
+      // 3. Si es Crédito, registrar en CxP; si es Contado, asentar en Libro Diario
       if (metodoPago === 'Crédito') {
-        const cxpRef = push(ref(rtdb, 'cxp'));
+        const cxpKey = push(ref(rtdb, 'cxp')).key;
         const fechaVence = new Date(fechaFactura);
         fechaVence.setDate(fechaVence.getDate() + Number(diasCredito));
-        await set(cxpRef, {
+        atomicBatch[`cxp/${cxpKey}`] = {
           id_proveedor: selectedProveedor.value,
           id_compra: compraId,
           numero_factura: numeroFactura.trim(),
-          fecha_emision: new Date(fechaFactura).toISOString(),
+          fecha_emision: fechaFacturaIso,
           fecha_vencimiento: fechaVence.toISOString(),
           monto_total: totalFacturaAPagar,
           saldo_pendiente: totalFacturaAPagar,
           estado: 'Pendiente',
           sucursal
-        });
+        };
       } else {
-        // 2. Si es Contado, asentar egreso en Libro Diario de Contabilidad
-        const movRef = push(ref(rtdb, 'movimientos_contables'));
-        await set(movRef, {
-          fecha: new Date(fechaFactura).toISOString(),
+        const movKey = push(ref(rtdb, 'movimientos_contables')).key;
+        atomicBatch[`movimientos_contables/${movKey}`] = {
+          fecha: fechaFacturaIso,
           tipo: 'Egreso',
           categoria: 'Pago a Proveedor (Repuestos/Insumos)',
           concepto: `Compra al contado factura ${numeroFactura.trim()} (${selectedProveedor.label})`,
@@ -550,46 +607,40 @@ export default function Compras() {
           beneficiario: selectedProveedor.label,
           sucursal,
           usuario: 'Compras'
-        });
+        };
       }
 
-      // 3. Aumentar Inventario, Actualizar Costo Real y Precio de Venta en Catálogo, y Asentar Kardex
+      // 4. Actualizar Costos/Precios en Catálogo y Asentar Kardex con saldos exactos
       for (const item of cart) {
         const m = calculateItemMetrics(item);
+        const snap = stockSnapshots[item.id] || { stockBefore: 0, stockAfter: m.totalUnidadesFisicas };
 
-        // Aumentar stock físico (compradas + bonificadas)
-        const itemInvRef = ref(rtdb, `inventario/${sucursal}/${item.id}/stock_actual`);
-        await runTransaction(itemInvRef, (currentStock) => {
-          return (currentStock || 0) + m.totalUnidadesFisicas;
-        });
-
-        // Actualizar último costo real en el catálogo maestro
-        const prodCostRef = ref(rtdb, `productos/${item.id}/cost`);
-        await set(prodCostRef, m.costoRealUnitario);
-
-        // Actualizar precio de venta en catálogo maestro si está seleccionado
+        atomicBatch[`productos/${item.id}/cost`] = m.costoRealUnitario;
         if (item.actualizarPrecioVenta && m.precioVenta > 0) {
-          const prodPriceRef = ref(rtdb, `productos/${item.id}/price`);
-          await set(prodPriceRef, m.precioVenta);
+          atomicBatch[`productos/${item.id}/price`] = m.precioVenta;
         }
 
-        // Registrar movimiento detallado en Kardex
-        const kardexRef = push(ref(rtdb, 'kardex'));
-        await set(kardexRef, {
-          fecha: new Date().toISOString(),
+        const kardexKey = push(ref(rtdb, 'kardex')).key;
+        atomicBatch[`kardex/${kardexKey}`] = {
+          fecha: nowIso,
           id_sucursal: sucursal,
           id_producto: item.id,
           nombre_producto: item.name,
           tipo_movimiento: 'Entrada por Compra',
           cantidad: m.totalUnidadesFisicas,
+          stock_anterior: snap.stockBefore,
+          stock_resultante: snap.stockAfter,
           id_referencia: numeroFactura.trim(),
           id_proveedor: selectedProveedor.value,
           costo_unitario: m.costoRealUnitario,
           precio_venta: m.precioVenta,
           detalle: `${m.qtyComprada} facturadas${m.bonifQty > 0 ? ` + ${m.bonifQty} bonificación/regalía` : ''}`,
           usuario: 'Compras'
-        });
+        };
       }
+
+      // 5. Commit atómico multi-ruta
+      await update(ref(rtdb), atomicBatch);
 
       toast.success("Factura de compra registrada y catálogo actualizado con éxito", { id: toastId });
       
@@ -604,19 +655,22 @@ export default function Compras() {
     } catch (error) {
       console.error(error);
       toast.error("Error al procesar compra: " + error.message, { id: toastId });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleDeleteCompra = async (compra) => {
     const num = compra.numero_factura || compra.id;
-    if (!window.confirm(`¿Estás seguro de anular/eliminar la compra "${num}" de ${compra.nombre_proveedor}? Se eliminará el registro de compras.`)) {
+    if (!window.confirm(`¿Estás seguro de anular/eliminar la compra "${num}" de ${compra.nombre_proveedor}?\n\nEsta acción:\n• Revertirá del inventario las unidades ingresadas\n• Registrará la salida por anulación en el Kardex\n• Eliminará la Cuenta por Pagar (CxP) o egreso contable asociado.`)) {
       return;
     }
+    const toastId = toast.loading(`Anulando compra ${num} y revirtiendo stock...`);
     try {
-      await remove(ref(rtdb, `compras/${compra.id}`));
-      toast.success(`Compra "${num}" eliminada correctamente`);
+      await reverseAndDeletePurchase(compra, 'Compras');
+      toast.success(`Compra "${num}" anulada y stock revertido correctamente`, { id: toastId });
     } catch (err) {
-      toast.error('Error al eliminar compra: ' + err.message);
+      toast.error('Error al anular compra: ' + err.message, { id: toastId });
     }
   };
 

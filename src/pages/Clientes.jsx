@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { ref, onValue, set, push, remove } from 'firebase/database';
+import { ref, onValue, set, update, push, remove } from 'firebase/database';
 import { rtdb } from '../firebase';
 import { Users, Plus, Edit2, Trash2, Search, Phone, FileText, CreditCard, Percent, ShieldCheck, Gift, CheckSquare } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { validateClienteDeletion } from '../utils/integrityService';
 
 const defaultMetodosDescuento = {
   Efectivo: true,
@@ -15,6 +16,7 @@ export default function Clientes() {
   const [clientes, setClientes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -85,8 +87,10 @@ export default function Clientes() {
 
   const handleSave = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
     if (!formData.nombre.trim()) return toast.error("El nombre es requerido");
 
+    setIsSubmitting(true);
     try {
       const itemRef = editingId ? ref(rtdb, `clientes/${editingId}`) : push(ref(rtdb, 'clientes'));
       
@@ -110,20 +114,26 @@ export default function Clientes() {
       if (!editingId) {
         await set(itemRef, payload);
       } else {
-        const clientObj = clientes.find(c => c.id === editingId);
-        await set(itemRef, { ...clientObj, ...payload });
+        await update(itemRef, payload);
       }
 
       toast.success(editingId ? 'Privilegios y condiciones actualizados' : 'Cliente registrado exitosamente');
       setIsModalOpen(false);
     } catch (error) {
       toast.error('Error al guardar: ' + error.message);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleDelete = async (id, nombre) => {
-    if (!window.confirm(`¿Estás seguro de eliminar a "${nombre}"?`)) return;
     try {
+      const check = await validateClienteDeletion(id);
+      if (!check.canDelete) {
+        toast.error(check.reason, { duration: 6000 });
+        return;
+      }
+      if (!window.confirm(`¿Estás seguro de eliminar a "${nombre}"?`)) return;
       await remove(ref(rtdb, `clientes/${id}`));
       toast.success("Cliente eliminado");
     } catch (error) {

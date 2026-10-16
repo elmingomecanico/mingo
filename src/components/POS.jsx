@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ShoppingCart, Trash2, Search, Save, Loader, Printer, Plus, X, UserPlus, Minus, Percent, FileDown, ShieldAlert, Sparkles, RefreshCw, Gift, Lock, Camera, Maximize2, Package, ScanBarcode, LockOpen, ArrowUpRight, Calculator, CheckCircle2, AlertTriangle, Coins, DollarSign, User, Wrench, Phone, CreditCard, MapPin, Building, Layers, Store } from 'lucide-react';
-import { ref, onValue, push, set, runTransaction } from 'firebase/database';
+import { ref, onValue, push, set, update, runTransaction } from 'firebase/database';
 import { rtdb } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
@@ -18,6 +18,8 @@ import ProductConfigModal from './ProductConfigModal';
 import { canSellNegative, canApplyDiscount, getMaxAllowedDiscount } from '../pages/Inventario';
 import { DEFAULT_SUCURSALES } from './catalogos/BranchManager';
 import { DEFAULT_CONSECUTIVOS } from './catalogos/ConsecutivosManager';
+import { subscribeProductImages, resolveProductImage } from '../utils/storageService';
+import { consumeNextConsecutiveAtomic } from '../utils/consecutivosService';
 
 // Catálogo maestro de sucursales con nombres amigables (sincronizado reactivamente con RTDB)
 export let SUCURSALES = DEFAULT_SUCURSALES;
@@ -159,14 +161,23 @@ export default function POS() {
   // ================= END TAB SYSTEM =================
 
   const [searchCode, setSearchCode] = useState('');
-  const [products, setProducts] = useState([]);
+  const [rawProducts, setRawProducts] = useState([]);
+  const [productImagesMap, setProductImagesMap] = useState({});
   const [servicios, setServicios] = useState([]);
   const [allInventory, setAllInventory] = useState({});
   const [inventory, setInventory] = useState({});
   const [loading, setLoading] = useState(true);
   const [clientes, setClientes] = useState([]);
+  const [cxcList, setCxcList] = useState([]);
   const [mecanicos, setMecanicos] = useState([]);
   const [empleados, setEmpleados] = useState([]);
+
+  const products = React.useMemo(() => {
+    return rawProducts.map(p => ({
+      ...p,
+      image: resolveProductImage(p, productImagesMap)
+    }));
+  }, [rawProducts, productImagesMap]);
 
   // Consultar existencia de un producto en cualquier sucursal
   const getStock = (productId, sucId = sucursal) => {
@@ -321,9 +332,21 @@ export default function POS() {
           type: 'producto',
           ...data[key]
         }));
-        setProducts(prodList);
+        setRawProducts(prodList);
       } else {
-        setProducts([]);
+        setRawProducts([]);
+      }
+    });
+
+    const unsubImgs = subscribeProductImages(setProductImagesMap);
+
+    const cxcRef = ref(rtdb, 'cxc');
+    const unsubCxc = onValue(cxcRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const val = snapshot.val();
+        setCxcList(Object.keys(val).map(k => ({ id: k, ...val[k] })));
+      } else {
+        setCxcList([]);
       }
     });
 
@@ -424,6 +447,8 @@ export default function POS() {
 
     return () => {
       unsubProd();
+      unsubImgs();
+      unsubCxc();
       unsubServ();
       unsubInv();
       unsubCli();
@@ -1076,6 +1101,8 @@ export default function POS() {
   };
 
   const processSale = async () => {
+    if (loading) return;
+
     // Validar asignación de caja por gerencia
     if (!canOperatePOS) {
       return toast.error('⛔ Acceso denegado: Tu usuario no tiene asignada una Caja Registradora por la administración. No puedes facturar en el POS.', { duration: 5500 });
@@ -1093,19 +1120,19 @@ export default function POS() {
     if (cart.some(item => item.type === 'servicio') && !selectedMecanico) {
       return toast.error('Debe asignar un mecánico para la mano de obra');
     }
-    
+
     // Si es crédito empleado
     if (metodoPago === 'Crédito Empleado' && !selectedEmpleadoDeudor) {
       return toast.error('Debe seleccionar al empleado al que se le otorga el crédito');
     }
-    
-    // Si es crédito a cliente, VALIDAR PRIVILEGIOS DE GERENCIA
+
+    // Si es crédito a cliente, VALIDAR PRIVILEGIOS DE GERENCIA + DEUDA ACTIVA EN CXC
     const targetClienteId = selectedCliente.value || 'MOSTRADOR';
     const clienteDataObj = clientes.find(c => c.id === targetClienteId);
 
     if (metodoPago === 'Crédito' && targetClienteId !== 'MOSTRADOR') {
       if (!clienteDataObj) return toast.error('Cliente no encontrado');
-      
+
       if (!clienteDataObj.credito_habilitado) {
         return toast.error('Este cliente NO tiene crédito autorizado por gerencia.');
       }
@@ -1115,8 +1142,18 @@ export default function POS() {
         return toast.error('El cliente tiene un límite de crédito de C$ 0.00. Solicite autorización de gerencia.');
       }
 
-      if (total > limite) {
-        return toast.error(`El monto supera el límite de crédito autorizado por gerencia (Límite: C$ ${limite.toFixed(2)})`);
+      // Calcular saldo pendiente actual en CxC para proteger el límite real de crédito
+      const deudaActualCliente = cxcList
+        .filter(c => c.id_cliente === targetClienteId && c.estado === 'Pendiente')
+        .reduce((acc, c) => acc + (Number(c.saldo_pendiente) || 0), 0);
+
+      const disponibleReal = Math.max(0, limite - deudaActualCliente);
+
+      if ((deudaActualCliente + total) > limite) {
+        return toast.error(
+          `Crédito insuficiente: El cliente ya debe C$ ${deudaActualCliente.toFixed(2)} de un límite de C$ ${limite.toFixed(2)} (Disponible: C$ ${disponibleReal.toFixed(2)}). La factura actual es de C$ ${total.toFixed(2)}.`,
+          { duration: 6000 }
+        );
       }
     }
 
@@ -1141,6 +1178,8 @@ export default function POS() {
         ? clienteDataObj.nombre
         : (selectedCliente.label && targetClienteId !== 'MOSTRADOR' ? selectedCliente.label : 'CLIENTE DE MOSTRADOR');
 
+      const cajeroResponsable = currentUserRealtime?.nombre_completo || user?.nombre_completo || user?.nombre || 'Caja POS';
+
       for (const branchId of branchIds) {
         const branchItems = groupedBySucursal[branchId];
         const branchSubtotal = branchItems.reduce((sum, item) => sum + (item.price * item.qty), 0);
@@ -1154,26 +1193,54 @@ export default function POS() {
           .filter(i => i.type === 'servicio')
           .reduce((sum, item) => sum + ((item.price * item.qty) - getItemDiscount(item)), 0);
 
-        // Obtener número secuencial de factura para esta sucursal (o global)
-        const counterRef = ref(rtdb, 'counters/ventas');
-        const counterResult = await runTransaction(counterRef, (currentData) => {
-          return (currentData || 0) + 1;
-        });
-        const numFactura = counterResult.snapshot.val();
+        // PASO 1: Descontar stock atómicamente verificando concurrencia y política de venta negativa ANTES de emitir factura
+        const deductedItemsRollback = [];
+        const stockResultsMap = {};
 
-        // Formato correlativo configurable por SuperAdmin
-        const ventasCfg = consecutivosConfig?.ventas || DEFAULT_CONSECUTIVOS.ventas;
-        const padCount = Number(ventasCfg.digitos_relleno) || 4;
-        const baseNum = numFactura.toString().padStart(padCount, '0');
-        let humanId = `${ventasCfg.prefijo !== undefined ? ventasCfg.prefijo : 'FAC-'}${baseNum}`;
-        if (ventasCfg.incluir_prefijo_sucursal) {
-          const branchObj = sucursalesList.find(s => s.id === branchId);
-          const branchPrefix = branchObj?.prefijo_factura || `${branchId}-`;
-          humanId = `${branchPrefix}${humanId}`;
+        try {
+          for (const item of branchItems) {
+            if (item.type !== 'servicio') {
+              const prodCatalogObj = products.find(p => p.id === item.id) || item;
+              const allowsNegative = canSellNegative(prodCatalogObj, politicasInventario);
+              const qtyToDeduct = Number(item.qty || 0);
+              const invProdRef = ref(rtdb, `inventario/${branchId}/${item.id}/stock_actual`);
+
+              let stockBefore = 0;
+              const txResult = await runTransaction(invProdRef, (currentStock) => {
+                const cur = Number(currentStock) || 0;
+                if (!allowsNegative && (cur - qtyToDeduct) < 0) {
+                  return; // Aborta la transacción si otro cajero agotó el stock un milisegundo antes
+                }
+                stockBefore = cur;
+                return cur - qtyToDeduct;
+              });
+
+              if (!txResult.committed) {
+                throw new Error(`Stock insuficiente en tiempo real para "${item.name}". Otro usuario acaba de agotar las existencias disponibles.`);
+              }
+
+              const stockAfter = Number(txResult.snapshot.val()) || 0;
+              stockBefore = stockAfter + qtyToDeduct;
+              deductedItemsRollback.push({ branchId, prodId: item.id, qty: qtyToDeduct });
+              stockResultsMap[item.id] = { stockBefore, stockAfter };
+            }
+          }
+        } catch (stockErr) {
+          // Si algún ítem falló por colisión de stock, revertir los ítems previos de este carrito
+          for (const rb of deductedItemsRollback) {
+            await runTransaction(ref(rtdb, `inventario/${rb.branchId}/${rb.prodId}/stock_actual`), (cur) => {
+              return (Number(cur) || 0) + rb.qty;
+            });
+          }
+          throw stockErr;
         }
 
-        const saleRef = push(ref(rtdb, 'ventas'));
-        const saleId = saleRef.key;
+        // PASO 2: Obtener número secuencial atómico desde `configuracion/consecutivos/ventas`
+        const branchObj = sucursalesList.find(s => s.id === branchId);
+        const { codigoFormateado: humanId } = await consumeNextConsecutiveAtomic('ventas', branchObj);
+
+        const saleId = push(ref(rtdb, 'ventas')).key;
+        const fechaVentaIso = new Date().toISOString();
 
         const newSale = {
           id: saleId,
@@ -1183,12 +1250,12 @@ export default function POS() {
           id_caja: activeTurno?.id_caja || userAssignedCaja?.id || 'CAJA-01',
           codigo_caja: activeTurno?.codigo_caja || userAssignedCaja?.codigo || 'CAJA-01',
           nombre_caja: activeTurno?.nombre_caja || userAssignedCaja?.nombre || 'Caja Mostrador',
-          fecha: new Date().toISOString(),
+          fecha: fechaVentaIso,
           sucursal: branchId,
           sucursal_nombre: getBranchName(branchId, sucursalesList),
           id_cliente: targetClienteId,
           nombre_cliente: nombreFinalCliente,
-          cajero: currentUserRealtime?.nombre_completo || user?.nombre || 'Caja POS',
+          cajero: cajeroResponsable,
           metodo_pago: metodoPago,
           id_mecanico: selectedMecanico ? selectedMecanico.value : null,
           nombre_mecanico: selectedMecanico ? selectedMecanico.label : null,
@@ -1221,10 +1288,12 @@ export default function POS() {
           })
         };
 
-        await set(saleRef, newSale);
-        createdSales.push(newSale);
+        // Preparar paquete Multi-Path Update para que todos los documentos vinculados se escriban de forma 100% ATÓMICA
+        const atomicBatch = {
+          [`ventas/${saleId}`]: newSale
+        };
 
-        // Si el cobro es con Tarjeta o Transferencia, acreditar en la cuenta bancaria vinculada
+        // PASO 3: Si el cobro es con Tarjeta o Transferencia, acreditar en la cuenta bancaria vinculada
         if (metodoPago === 'Tarjeta' || metodoPago === 'Transferencia') {
           const cuentaDestino = cuentasBancarias.find(c => 
             c.estado !== 'Inactiva' && (
@@ -1239,22 +1308,20 @@ export default function POS() {
           );
 
           if (cuentaDestino) {
-            const saldoAnt = Number(cuentaDestino.saldo_actual) || 0;
-            const saldoPost = saldoAnt + branchTotal;
-
-            // Acreditar saldo en la cuenta bancaria en tiempo real
-            await runTransaction(ref(rtdb, `cuentas_bancarias/${cuentaDestino.id}/saldo_actual`), (cur) => {
+            const txBank = await runTransaction(ref(rtdb, `cuentas_bancarias/${cuentaDestino.id}/saldo_actual`), (cur) => {
               return (Number(cur) || 0) + branchTotal;
             });
+            const saldoPost = Number(txBank.snapshot.val()) || branchTotal;
+            const saldoAnt = saldoPost - branchTotal;
 
-            // Registrar movimiento bancario con justificación y trazabilidad
-            const movBancRef = push(ref(rtdb, 'movimientos_bancarios'));
-            await set(movBancRef, {
+            const movBancKey = push(ref(rtdb, 'movimientos_bancarios')).key;
+            atomicBatch[`movimientos_bancarios/${movBancKey}`] = {
+              id_venta: saleId,
               id_cuenta: cuentaDestino.id,
               nombre_cuenta: cuentaDestino.alias,
               banco: cuentaDestino.banco,
               moneda: cuentaDestino.moneda,
-              fecha: newSale.fecha,
+              fecha: fechaVentaIso,
               tipo: 'Ingreso',
               razon_movimiento: metodoPago === 'Tarjeta' ? 'Venta POS (Tarjeta)' : 'Venta POS (Transferencia)',
               concepto: `Factura ${humanId} - ${nombreFinalCliente}`,
@@ -1264,60 +1331,61 @@ export default function POS() {
               saldo_anterior: saldoAnt,
               saldo_posterior: saldoPost,
               beneficiario_o_depositante: nombreFinalCliente,
-              usuario: user?.nombre || 'Caja POS',
+              usuario: cajeroResponsable,
               sucursal: branchId,
               notas: `Cobro procesado en Caja POS (${getBranchName(branchId)}) con método ${metodoPago}`
-            });
+            };
           }
         }
 
-        // Si es crédito a cliente, generar cuenta por cobrar para esta factura
+        // PASO 4: Si es crédito a cliente, incluir Cuenta por Cobrar (CxC) en el paquete atómico
         if (metodoPago === 'Crédito' && targetClienteId !== 'MOSTRADOR') {
-          const cxcRecord = push(ref(rtdb, 'cxc'));
+          const cxcKey = push(ref(rtdb, 'cxc')).key;
           const fechaVence = new Date();
           fechaVence.setDate(fechaVence.getDate() + 30);
-          
-          await set(cxcRecord, {
+
+          atomicBatch[`cxc/${cxcKey}`] = {
             id_cliente: targetClienteId,
             nombre_cliente: nombreFinalCliente,
             id_factura: saleId,
             numero_factura: humanId,
-            fecha_emision: newSale.fecha,
+            fecha_emision: fechaVentaIso,
             fecha_vencimiento: fechaVence.toISOString(),
             monto_total: branchTotal,
             saldo_pendiente: branchTotal,
             sucursal: branchId,
             multisucursal_id: multiVentaId,
             estado: 'Pendiente'
-          });
+          };
         }
 
-        // Si es crédito a empleado, registrar deuda en RRHH para esta factura
+        // PASO 5: Si es crédito a empleado, incluir deuda en RRHH en el paquete atómico
         if (metodoPago === 'Crédito Empleado' && selectedEmpleadoDeudor) {
-          const deudaRecord = push(ref(rtdb, 'deudas_empleados'));
-          await set(deudaRecord, {
+          const deudaKey = push(ref(rtdb, 'deudas_empleados')).key;
+          atomicBatch[`deudas_empleados/${deudaKey}`] = {
+            id_factura: saleId,
             id_empleado: selectedEmpleadoDeudor.value,
             tipo: 'Crédito',
             motivo: `Compra interna - Factura ${humanId} (${getBranchName(branchId)})`,
             monto_total: branchTotal,
             saldo_pendiente: branchTotal,
             cuota_por_pago: branchTotal,
-            fecha_creacion: newSale.fecha,
+            fecha_creacion: fechaVentaIso,
             sucursal: branchId,
             estado: 'Activo'
-          });
+          };
         }
 
-        // Si hay servicios en esta sucursal, generar Orden de Trabajo
+        // PASO 6: Si hay servicios en esta sucursal, incluir Orden de Trabajo en el paquete atómico
         const serviciosEnEstaSuc = branchItems.filter(item => item.type === 'servicio');
         if (serviciosEnEstaSuc.length > 0 && selectedMecanico) {
-          const otRef = push(ref(rtdb, 'ordenes_trabajo'));
-          const totalServicios = serviciosEnEstaSuc.reduce((sum, item) => sum + ((item.price * item.qty) - (item.discount || 0)), 0);
-          
-          await set(otRef, {
+          const otKey = push(ref(rtdb, 'ordenes_trabajo')).key;
+          const totalServicios = serviciosEnEstaSuc.reduce((sum, item) => sum + ((item.price * item.qty) - getItemDiscount(item)), 0);
+
+          atomicBatch[`ordenes_trabajo/${otKey}`] = {
             id_factura: saleId,
             numero_factura: humanId,
-            fecha_creacion: newSale.fecha,
+            fecha_creacion: fechaVentaIso,
             id_cliente: targetClienteId,
             nombre_cliente: nombreFinalCliente,
             id_mecanico: selectedMecanico.value,
@@ -1328,40 +1396,52 @@ export default function POS() {
               id_servicio: s.id,
               nombre: s.name,
               cantidad: s.qty,
-              subtotal: (s.price * s.qty) - (s.discount || 0)
+              subtotal: (s.price * s.qty) - getItemDiscount(s)
             })),
             total_servicios: totalServicios,
             comision_mecanico_porcentaje: selectedMecanico.comision || 50,
             comision_mecanico_monto: totalServicios * ((selectedMecanico.comision || 50) / 100)
-          });
+          };
         }
 
-        // Descontar inventario y registrar en Kardex de esta sucursal
+        // PASO 7: Incluir registros de Kardex con los saldos exactos retornados por la transacción
         for (const item of branchItems) {
           if (item.type !== 'servicio') {
-            const invProdRef = ref(rtdb, `inventario/${branchId}/${item.id}/stock_actual`);
-            await runTransaction(invProdRef, (currentStock) => {
-              return (Number(currentStock) || 0) - Number(item.qty || 0);
-            });
+            const kardexKey = push(ref(rtdb, 'kardex')).key;
+            const { stockBefore, stockAfter } = stockResultsMap[item.id] || { stockBefore: 0, stockAfter: 0 };
 
-            // Registrar en Kardex de la sucursal correspondiente
-            const kardexRef = push(ref(rtdb, 'kardex'));
-            const currentStock = Number(allInventory[branchId]?.[item.id]?.stock_actual) || 0;
-            const nuevoStock = currentStock - Number(item.qty || 0);
-            await set(kardexRef, {
-              fecha: new Date().toISOString(),
+            atomicBatch[`kardex/${kardexKey}`] = {
+              fecha: fechaVentaIso,
               id_sucursal: branchId,
               id_producto: item.id,
               nombre_producto: item.name,
-              tipo_movimiento: nuevoStock < 0 ? 'Salida por Venta (En Negativo)' : 'Salida por Venta',
+              tipo_movimiento: stockAfter < 0 ? 'Salida por Venta (En Negativo)' : 'Salida por Venta',
               cantidad: item.qty,
               id_referencia: humanId,
-              stock_anterior: currentStock,
-              stock_nuevo: nuevoStock,
-              usuario: user?.nombre || 'Caja POS'
-            });
+              stock_anterior: stockBefore,
+              stock_nuevo: stockAfter,
+              usuario: cajeroResponsable
+            };
           }
         }
+
+        // Ejecutar todas las escrituras de la factura en un solo bloque atómico
+        await update(ref(rtdb), atomicBatch);
+
+        // PASO 8: Actualizar atómicamente los acumuladores del turno de caja activo
+        if (activeTurno?.id) {
+          await runTransaction(ref(rtdb, `turnos_caja/${activeTurno.id}`), (turnoData) => {
+            if (!turnoData) return turnoData;
+            if (metodoPago === 'Efectivo') {
+              turnoData.total_ventas_efectivo = (Number(turnoData.total_ventas_efectivo) || 0) + branchTotal;
+            }
+            turnoData.total_ventas_productos = (Number(turnoData.total_ventas_productos) || 0) + branchSubtotalProductos;
+            turnoData.total_ventas_servicios = (Number(turnoData.total_ventas_servicios) || 0) + branchSubtotalServicios;
+            return turnoData;
+          });
+        }
+
+        createdSales.push(newSale);
       }
 
       if (isMulti) {
