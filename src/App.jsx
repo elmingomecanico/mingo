@@ -20,6 +20,7 @@ import Usuarios from './pages/Usuarios'
 import OrdenesTrabajo from './pages/OrdenesTrabajo'
 import RRHH from './pages/RRHH'
 import PortalEmpleado from './pages/PortalEmpleado'
+import EcommerceStore from './pages/EcommerceStore'
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -57,12 +58,9 @@ function AppRouter() {
     return <div className="h-screen flex items-center justify-center bg-gray-100 font-bold text-gray-500">Cargando sistema...</div>;
   }
 
-  if (!user) {
-    return <Login />;
-  }
-
   // Función para validar permiso
   const hasPermission = (perm) => {
+    if (!user) return false;
     if (user.rol === 'SuperAdmin') return true;
     if (perm === 'VER_TALLER' && user.funcion === 'Mecánico') return true;
     if (perm === 'VER_CONTABILIDAD' && (user.permisos?.includes('VER_CONTABILIDAD') || user.permisos?.includes('VER_CXP') || user.permisos?.includes('VER_REPORTES'))) return true;
@@ -70,37 +68,45 @@ function AppRouter() {
   };
 
   const ProtectedRoute = ({ children, perm }) => {
-    if (!hasPermission(perm)) {
-      return <Navigate to="/" replace />;
+    if (!user) {
+      return <Navigate to="/login" replace />;
     }
-    return children;
+    if (perm && !hasPermission(perm)) {
+      return <Navigate to="/dashboard" replace />;
+    }
+    return <Layout>{children}</Layout>;
   };
 
   return (
     <BrowserRouter>
-      <Layout>
-        <Routes>
-          {/* Home no requiere permiso específico, todos los logueados entran */}
-          <Route path="/" element={<Home />} />
-          <Route path="/pos" element={<ProtectedRoute perm="VER_POS"><POS /></ProtectedRoute>} />
-          <Route path="/taller" element={<ProtectedRoute perm="VER_TALLER"><OrdenesTrabajo /></ProtectedRoute>} />
-          <Route path="/inventario" element={<ProtectedRoute perm="VER_INVENTARIO"><Inventario /></ProtectedRoute>} />
-          <Route path="/clientes" element={<ProtectedRoute perm="VER_CLIENTES"><Clientes /></ProtectedRoute>} />
-          <Route path="/cxc" element={<ProtectedRoute perm="VER_CXC"><CxC /></ProtectedRoute>} />
-          <Route path="/proveedores" element={<ProtectedRoute perm="VER_PROVEEDORES"><Proveedores /></ProtectedRoute>} />
-          <Route path="/cxp" element={<ProtectedRoute perm="VER_CXP"><CxP /></ProtectedRoute>} />
-          <Route path="/contabilidad" element={<ProtectedRoute perm="VER_CONTABILIDAD"><Contabilidad /></ProtectedRoute>} />
-          <Route path="/compras" element={<ProtectedRoute perm="VER_COMPRAS"><Compras /></ProtectedRoute>} />
-          <Route path="/servicios" element={<ProtectedRoute perm="VER_INVENTARIO"><Servicios /></ProtectedRoute>} />
-          <Route path="/reportes" element={<ProtectedRoute perm="VER_REPORTES"><Reportes /></ProtectedRoute>} />
-          <Route path="/kardex" element={<ProtectedRoute perm="VER_REPORTES"><Kardex /></ProtectedRoute>} />
-          <Route path="/catalogos" element={<ProtectedRoute perm="VER_CATALOGOS"><Catalogos /></ProtectedRoute>} />
-          <Route path="/usuarios" element={<ProtectedRoute perm="VER_USUARIOS"><Navigate to="/rrhh" replace /></ProtectedRoute>} />
-          <Route path="/rrhh" element={<ProtectedRoute perm="VER_USUARIOS"><RRHH /></ProtectedRoute>} />
-          <Route path="/mi-portal" element={<PortalEmpleado />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Layout>
+      <Routes>
+        {/* PÁGINA PRINCIPAL PÚBLICA: ECOMMERCE & CATÁLOGO EN LÍNEA */}
+        <Route path="/" element={<EcommerceStore />} />
+        <Route path="/tienda" element={<EcommerceStore />} />
+
+        {/* ACCESO PERSONAL / FACTURACIÓN */}
+        <Route path="/login" element={<Login />} />
+
+        {/* RUTAS INTERNAS DEL ERP (PROTEGIDAS) */}
+        <Route path="/dashboard" element={<ProtectedRoute><Home /></ProtectedRoute>} />
+        <Route path="/pos" element={<ProtectedRoute perm="VER_POS"><POS /></ProtectedRoute>} />
+        <Route path="/taller" element={<ProtectedRoute perm="VER_TALLER"><OrdenesTrabajo /></ProtectedRoute>} />
+        <Route path="/inventario" element={<ProtectedRoute perm="VER_INVENTARIO"><Inventario /></ProtectedRoute>} />
+        <Route path="/clientes" element={<ProtectedRoute perm="VER_CLIENTES"><Clientes /></ProtectedRoute>} />
+        <Route path="/cxc" element={<ProtectedRoute perm="VER_CXC"><CxC /></ProtectedRoute>} />
+        <Route path="/proveedores" element={<ProtectedRoute perm="VER_PROVEEDORES"><Proveedores /></ProtectedRoute>} />
+        <Route path="/cxp" element={<ProtectedRoute perm="VER_CXP"><CxP /></ProtectedRoute>} />
+        <Route path="/contabilidad" element={<ProtectedRoute perm="VER_CONTABILIDAD"><Contabilidad /></ProtectedRoute>} />
+        <Route path="/compras" element={<ProtectedRoute perm="VER_COMPRAS"><Compras /></ProtectedRoute>} />
+        <Route path="/servicios" element={<ProtectedRoute perm="VER_INVENTARIO"><Servicios /></ProtectedRoute>} />
+        <Route path="/reportes" element={<ProtectedRoute perm="VER_REPORTES"><Reportes /></ProtectedRoute>} />
+        <Route path="/kardex" element={<ProtectedRoute perm="VER_REPORTES"><Kardex /></ProtectedRoute>} />
+        <Route path="/catalogos" element={<ProtectedRoute perm="VER_CATALOGOS"><Catalogos /></ProtectedRoute>} />
+        <Route path="/usuarios" element={<ProtectedRoute perm="VER_USUARIOS"><Navigate to="/rrhh" replace /></ProtectedRoute>} />
+        <Route path="/rrhh" element={<ProtectedRoute perm="VER_USUARIOS"><RRHH /></ProtectedRoute>} />
+        <Route path="/mi-portal" element={<ProtectedRoute><PortalEmpleado /></ProtectedRoute>} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
     </BrowserRouter>
   );
 }
@@ -116,3 +122,4 @@ function App() {
 }
 
 export default App
+

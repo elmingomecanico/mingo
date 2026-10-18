@@ -1,12 +1,13 @@
 import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { Home, ShoppingCart, Package, BarChart2, Settings, LogOut, Activity, Users, Wallet, Menu, X, ShieldCheck, Truck, Wrench, ShoppingBag, UserCheck, Landmark } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Home, ShoppingCart, Package, BarChart2, Settings, LogOut, Activity, Users, Wallet, Menu, X, ShieldCheck, Truck, Wrench, ShoppingBag, UserCheck, Landmark, Globe } from 'lucide-react';
 import { Toaster } from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import logoIcon from '../assets/logo-icon.jpg';
 
 export default function Layout({ children }) {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user, logout } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
   
@@ -14,7 +15,7 @@ export default function Layout({ children }) {
     {
       title: 'Operaciones',
       items: [
-        { name: 'Dashboard', path: '/', icon: <Home size={18} />, perm: 'VER_REPORTES' },
+        { name: 'Dashboard', path: '/dashboard', icon: <Home size={18} />, perm: 'VER_REPORTES' },
         { name: 'Caja POS', path: '/pos', icon: <ShoppingCart size={18} />, perm: 'VER_POS' },
         { name: 'Órdenes (Taller)', path: '/taller', icon: <Wrench size={18} />, perm: 'VER_TALLER' },
       ]
@@ -68,6 +69,11 @@ export default function Layout({ children }) {
     return user.permisos && user.permisos.includes(perm);
   };
 
+  const handleLogout = () => {
+    logout();
+    navigate('/', { replace: true });
+  };
+
   return (
     <div className="flex h-screen bg-gray-100 font-sans text-gray-800 overflow-hidden">
       <Toaster position="top-right" />
@@ -104,6 +110,23 @@ export default function Layout({ children }) {
               <p className="text-xs text-blue-300 truncate">{user?.rol} • {user?.id_sucursal}</p>
             </div>
           </div>
+        </div>
+
+        {/* Enlace rápido a la Tienda Pública */}
+        <div className="px-3 pt-3">
+          <Link
+            to="/"
+            onClick={() => setIsMobileMenuOpen(false)}
+            className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl bg-amber-400/15 hover:bg-amber-400/25 border border-amber-400/30 text-amber-300 text-xs font-black transition-all"
+          >
+            <span className="flex items-center gap-2">
+              <Globe size={16} />
+              Ver Tienda Online
+            </span>
+            <span className="text-[10px] bg-amber-400 text-blue-950 px-1.5 py-0.5 rounded font-black">
+              PÚBLICO
+            </span>
+          </Link>
         </div>
         
         <nav className="flex-1 overflow-y-auto py-3 px-3 space-y-4">
@@ -144,7 +167,7 @@ export default function Layout({ children }) {
         </nav>
 
         <div className="p-4 border-t border-blue-800">
-          <button onClick={logout} className="flex items-center gap-3 text-blue-200 hover:text-white hover:bg-red-500/20 px-4 py-3 rounded-xl w-full transition-colors font-bold">
+          <button onClick={handleLogout} className="flex items-center gap-3 text-blue-200 hover:text-white hover:bg-red-500/20 px-4 py-3 rounded-xl w-full transition-colors font-bold cursor-pointer">
             <LogOut size={20} />
             Cerrar Sesión
           </button>
