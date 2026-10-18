@@ -22,6 +22,19 @@ const TALLER_CONTACT = {
   email: 'elmingomecanico@gmail.com'
 };
 
+// Normalizar nombres de categorías para eliminar duplicados o redundancias
+export const normalizeCategoryName = (cat) => {
+  if (!cat) return 'General';
+  const trimmed = cat.trim();
+  const lower = trimmed.toLowerCase();
+  if (lower === 'lubricantes y aceites' || lower === 'aceites' || lower === 'aceite') return 'Lubricantes';
+  if (lower === 'llantas y neumáticos' || lower === 'llantas y neumaticos') return 'Llantas';
+  if (lower === 'frenos' || lower === 'sistema de frenos') return 'Frenos';
+  if (lower === 'eléctrico' || lower === 'electrico' || lower === 'sistema eléctrico' || lower === 'sistema electrico') return 'Sistema Eléctrico';
+  if (lower === 'neumáticos' || lower === 'neumaticos' || lower === 'cámaras' || lower === 'tubos') return 'Neumáticos';
+  return trimmed;
+};
+
 export default function EcommerceStore() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -191,6 +204,7 @@ export default function EcommerceStore() {
 
       return {
         ...p,
+        cat: normalizeCategoryName(p.cat),
         image: img,
         price: Number(p.price || 0),
         stockDisponible,
@@ -202,16 +216,32 @@ export default function EcommerceStore() {
     });
   }, [rawProducts, productImagesMap, allInventory, sucursales, selectedBranch]);
 
-  // Lista de categorías solo de repuestos y productos físicos
+  // Lista limpia y no redundante de categorías
   const allCategories = useMemo(() => {
-    const set = new Set(categoriasCatalog);
+    const set = new Set();
+    categoriasCatalog.forEach(c => {
+      const norm = normalizeCategoryName(c);
+      if (norm && norm.toLowerCase() !== 'servicios de taller') set.add(norm);
+    });
     hydratedProducts.forEach(p => {
-      if (p.cat && p.cat.trim() && p.cat.toLowerCase() !== 'servicios de taller') {
-        set.add(p.cat.trim());
+      if (p.cat && p.cat.toLowerCase() !== 'servicios de taller') {
+        set.add(p.cat);
       }
     });
+    // Garantizar que siempre estén visibles las categorías principales
+    ['Llantas', 'Neumáticos', 'Lubricantes', 'Frenos', 'Sistema Eléctrico', 'Transmisión y Cadena'].forEach(c => set.add(c));
     return ['Todas', ...Array.from(set).sort()];
   }, [categoriasCatalog, hydratedProducts]);
+
+  // Conteo en tiempo real de repuestos por categoría
+  const categoryCounts = useMemo(() => {
+    const counts = { 'Todas': hydratedProducts.length };
+    hydratedProducts.forEach(p => {
+      const c = p.cat || 'General';
+      counts[c] = (counts[c] || 0) + 1;
+    });
+    return counts;
+  }, [hydratedProducts]);
 
   // Lista de modelos de moto para compatibilidad de repuestos
   const allMotoModels = useMemo(() => {
@@ -698,21 +728,29 @@ export default function EcommerceStore() {
             </div>
           </div>
 
-          {/* Categorías de Repuestos */}
+          {/* Categorías de Repuestos Limpias y sin Redundancias */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
             {allCategories.map(cat => {
               const active = selectedCategory === cat;
+              const count = categoryCounts[cat] || 0;
               return (
                 <button
                   key={cat}
                   onClick={() => setSelectedCategory(cat)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all cursor-pointer shrink-0 ${
+                  className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all cursor-pointer shrink-0 flex items-center gap-1.5 ${
                     active
                       ? 'bg-blue-950 text-white shadow-sm'
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                   }`}
                 >
-                  {cat}
+                  <span>{cat}</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
+                    active
+                      ? 'bg-amber-400 text-blue-950'
+                      : (count > 0 ? 'bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-400')
+                  }`}>
+                    {count}
+                  </span>
                 </button>
               );
             })}

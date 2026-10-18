@@ -133,11 +133,12 @@ export default function ProductCatalogsManager() {
   const seedSampleData = async () => {
     try {
       await set(ref(rtdb, 'catalogos/categorias'), {
-        "c1": { nombre: "Lubricantes y Aceites", descripcion: "Aceites de motor 4T, 2T y transmisión" },
-        "c2": { nombre: "Llantas y Neumáticos", descripcion: "Delanteras, traseras y tubos" },
-        "c3": { nombre: "Sistema de Frenos", descripcion: "Pastillas, zapatas, bombas y discos" },
-        "c4": { nombre: "Sistema Eléctrico", descripcion: "Baterías, bujías, CDI, focos" },
-        "c5": { nombre: "Transmisión y Cadena", descripcion: "Kit de arrastre, sprockets, cadenas" }
+        "cat_llantas": { nombre: "Llantas", descripcion: "Llantas delanteras y traseras para moto" },
+        "cat_neumaticos": { nombre: "Neumáticos", descripcion: "Neumáticos, tubos, cámaras interiores y parches" },
+        "cat_lubricantes": { nombre: "Lubricantes", descripcion: "Aceites para motor 4T, 2T, transmisión y lubricantes" },
+        "cat_frenos": { nombre: "Frenos", descripcion: "Pastillas, zapatas, bombas y discos" },
+        "cat_electrico": { nombre: "Sistema Eléctrico", descripcion: "Baterías, bujías, CDI, focos y componentes eléctricos" },
+        "cat_transmision": { nombre: "Transmisión y Cadena", descripcion: "Kit de arrastre, sprockets, coronas y cadenas" }
       });
       await set(ref(rtdb, 'catalogos/modelos'), {
         "m1": { nombre: "Pulsar NS 200", descripcion: "Bajaj" },
