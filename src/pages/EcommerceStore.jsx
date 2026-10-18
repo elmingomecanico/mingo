@@ -10,10 +10,17 @@ import {
   ShoppingCart, Search, Wrench, Package, Phone, MapPin, Lock, ArrowRight,
   Plus, Minus, Trash2, X, CheckCircle2, MessageCircle, Sparkles, Filter,
   ShieldCheck, Clock, Bike, Layers, ChevronRight, Copy, ExternalLink, Eye,
-  Building2, SlidersHorizontal, Tag, Info
+  Building2, SlidersHorizontal, Tag, Info, Mail, Calendar, HelpCircle
 } from 'lucide-react';
 import toast, { Toaster } from 'react-hot-toast';
 import logoIcon from '../assets/logo-icon.jpg';
+
+// Información oficial de contacto directo para servicios de taller
+const TALLER_CONTACT = {
+  whatsapp: '50582943669',
+  whatsappDisplay: '+505 8294 3669',
+  email: 'elmingomecanico@gmail.com'
+};
 
 export default function EcommerceStore() {
   const { user } = useAuth();
@@ -29,33 +36,35 @@ export default function EcommerceStore() {
   const [modelosCatalog, setModelosCatalog] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Estados de filtros y búsqueda
+  // Estados de filtros y búsqueda exclusivamente para REPUESTOS / PRODUCTOS FÍSICOS
   const [search, setSearch] = useState('');
   const [selectedBranch, setSelectedBranch] = useState('TODAS');
-  const [selectedType, setSelectedType] = useState('todos'); // 'todos' | 'repuestos' | 'servicios'
   const [selectedCategory, setSelectedCategory] = useState('Todas');
   const [selectedMotoModel, setSelectedMotoModel] = useState('Todos');
   const [onlyInStock, setOnlyInStock] = useState(false);
   const [sortBy, setSortBy] = useState('relevancia'); // 'relevancia' | 'precio_asc' | 'precio_desc' | 'nombre_asc'
   const [showMobileFilters, setShowMobileFilters] = useState(false);
 
-  // Carrito de compras / cotización (persistido en localStorage)
+  // Carrito de compras / cotización exclusivamente para PRODUCTOS FÍSICOS
   const [cart, setCart] = useState(() => {
     try {
       const saved = localStorage.getItem('mingo_ecommerce_cart');
-      return saved ? JSON.parse(saved) : [];
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      // Filtrar cualquier servicio que haya quedado en caché previo
+      return Array.isArray(parsed) ? parsed.filter(i => i.itemType !== 'servicio') : [];
     } catch {
       return [];
     }
   });
   const [isCartOpen, setIsCartOpen] = useState(false);
 
-  // Datos del cliente para el pedido por WhatsApp
+  // Datos del cliente para el pedido de repuestos
   const [customerInfo, setCustomerInfo] = useState({
     nombre: '',
     telefono: '',
     modeloMoto: '',
-    modalidad: 'Retiro en Sucursal', // 'Retiro en Sucursal' | 'Consulta de Envío / Delivery' | 'Agendar Instalación en Taller'
+    modalidad: 'Retiro en Sucursal', // 'Retiro en Sucursal' | 'Envío por CargoTrans / Encomienda' | 'Delivery Local'
     sucursalPreferida: 'SUC-01',
     notas: ''
   });
@@ -102,9 +111,8 @@ export default function EcommerceStore() {
         setServicios(Object.keys(val).map(k => ({
           id: k,
           ...val[k],
-          name: val[k].nombre || 'Servicio de Taller',
-          price: Number(val[k].precio || 0),
-          cat: 'Servicios de Taller',
+          nombre: val[k].nombre || 'Servicio de Taller',
+          precio: Number(val[k].precio || 0),
           itemType: 'servicio'
         })));
       } else {
@@ -159,12 +167,11 @@ export default function EcommerceStore() {
     };
   }, []);
 
-  // Hidratar productos con sus imágenes WebP/R2 y stock consolidado
+  // Hidratar ÚNICAMENTE productos físicos con WebP/R2 y stock consolidado
   const hydratedProducts = useMemo(() => {
     return rawProducts.map(p => {
       const img = resolveProductImage(p, productImagesMap);
 
-      // Calcular stock según sucursal seleccionada o suma de todas las sucursales activas
       let stockDisponible = 0;
       const stockPorSucursal = {};
 
@@ -195,16 +202,18 @@ export default function EcommerceStore() {
     });
   }, [rawProducts, productImagesMap, allInventory, sucursales, selectedBranch]);
 
-  // Extraer listas únicas de categorías y modelos de moto
+  // Lista de categorías solo de repuestos y productos físicos
   const allCategories = useMemo(() => {
     const set = new Set(categoriasCatalog);
     hydratedProducts.forEach(p => {
-      if (p.cat && p.cat.trim()) set.add(p.cat.trim());
+      if (p.cat && p.cat.trim() && p.cat.toLowerCase() !== 'servicios de taller') {
+        set.add(p.cat.trim());
+      }
     });
-    if (servicios.length > 0) set.add('Servicios de Taller');
     return ['Todas', ...Array.from(set).sort()];
-  }, [categoriasCatalog, hydratedProducts, servicios]);
+  }, [categoriasCatalog, hydratedProducts]);
 
+  // Lista de modelos de moto para compatibilidad de repuestos
   const allMotoModels = useMemo(() => {
     const set = new Set(modelosCatalog);
     hydratedProducts.forEach(p => {
@@ -215,16 +224,9 @@ export default function EcommerceStore() {
     return ['Todos', ...Array.from(set).sort()];
   }, [modelosCatalog, hydratedProducts]);
 
-  // Combinar catálogo según filtros
+  // Catálogo de Productos Físicos filtrados (LOS SERVICIOS NUNCA SE MEZCLAN AQUÍ)
   const catalogItems = useMemo(() => {
-    let list = [];
-    if (selectedType === 'todos') {
-      list = [...hydratedProducts, ...servicios];
-    } else if (selectedType === 'repuestos') {
-      list = [...hydratedProducts];
-    } else {
-      list = [...servicios];
-    }
+    let list = [...hydratedProducts];
 
     // Filtro por categoría
     if (selectedCategory !== 'Todas') {
@@ -234,7 +236,6 @@ export default function EcommerceStore() {
     // Filtro por modelo de moto
     if (selectedMotoModel !== 'Todos') {
       list = list.filter(item => {
-        if (item.itemType === 'servicio') return true;
         const comp = item.compatibilidad || [];
         return comp.some(m => m.toLowerCase() === selectedMotoModel.toLowerCase() || m.toLowerCase() === 'universal');
       });
@@ -242,7 +243,7 @@ export default function EcommerceStore() {
 
     // Filtro solo en stock
     if (onlyInStock) {
-      list = list.filter(item => item.itemType === 'servicio' || item.stockDisponible > 0);
+      list = list.filter(item => item.stockDisponible > 0);
     }
 
     // Búsqueda tokenizada inteligente
@@ -266,18 +267,23 @@ export default function EcommerceStore() {
       if (sortBy === 'precio_asc') return Number(a.price || 0) - Number(b.price || 0);
       if (sortBy === 'precio_desc') return Number(b.price || 0) - Number(a.price || 0);
       if (sortBy === 'nombre_asc') return (a.name || '').localeCompare(b.name || '');
-      // Por relevancia: primero productos con foto y con stock
-      const scoreA = (a.image ? 2 : 0) + (a.stockDisponible > 0 || a.itemType === 'servicio' ? 1 : 0);
-      const scoreB = (b.image ? 2 : 0) + (b.stockDisponible > 0 || b.itemType === 'servicio' ? 1 : 0);
+      // Por relevancia: productos con foto y stock primero
+      const scoreA = (a.image ? 2 : 0) + (a.stockDisponible > 0 ? 1 : 0);
+      const scoreB = (b.image ? 2 : 0) + (b.stockDisponible > 0 ? 1 : 0);
       if (scoreB !== scoreA) return scoreB - scoreA;
       return (a.name || '').localeCompare(b.name || '');
     });
 
     return list;
-  }, [hydratedProducts, servicios, selectedType, selectedCategory, selectedMotoModel, onlyInStock, search, sortBy]);
+  }, [hydratedProducts, selectedCategory, selectedMotoModel, onlyInStock, search, sortBy]);
 
-  // Operaciones del Carrito
+  // Operaciones del Carrito (Solo para productos físicos)
   const addToCart = (item, qty = 1) => {
+    if (item.itemType === 'servicio') {
+      toast.error('Los servicios de taller no se agregan al carrito. Contáctanos por WhatsApp o correo para agendar tu cita.');
+      return;
+    }
+
     setCart(prev => {
       const existing = prev.find(i => i.id === item.id);
       if (existing) {
@@ -289,15 +295,15 @@ export default function EcommerceStore() {
           id: item.id,
           codigo_visible: item.codigo_visible || item.id,
           name: item.name || item.nombre,
-          price: Number(item.price || item.precio || 0),
+          price: Number(item.price || 0),
           image: item.image || '',
-          itemType: item.itemType || 'producto',
+          itemType: 'producto',
           cat: item.cat || 'General',
           qty
         }
       ];
     });
-    toast.success(`${item.name || item.nombre} agregado a tu pedido`, {
+    toast.success(`${item.name || item.nombre} agregado al pedido`, {
       icon: '🛒',
       duration: 2000
     });
@@ -337,20 +343,20 @@ export default function EcommerceStore() {
     return pref || sucursales[0] || DEFAULT_SUCURSALES[0];
   }, [selectedBranch, customerInfo.sucursalPreferida, sucursales]);
 
-  // Formatear teléfono para enlace wa.me
+  // Formatear teléfono para WhatsApp
   const getWhatsAppNumber = (rawPhone) => {
     const digits = String(rawPhone || '').replace(/\D/g, '');
-    if (!digits) return '50588888888';
+    if (!digits) return TALLER_CONTACT.whatsapp;
     if (digits.length === 8) return `505${digits}`;
     return digits;
   };
 
-  // Generar texto del pedido
+  // Generar mensaje de pedido de repuestos
   const buildOrderMessage = (itemsToOrder = cart) => {
     const branchName = targetSucursalObj?.nombre || 'Sucursal Principal';
     const lines = [
       `🏍️ *HOLA TALLER EL MINGO (${branchName.toUpperCase()})*`,
-      `Deseo realizar el siguiente pedido / cotización desde la Tienda Online:`,
+      `Deseo realizar el siguiente pedido / cotización de repuestos desde la Tienda Online:`,
       ``
     ];
 
@@ -362,14 +368,14 @@ export default function EcommerceStore() {
 
     const totalCalc = itemsToOrder.reduce((acc, i) => acc + i.price * i.qty, 0);
     lines.push(``);
-    lines.push(`💰 *TOTAL ESTIMADO: C$ ${totalCalc.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}*`);
+    lines.push(`💰 *TOTAL ESTIMADO REPUESTOS: C$ ${totalCalc.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}*`);
     lines.push(`────────────────────`);
 
     if (customerInfo.nombre.trim()) lines.push(`👤 *Cliente:* ${customerInfo.nombre.trim()}`);
     if (customerInfo.telefono.trim()) lines.push(`📱 *Teléfono:* ${customerInfo.telefono.trim()}`);
     if (customerInfo.modeloMoto.trim()) lines.push(`🏍️ *Moto:* ${customerInfo.modeloMoto.trim()}`);
     lines.push(`📍 *Modalidad:* ${customerInfo.modalidad}`);
-    lines.push(`🏢 *Sucursal:* ${branchName}`);
+    lines.push(`🏢 *Sucursal de Preferencia:* ${branchName}`);
     if (customerInfo.notas.trim()) lines.push(`📝 *Nota:* ${customerInfo.notas.trim()}`);
 
     return lines.join('\n');
@@ -378,10 +384,10 @@ export default function EcommerceStore() {
   const handleSendWhatsAppOrder = (customItems = null) => {
     const items = customItems || cart;
     if (!items || items.length === 0) {
-      return toast.error('Agrega al menos un producto o servicio al pedido');
+      return toast.error('Agrega al menos un repuesto al pedido');
     }
     const text = buildOrderMessage(items);
-    const phone = getWhatsAppNumber(targetSucursalObj?.telefono);
+    const phone = TALLER_CONTACT.whatsapp; // Usar WhatsApp oficial central
     const url = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
     window.open(url, '_blank', 'noopener,noreferrer');
   };
@@ -394,19 +400,13 @@ export default function EcommerceStore() {
   };
 
   const handleQuickWhatsAppItem = (item) => {
-    const singleItem = [{
-      id: item.id,
-      codigo_visible: item.codigo_visible || item.id,
-      name: item.name || item.nombre,
-      price: Number(item.price || item.precio || 0),
-      qty: 1
-    }];
-    handleSendWhatsAppOrder(singleItem);
+    const text = `Hola Taller El Mingo, deseo cotizar el siguiente repuesto:\n*${item.name}* [${item.codigo_visible || item.id}]\nPrecio: C$ ${Number(item.price || 0).toFixed(2)}\n¿Tienen disponibilidad inmediata?`;
+    const url = `https://wa.me/${TALLER_CONTACT.whatsapp}?text=${encodeURIComponent(text)}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   const resetFilters = () => {
     setSearch('');
-    setSelectedType('todos');
     setSelectedCategory('Todas');
     setSelectedMotoModel('Todos');
     setOnlyInStock(false);
@@ -417,32 +417,40 @@ export default function EcommerceStore() {
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-800">
       <Toaster position="top-right" />
 
-      {/* BARRA SUPERIOR INFORMATIVA */}
+      {/* BARRA SUPERIOR INFORMATIVA CON CONTACTOS OFICIALES */}
       <div className="bg-blue-950 text-blue-100 text-xs border-b border-blue-900">
         <div className="max-w-7xl mx-auto px-4 py-2 flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-4">
             <span className="flex items-center gap-1.5 font-semibold text-amber-400">
-              <Sparkles size={14} /> Repuestos Garantizados y Servicio Mecánico Profesional
+              <Sparkles size={14} /> Taller El Mingo • Repuestos y Mantenimiento de Motos
             </span>
-            <span className="hidden md:flex items-center gap-1 text-blue-200">
-              <MapPin size={13} /> {targetSucursalObj?.direccion || 'Managua, Nicaragua'}
-            </span>
-            <span className="hidden sm:flex items-center gap-1 text-blue-200">
-              <Phone size={13} /> {targetSucursalObj?.telefono || '+505 8888-8888'}
-            </span>
+            <a
+              href={`https://wa.me/${TALLER_CONTACT.whatsapp}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 text-emerald-300 hover:text-emerald-200 font-bold"
+            >
+              <MessageCircle size={13} /> WhatsApp: {TALLER_CONTACT.whatsappDisplay}
+            </a>
+            <a
+              href={`mailto:${TALLER_CONTACT.email}`}
+              className="hidden sm:flex items-center gap-1 text-blue-200 hover:text-white"
+            >
+              <Mail size={13} /> {TALLER_CONTACT.email}
+            </a>
           </div>
 
           <div className="flex items-center gap-3 ml-auto">
             {user ? (
               <div className="flex items-center gap-2">
                 <span className="text-[11px] text-emerald-300 font-bold hidden sm:inline">
-                  ● Sesión activa: {user.nombre_completo}
+                  ● Sesión: {user.nombre_completo}
                 </span>
                 <button
                   onClick={() => navigate('/pos')}
                   className="bg-emerald-500 hover:bg-emerald-600 text-white font-black px-3 py-1 rounded-lg text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
                 >
-                  <ShoppingCart size={13} /> Ir a Facturación POS
+                  <ShoppingCart size={13} /> Facturación POS
                 </button>
                 <button
                   onClick={() => navigate('/dashboard')}
@@ -493,7 +501,7 @@ export default function EcommerceStore() {
               </div>
             </div>
 
-            {/* Buscador Desktop */}
+            {/* Buscador Desktop para Repuestos */}
             <div className="hidden md:flex flex-1 max-w-xl mx-4">
               <div className="relative w-full">
                 <Search className="absolute left-3.5 top-3 text-slate-400" size={18} />
@@ -501,7 +509,7 @@ export default function EcommerceStore() {
                   type="text"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Buscar repuesto, código, marca o modelo de moto (ej. Pulsar, Aceite, Frenos)..."
+                  placeholder="Buscar repuesto por nombre, código o modelo de moto (ej. Aceite, Llantas, Boxer)..."
                   className="w-full pl-10 pr-9 py-2.5 bg-slate-100 hover:bg-slate-100/80 focus:bg-white border-2 border-transparent focus:border-blue-600 rounded-xl text-sm font-medium outline-none transition-all"
                 />
                 {search && (
@@ -515,24 +523,18 @@ export default function EcommerceStore() {
               </div>
             </div>
 
-            {/* Acciones Derecha: Selector Sucursal + Carrito + Login rápido */}
+            {/* Acciones: Enlace a Servicios de Taller + Carrito + Login */}
             <div className="flex items-center gap-2 sm:gap-3">
-              {/* Selector de Sucursal */}
-              <div className="hidden lg:flex items-center gap-1.5 bg-slate-100 border border-slate-200 px-3 py-2 rounded-xl">
-                <Building2 size={15} className="text-blue-700 shrink-0" />
-                <select
-                  value={selectedBranch}
-                  onChange={(e) => setSelectedBranch(e.target.value)}
-                  className="bg-transparent text-xs font-bold text-slate-700 outline-none cursor-pointer"
-                >
-                  <option value="TODAS">Todas las Sucursales</option>
-                  {sucursales.map(s => (
-                    <option key={s.id} value={s.id}>{s.nombre}</option>
-                  ))}
-                </select>
-              </div>
+              {/* Botón directo de salto a Servicios */}
+              <a
+                href="#servicios-taller"
+                className="hidden sm:flex items-center gap-1.5 bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-200 px-3 py-2 rounded-xl text-xs font-black transition-all"
+              >
+                <Wrench size={14} className="text-blue-700" />
+                <span>Servicios de Taller</span>
+              </a>
 
-              {/* Botón Carrito / Pedido */}
+              {/* Botón Carrito / Pedido de Repuestos */}
               <button
                 onClick={() => setIsCartOpen(true)}
                 className="relative bg-blue-600 hover:bg-blue-700 active:scale-95 text-white px-3.5 sm:px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm flex items-center gap-2 shadow-md shadow-blue-600/20 transition-all cursor-pointer"
@@ -546,7 +548,7 @@ export default function EcommerceStore() {
                 )}
               </button>
 
-              {/* Botón Login visible en móvil/tablet también */}
+              {/* Botón Login */}
               {!user && (
                 <Link
                   to="/login"
@@ -568,7 +570,7 @@ export default function EcommerceStore() {
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar repuesto, código o moto..."
+                placeholder="Buscar repuesto o modelo..."
                 className="w-full pl-9 pr-8 py-2 bg-slate-100 focus:bg-white border border-slate-200 focus:border-blue-600 rounded-xl text-sm font-medium outline-none"
               />
               {search && (
@@ -580,6 +582,12 @@ export default function EcommerceStore() {
                 </button>
               )}
             </div>
+            <a
+              href="#servicios-taller"
+              className="bg-blue-50 text-blue-900 border border-blue-200 px-3 py-2 rounded-xl text-xs font-black flex items-center gap-1 shrink-0"
+            >
+              <Wrench size={14} /> Taller
+            </a>
             <button
               onClick={() => setShowMobileFilters(!showMobileFilters)}
               className={`px-3 py-2 rounded-xl border font-bold text-xs flex items-center gap-1.5 shrink-0 ${
@@ -589,7 +597,6 @@ export default function EcommerceStore() {
               }`}
             >
               <SlidersHorizontal size={15} />
-              Filtros
             </button>
           </div>
         </div>
@@ -602,20 +609,28 @@ export default function EcommerceStore() {
           <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
             <div className="max-w-2xl">
               <div className="inline-flex items-center gap-2 bg-blue-800/70 border border-blue-700 text-amber-300 text-xs font-bold px-3 py-1 rounded-full mb-3">
-                <Bike size={14} /> Catálogo en Tiempo Real • Precios Oficiales
+                <Bike size={14} /> Catálogo de Repuestos Físicos • Envíos & Retiro en Tienda
               </div>
               <h2 className="text-2xl sm:text-4xl font-black tracking-tight leading-tight">
-                Todo para tu moto en un solo lugar.
+                Repuestos garantizados para tu motocicleta.
               </h2>
               <p className="text-blue-200 text-sm sm:text-base mt-2 max-w-xl">
-                Explora nuestro inventario de repuestos originales, lubricantes, llantas y servicios de mantenimiento. Arma tu cotización y envíala directo a nuestro WhatsApp.
+                Encuentra repuestos originales y compatibles para tu moto. Agrega al carrito para armar tu cotización con envío por encomienda o retiro en sucursal.
               </p>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <a
+                  href="#servicios-taller"
+                  className="inline-flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-blue-950 font-black text-xs px-4 py-2.5 rounded-xl shadow-md transition-all"
+                >
+                  <Wrench size={15} /> Ver Servicios de Taller y Mano de Obra
+                </a>
+              </div>
             </div>
 
-            {/* Selector Rápido de Modelo de Moto */}
+            {/* Selector de Moto para Repuestos */}
             <div className="w-full lg:w-auto bg-white/10 backdrop-blur-md border border-white/15 p-4 rounded-2xl flex flex-col gap-2.5 min-w-[280px] sm:min-w-[340px]">
               <div className="flex items-center gap-2 text-amber-300 font-black text-xs uppercase tracking-wider">
-                <Bike size={16} /> ¿Qué moto tienes? Filtra por modelo
+                <Bike size={16} /> Filtra repuestos por modelo de moto
               </div>
               <select
                 value={selectedMotoModel}
@@ -624,57 +639,35 @@ export default function EcommerceStore() {
               >
                 <option value="Todos">🏍️ Ver todas las marcas y modelos</option>
                 {allMotoModels.filter(m => m !== 'Todos').map(model => (
-                  <option key={model} value={model}>Compatible con: {model}</option>
+                  <option key={model} value={model}>Repuestos compatibles con: {model}</option>
                 ))}
               </select>
               <div className="flex items-center justify-between text-[11px] text-blue-200 pt-1">
-                <span className="flex items-center gap-1"><ShieldCheck size={13} className="text-emerald-400" /> Stock actualizado</span>
-                <span className="flex items-center gap-1"><MessageCircle size={13} className="text-emerald-400" /> Atención inmediata</span>
+                <span className="flex items-center gap-1"><ShieldCheck size={13} className="text-emerald-400" /> Stock verificado</span>
+                <span className="flex items-center gap-1"><Package size={13} className="text-amber-400" /> Envíos nacionales</span>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* BARRA DE CATEGORÍAS Y CONTROLES PRINCIPALES */}
+      {/* BARRA DE CATEGORÍAS DE REPUESTOS */}
       <div className="bg-white border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 py-3 flex flex-col gap-3">
-          {/* Tabs Tipo: Todos / Repuestos / Servicios + Controles */}
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
-              <button
-                onClick={() => setSelectedType('todos')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
-                  selectedType === 'todos' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Todo ({hydratedProducts.length + servicios.length})
-              </button>
-              <button
-                onClick={() => setSelectedType('repuestos')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1 transition-all cursor-pointer ${
-                  selectedType === 'repuestos' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <Package size={13} /> Repuestos ({hydratedProducts.length})
-              </button>
-              <button
-                onClick={() => setSelectedType('servicios')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1 transition-all cursor-pointer ${
-                  selectedType === 'servicios' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <Wrench size={13} /> Taller ({servicios.length})
-              </button>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-black text-blue-950 uppercase tracking-wider flex items-center gap-1.5">
+                <Package size={15} className="text-blue-700" />
+                Catálogo de Repuestos ({catalogItems.length} artículos)
+              </span>
             </div>
 
-            {/* Filtros secundarios Desktop y Mobile expandible */}
+            {/* Controles secundarios */}
             <div className={`w-full md:w-auto flex flex-wrap items-center gap-2 ${showMobileFilters ? 'flex' : 'hidden md:flex'}`}>
-              {/* Sucursal en móvil */}
               <select
                 value={selectedBranch}
                 onChange={(e) => setSelectedBranch(e.target.value)}
-                className="lg:hidden bg-slate-100 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-700 outline-none"
+                className="bg-slate-100 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-700 outline-none"
               >
                 <option value="TODAS">📍 Todas las Sucursales</option>
                 {sucursales.map(s => (
@@ -682,7 +675,6 @@ export default function EcommerceStore() {
                 ))}
               </select>
 
-              {/* Toggle Solo Disponibles */}
               <label className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200/70 px-3 py-1.5 rounded-xl cursor-pointer text-xs font-bold text-slate-700 select-none">
                 <input
                   type="checkbox"
@@ -690,10 +682,9 @@ export default function EcommerceStore() {
                   onChange={(e) => setOnlyInStock(e.target.checked)}
                   className="rounded text-blue-600 focus:ring-blue-500"
                 />
-                Solo con stock inmediato
+                Solo con stock disponible
               </label>
 
-              {/* Ordenar por */}
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
@@ -707,7 +698,7 @@ export default function EcommerceStore() {
             </div>
           </div>
 
-          {/* Pills de Categorías Deslizables */}
+          {/* Categorías de Repuestos */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
             {allCategories.map(cat => {
               const active = selectedCategory === cat;
@@ -729,13 +720,13 @@ export default function EcommerceStore() {
         </div>
       </div>
 
-      {/* CONTENIDO PRINCIPAL DEL CATÁLOGO */}
+      {/* CONTENIDO PRINCIPAL: CATÁLOGO DE REPUESTOS FÍSICOS */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-6">
         {/* Indicadores de filtros activos */}
         {(search || selectedCategory !== 'Todas' || selectedMotoModel !== 'Todos' || onlyInStock) && (
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2 bg-blue-50 border border-blue-200 px-4 py-2.5 rounded-xl">
             <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-blue-900">
-              <span>Mostrando {catalogItems.length} resultados</span>
+              <span>Mostrando {catalogItems.length} repuestos</span>
               {selectedCategory !== 'Todas' && (
                 <span className="bg-white border border-blue-200 px-2.5 py-0.5 rounded-full flex items-center gap-1">
                   Categoría: {selectedCategory}
@@ -759,7 +750,7 @@ export default function EcommerceStore() {
               onClick={resetFilters}
               className="text-xs font-black text-blue-700 hover:text-blue-900 underline cursor-pointer"
             >
-              Limpiar todos los filtros
+              Limpiar filtros de repuestos
             </button>
           </div>
         )}
@@ -783,20 +774,20 @@ export default function EcommerceStore() {
             <div className="w-16 h-16 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-4">
               <Search size={30} />
             </div>
-            <h3 className="text-lg font-black text-slate-800">No encontramos coincidencias exactas</h3>
+            <h3 className="text-lg font-black text-slate-800">No encontramos repuestos compatibles</h3>
             <p className="text-sm text-slate-500 mt-1">
-              ¿Buscas un repuesto especial? Consúltanos directamente por WhatsApp y te confirmamos disponibilidad inmediata en bodega.
+              Consúltanos por WhatsApp al {TALLER_CONTACT.whatsappDisplay} con el nombre o muestra del repuesto y te confirmamos disponibilidad en bodega.
             </p>
             <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
               <button
                 onClick={resetFilters}
                 className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs cursor-pointer"
               >
-                Ver todo el catálogo
+                Ver todos los repuestos
               </button>
               <a
-                href={`https://wa.me/${getWhatsAppNumber(targetSucursalObj?.telefono)}?text=${encodeURIComponent(
-                  `Hola Taller El Mingo, estoy buscando en la web: "${search || 'un repuesto'}" y quisiera consultar disponibilidad.`
+                href={`https://wa.me/${TALLER_CONTACT.whatsapp}?text=${encodeURIComponent(
+                  `Hola Taller El Mingo, estoy buscando en la web: "${search || selectedMotoModel || 'un repuesto'}" y deseo consultar disponibilidad.`
                 )}`}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -807,20 +798,19 @@ export default function EcommerceStore() {
             </div>
           </div>
         ) : (
-          /* GRILLA DE PRODUCTOS Y SERVICIOS */
+          /* GRILLA DE REPUESTOS FÍSICOS */
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
             {catalogItems.map(item => {
-              const isService = item.itemType === 'servicio';
               const inCartItem = cart.find(c => c.id === item.id);
-              const hasStock = isService || item.stockDisponible > 0;
-              const isLowStock = !isService && item.stockDisponible > 0 && item.stockDisponible <= Number(item.stock_minimo || 2);
+              const hasStock = item.stockDisponible > 0;
+              const isLowStock = item.stockDisponible > 0 && item.stockDisponible <= Number(item.stock_minimo || 2);
 
               return (
                 <div
                   key={item.id}
                   className="bg-white rounded-2xl border border-slate-200/90 hover:border-blue-400 shadow-sm hover:shadow-xl transition-all duration-200 flex flex-col overflow-hidden group"
                 >
-                  {/* Cabecera Visual / Foto */}
+                  {/* Foto de Producto */}
                   <div className="relative h-48 bg-slate-100 flex items-center justify-center overflow-hidden border-b border-slate-100">
                     {item.image ? (
                       <>
@@ -844,18 +834,10 @@ export default function EcommerceStore() {
                         onClick={() => setDetailModalItem(item)}
                         className="flex flex-col items-center justify-center text-slate-400 p-4 text-center cursor-pointer"
                       >
-                        {isService ? (
-                          <div className="w-16 h-16 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mb-2 shadow-inner">
-                            <Wrench size={32} />
-                          </div>
-                        ) : (
-                          <div className="w-16 h-16 rounded-2xl bg-slate-200/70 text-slate-400 flex items-center justify-center mb-2">
-                            <Package size={32} />
-                          </div>
-                        )}
-                        <span className="text-[11px] font-bold text-slate-400">
-                          {isService ? 'Servicio de Taller' : 'Taller El Mingo'}
-                        </span>
+                        <div className="w-16 h-16 rounded-2xl bg-slate-200/70 text-slate-400 flex items-center justify-center mb-2">
+                          <Package size={32} />
+                        </div>
+                        <span className="text-[11px] font-bold text-slate-400">Taller El Mingo</span>
                       </div>
                     )}
 
@@ -865,11 +847,7 @@ export default function EcommerceStore() {
                         {item.codigo_visible || item.id}
                       </span>
 
-                      {isService ? (
-                        <span className="bg-blue-600 text-white text-[10px] font-black px-2.5 py-0.5 rounded-full shadow-xs">
-                          SERVICIO
-                        </span>
-                      ) : hasStock ? (
+                      {hasStock ? (
                         <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full shadow-xs ${
                           isLowStock
                             ? 'bg-amber-400 text-slate-950'
@@ -879,13 +857,13 @@ export default function EcommerceStore() {
                         </span>
                       ) : (
                         <span className="bg-slate-700 text-slate-100 text-[10px] font-bold px-2.5 py-0.5 rounded-full">
-                          Consultar Stock
+                          Consultar Bodega
                         </span>
                       )}
                     </div>
                   </div>
 
-                  {/* Cuerpo de la Tarjeta */}
+                  {/* Detalle del Repuesto */}
                   <div className="p-4 flex-1 flex flex-col justify-between gap-3">
                     <div>
                       <div className="flex items-center justify-between gap-1 mb-1">
@@ -894,7 +872,6 @@ export default function EcommerceStore() {
                         </span>
                       </div>
 
-                      {/* Nombre completo sin puntos suspensivos que oculten información */}
                       <h3
                         onClick={() => setDetailModalItem(item)}
                         className="font-black text-slate-800 text-sm sm:text-base leading-snug hover:text-blue-700 cursor-pointer break-words"
@@ -902,14 +879,13 @@ export default function EcommerceStore() {
                         {item.name || item.nombre}
                       </h3>
 
-                      {/* Descripción de servicio si aplica */}
                       {item.descripcion && (
                         <p className="text-xs text-slate-500 mt-1 leading-relaxed">
                           {item.descripcion}
                         </p>
                       )}
 
-                      {/* Modelos de moto compatibles */}
+                      {/* Compatibilidad de motos */}
                       {item.compatibilidad && item.compatibilidad.length > 0 && (
                         <div className="mt-2.5 flex flex-wrap gap-1">
                           {item.compatibilidad.map(mod => (
@@ -925,7 +901,7 @@ export default function EcommerceStore() {
                       )}
                     </div>
 
-                    {/* Precio y Acciones */}
+                    {/* Precio y Botón de Carrito */}
                     <div className="pt-3 border-t border-slate-100 flex flex-col gap-2.5">
                       <div className="flex items-baseline justify-between gap-2">
                         <div>
@@ -939,7 +915,7 @@ export default function EcommerceStore() {
 
                         <button
                           onClick={() => handleQuickWhatsAppItem(item)}
-                          title="Consultar este artículo por WhatsApp"
+                          title="Consultar por WhatsApp"
                           className="text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 p-2 rounded-xl transition-colors cursor-pointer"
                         >
                           <MessageCircle size={18} />
@@ -982,13 +958,140 @@ export default function EcommerceStore() {
         )}
       </main>
 
-      {/* SECCIÓN DE SUCURSALES Y CONFIANZA */}
-      <section className="bg-white border-t border-slate-200 py-10 mt-10">
+      {/* ========================================================================= */}
+      {/* SECCIÓN DEDICADA DE SERVICIOS DE TALLER (SIEMPRE VISIBLE, NUNCA EN CARRITO) */}
+      {/* ========================================================================= */}
+      <section id="servicios-taller" className="bg-gradient-to-b from-slate-100 via-white to-slate-100 border-t-2 border-slate-200 py-12 scroll-mt-20">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="flex flex-col md:flex-row items-start md:items-end justify-between gap-4 mb-8">
+            <div>
+              <div className="inline-flex items-center gap-2 bg-blue-900 text-white text-xs font-black px-3.5 py-1 rounded-full uppercase tracking-wider mb-2.5 shadow-xs">
+                <Wrench size={14} className="text-amber-400" /> Servicios de Taller Mecánico Especializado
+              </div>
+              <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                Mantenimiento y Reparación en Taller
+              </h2>
+              <p className="text-slate-600 text-xs sm:text-sm mt-1 max-w-2xl leading-relaxed">
+                Mano de obra calificada realizada exclusivamente en nuestras instalaciones físicas. Estos servicios no se adquieren por paquetería: se agendan directamente con nuestro equipo técnico y se facturan en caja asignando formalmente a tu mecánico.
+              </p>
+            </div>
+
+            {/* Canales de Contacto Directo */}
+            <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+              <a
+                href={`https://wa.me/${TALLER_CONTACT.whatsapp}?text=${encodeURIComponent("Hola Taller El Mingo, deseo consultar sobre los servicios mecánicos para mi moto.")}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-sm transition-all"
+              >
+                <MessageCircle size={16} /> WhatsApp: {TALLER_CONTACT.whatsappDisplay}
+              </a>
+              <a
+                href={`mailto:${TALLER_CONTACT.email}?subject=Consulta de Servicios de Taller - El Mingo`}
+                className="bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs px-4 py-2.5 rounded-xl flex items-center gap-2 transition-all"
+              >
+                <Mail size={16} /> {TALLER_CONTACT.email}
+              </a>
+            </div>
+          </div>
+
+          {/* Grilla de Servicios de Taller */}
+          {servicios.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-500 text-sm">
+              Cargando catálogo de servicios disponibles...
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {servicios.map((srv) => (
+                <div
+                  key={srv.id}
+                  className="bg-white rounded-2xl border-2 border-slate-200/90 hover:border-blue-500 p-5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between gap-4 group"
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-3">
+                      <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center font-bold group-hover:scale-110 transition-transform">
+                        <Wrench size={20} />
+                      </div>
+                      <span className="text-[10px] font-mono font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md">
+                        {srv.codigo_visible || srv.id}
+                      </span>
+                    </div>
+
+                    <h3 className="font-black text-slate-900 text-base leading-snug">
+                      {srv.nombre}
+                    </h3>
+
+                    {srv.descripcion && (
+                      <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                        {srv.descripcion}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="pt-3 border-t border-slate-100">
+                    <div className="mb-3">
+                      <span className="text-[10px] font-bold uppercase text-slate-400 block">
+                        Mano de Obra (Referencial)
+                      </span>
+                      <span className="text-xl font-black text-blue-950">
+                        C$ {Number(srv.precio || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-2">
+                      <a
+                        href={`https://wa.me/${TALLER_CONTACT.whatsapp}?text=${encodeURIComponent(
+                          `Hola Taller El Mingo, deseo cotizar y agendar el servicio de: *${srv.nombre}* (Ref. C$ ${Number(srv.precio || 0).toFixed(2)}). ¿Tienen disponibilidad de mecánico?`
+                        )}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white font-black text-xs py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer"
+                      >
+                        <MessageCircle size={15} /> Agendar por WhatsApp
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Banner explicativo de cómo contratar y facturar servicios */}
+          <div className="mt-8 bg-blue-950 text-white rounded-3xl p-6 sm:p-8 flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden shadow-lg">
+            <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]"></div>
+            <div className="relative z-10 max-w-2xl">
+              <span className="text-amber-400 font-black text-xs uppercase tracking-wider block mb-1">
+                Atención Mecánica Profesional en Taller
+              </span>
+              <h4 className="text-lg sm:text-xl font-black">
+                ¿Cómo funciona la contratación y facturación de servicios?
+              </h4>
+              <p className="text-blue-200 text-xs sm:text-sm mt-1.5 leading-relaxed">
+                Para garantizar la calidad técnica, todo servicio se agrega a tu factura o expediente de orden de trabajo en caja al ingresar tu moto, donde el sistema le asigna oficialmente un mecánico responsable. Contáctanos por WhatsApp al <strong>{TALLER_CONTACT.whatsappDisplay}</strong> o al correo <strong>{TALLER_CONTACT.email}</strong> para programar tu visita.
+              </p>
+            </div>
+
+            <div className="relative z-10 shrink-0 flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+              <a
+                href={`https://wa.me/${TALLER_CONTACT.whatsapp}?text=${encodeURIComponent("Hola Taller El Mingo, deseo programar un mantenimiento para mi moto en el taller.")}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-emerald-500 hover:bg-emerald-600 text-white font-black px-5 py-3 rounded-xl text-xs flex items-center justify-center gap-2 shadow-md transition-all"
+              >
+                <MessageCircle size={17} /> Chatear al +505 8294 3669
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* SECCIÓN DE SUCURSALES Y DIRECCIONES */}
+      <section className="bg-white border-t border-slate-200 py-10">
         <div className="max-w-7xl mx-auto px-4">
           <div className="text-center max-w-xl mx-auto mb-8">
             <h3 className="text-xl font-black text-slate-900">Nuestras Sucursales y Atención</h3>
             <p className="text-xs sm:text-sm text-slate-500 mt-1">
-              Visítanos o realiza tu pedido en línea para retiro inmediato o atención en taller.
+              Visítanos para mantenimiento o retira tus pedidos de repuestos de inmediato.
             </p>
           </div>
 
@@ -1022,7 +1125,7 @@ export default function EcommerceStore() {
                     Ver stock de esta sede →
                   </button>
                   <a
-                    href={`https://wa.me/${getWhatsAppNumber(suc.telefono)}?text=${encodeURIComponent(`Hola Taller El Mingo (${suc.nombre}), deseo hacer una consulta.`)}`}
+                    href={`https://wa.me/${TALLER_CONTACT.whatsapp}?text=${encodeURIComponent(`Hola Taller El Mingo (${suc.nombre}), deseo hacer una consulta.`)}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1"
@@ -1043,7 +1146,9 @@ export default function EcommerceStore() {
             <img src={logoIcon} alt="Taller El Mingo" className="w-8 h-8 rounded-full border border-slate-700" />
             <div>
               <p className="font-black text-white text-sm">TALLER EL MINGO</p>
-              <p className="text-[11px] text-slate-500">© {new Date().getFullYear()} Todos los derechos reservados.</p>
+              <p className="text-[11px] text-slate-500">
+                WhatsApp: {TALLER_CONTACT.whatsappDisplay} • {TALLER_CONTACT.email}
+              </p>
             </div>
           </div>
 
@@ -1072,14 +1177,14 @@ export default function EcommerceStore() {
               <span className="bg-amber-400 text-blue-950 px-2.5 py-0.5 rounded-full text-xs font-black">
                 {cartCount}
               </span>
-              <span>Ver Mi Pedido / Cotización</span>
+              <span>Ver Pedido de Repuestos</span>
             </div>
             <span>C$ {cartTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} →</span>
           </button>
         </div>
       )}
 
-      {/* DRAWER LATERAL DEL CARRITO Y PEDIDO POR WHATSAPP */}
+      {/* DRAWER LATERAL DEL CARRITO PARA REPUESTOS */}
       {isCartOpen && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-xs">
           <div className="bg-white w-full max-w-md h-full flex flex-col shadow-2xl animate-in slide-in-from-right duration-200">
@@ -1088,9 +1193,9 @@ export default function EcommerceStore() {
               <div className="flex items-center gap-2.5">
                 <ShoppingCart size={20} className="text-amber-400" />
                 <div>
-                  <h2 className="font-black text-base leading-none">Tu Pedido / Cotización</h2>
+                  <h2 className="font-black text-base leading-none">Pedido de Repuestos</h2>
                   <p className="text-[11px] text-blue-200 mt-0.5">
-                    {cartCount} {cartCount === 1 ? 'artículo seleccionado' : 'artículos seleccionados'}
+                    {cartCount} {cartCount === 1 ? 'artículo' : 'artículos'} para envío o retiro
                   </p>
                 </div>
               </div>
@@ -1109,14 +1214,14 @@ export default function EcommerceStore() {
                   <div className="w-16 h-16 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-3">
                     <ShoppingCart size={28} />
                   </div>
-                  <p className="font-black text-slate-700 text-base">Tu carrito está vacío</p>
+                  <p className="font-black text-slate-700 text-base">Tu pedido de repuestos está vacío</p>
                   <p className="text-xs text-slate-500 mt-1">
-                    Explora el catálogo y agrega los repuestos o servicios que necesitas cotizar o pedir.
+                    Explora el catálogo y agrega los repuestos o lubricantes que deseas cotizar o recibir.
                   </p>
                 </div>
               ) : (
                 <>
-                  {/* Lista de ítems */}
+                  {/* Lista de repuestos en carrito */}
                   <div className="space-y-2.5">
                     {cart.map(item => (
                       <div key={item.id} className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-center justify-between gap-3">
@@ -1125,7 +1230,7 @@ export default function EcommerceStore() {
                             <img src={item.image} alt={item.name} className="w-12 h-12 rounded-lg object-contain bg-white border border-slate-200 shrink-0" />
                           ) : (
                             <div className="w-12 h-12 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
-                              {item.itemType === 'servicio' ? <Wrench size={20} /> : <Package size={20} />}
+                              <Package size={20} />
                             </div>
                           )}
                           <div className="min-w-0 flex-1">
@@ -1168,10 +1273,10 @@ export default function EcommerceStore() {
                     ))}
                   </div>
 
-                  {/* Datos opcionales para personalizar el pedido */}
+                  {/* Formulario de entrega / retiro */}
                   <div className="bg-blue-50/70 border border-blue-200 rounded-2xl p-3.5 space-y-3">
                     <p className="text-xs font-black text-blue-950 uppercase tracking-wider">
-                      Datos para tu atención rápida
+                      Datos para el envío o retiro
                     </p>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -1191,7 +1296,7 @@ export default function EcommerceStore() {
                           type="text"
                           value={customerInfo.modeloMoto}
                           onChange={(e) => setCustomerInfo(prev => ({ ...prev, modeloMoto: e.target.value }))}
-                          placeholder="Ej. Pulsar 180 / Boxer"
+                          placeholder="Ej. Boxer BM 150"
                           className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-medium outline-none focus:border-blue-600"
                         />
                       </div>
@@ -1199,7 +1304,7 @@ export default function EcommerceStore() {
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                       <div>
-                        <label className="block text-[11px] font-bold text-slate-600 mb-1">Sucursal de Atención</label>
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1">Sucursal de Preferencia</label>
                         <select
                           value={customerInfo.sucursalPreferida}
                           onChange={(e) => setCustomerInfo(prev => ({ ...prev, sucursalPreferida: e.target.value }))}
@@ -1211,26 +1316,26 @@ export default function EcommerceStore() {
                         </select>
                       </div>
                       <div>
-                        <label className="block text-[11px] font-bold text-slate-600 mb-1">Modalidad</label>
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1">Modalidad de Entrega</label>
                         <select
                           value={customerInfo.modalidad}
                           onChange={(e) => setCustomerInfo(prev => ({ ...prev, modalidad: e.target.value }))}
                           className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold outline-none focus:border-blue-600"
                         >
                           <option value="Retiro en Sucursal">Retiro en Sucursal</option>
-                          <option value="Agendar Instalación en Taller">Instalar en el Taller</option>
-                          <option value="Consulta de Envío / Delivery">Consultar Delivery</option>
+                          <option value="Envío por CargoTrans / Encomienda">Envío por CargoTrans / Encomienda</option>
+                          <option value="Delivery Local">Delivery Local</option>
                         </select>
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-[11px] font-bold text-slate-600 mb-1">Comentario adicional (opcional)</label>
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1">Indicaciones o Nota adicional</label>
                       <input
                         type="text"
                         value={customerInfo.notas}
                         onChange={(e) => setCustomerInfo(prev => ({ ...prev, notas: e.target.value }))}
-                        placeholder="Ej. Paso retirando a las 2:00 PM..."
+                        placeholder="Ej. Enviar a agencia CargoTrans de..."
                         className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-medium outline-none focus:border-blue-600"
                       />
                     </div>
@@ -1243,7 +1348,7 @@ export default function EcommerceStore() {
             {cart.length > 0 && (
               <div className="p-4 border-t border-slate-200 bg-slate-50 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-500 uppercase">Total Estimado</span>
+                  <span className="text-xs font-bold text-slate-500 uppercase">Total Estimado Repuestos</span>
                   <span className="text-2xl font-black text-blue-950">
                     C$ {cartTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
@@ -1254,7 +1359,7 @@ export default function EcommerceStore() {
                   className="w-full bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white font-black py-3 px-4 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 text-sm cursor-pointer transition-all"
                 >
                   <MessageCircle size={19} />
-                  Enviar Pedido por WhatsApp
+                  Enviar Pedido de Repuestos por WhatsApp
                 </button>
 
                 <div className="flex items-center justify-between gap-2 pt-1">
@@ -1277,7 +1382,7 @@ export default function EcommerceStore() {
         </div>
       )}
 
-      {/* MODAL DETALLE DE PRODUCTO */}
+      {/* MODAL DETALLE DE REPUESTO */}
       {detailModalItem && (
         <div
           className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4"
@@ -1312,7 +1417,7 @@ export default function EcommerceStore() {
 
               <div>
                 <span className="text-xs font-black uppercase text-blue-600">
-                  {detailModalItem.cat || 'General'}
+                  {detailModalItem.cat || 'Repuestos'}
                 </span>
                 <h3 className="text-xl font-black text-slate-900 mt-0.5">
                   {detailModalItem.name || detailModalItem.nombre}
@@ -1323,7 +1428,7 @@ export default function EcommerceStore() {
               </div>
 
               {/* Disponibilidad por sucursal */}
-              {detailModalItem.itemType !== 'servicio' && detailModalItem.stockPorSucursal && (
+              {detailModalItem.stockPorSucursal && (
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
                   <p className="text-[11px] font-black text-slate-500 uppercase mb-2">
                     Disponibilidad por Sucursal
