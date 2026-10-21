@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Select from 'react-select';
+import { useReactToPrint } from 'react-to-print';
 import { consumeNextConsecutiveAtomic, checkDuplicateCodigoVisible } from '../../utils/consecutivosService';
 import { DEFAULT_CONSECUTIVOS, formatConsecutive } from '../catalogos/ConsecutivosManager';
 
@@ -44,6 +45,11 @@ export default function TraspasosManager({ user, sucursalesProp = null, products
   const [selectedTraspaso, setSelectedTraspaso] = useState(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const printRef = useRef(null);
+  const handlePrint = useReactToPrint({
+    contentRef: printRef,
+    documentTitle: `Remision_${selectedTraspaso?.codigo_visible || 'Traspaso'}`,
+    pageStyle: `@page { size: letter portrait; margin: 12mm 15mm; } @media print { body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; } .no-print { display: none !important; } }`
+  });
 
   // Carga reactiva de datos desde Firebase RTDB
   useEffect(() => {
@@ -1009,7 +1015,7 @@ export default function TraspasosManager({ user, sucursalesProp = null, products
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-xs animate-in fade-in overflow-hidden">
           <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[94vh]">
             
-            <div className="p-4 bg-gray-900 text-white flex items-center justify-between shrink-0">
+            <div className="p-4 bg-gray-900 text-white flex items-center justify-between shrink-0 no-print print:hidden">
               <div className="flex items-center gap-2">
                 <FileText className="text-emerald-400" size={18} />
                 <span className="font-black text-sm">
@@ -1024,8 +1030,8 @@ export default function TraspasosManager({ user, sucursalesProp = null, products
               </button>
             </div>
 
-            {/* Hoja de Remisión formal (área imprimible) */}
-            <div className="p-6 overflow-y-auto flex-1 space-y-6" ref={printRef}>
+            {/* Hoja de Remisión formal (área imprimible exclusiva) */}
+            <div className="p-6 overflow-y-auto flex-1 space-y-6 bg-white print:p-0 print:m-0" ref={printRef}>
               
               {/* Encabezado Formal */}
               <div className="border-b-2 border-gray-900 pb-4 flex justify-between items-start">
@@ -1149,8 +1155,8 @@ export default function TraspasosManager({ user, sucursalesProp = null, products
 
             </div>
 
-            {/* Footer Modal con Botón Imprimir */}
-            <div className="p-4 border-t border-gray-200 bg-gray-50 flex items-center justify-between shrink-0">
+            {/* Footer Modal con Botón Imprimir (Excluido de la impresión) */}
+            <div className="p-4 border-t border-gray-200 bg-gray-50 flex items-center justify-between shrink-0 no-print print:hidden">
               <button
                 type="button"
                 onClick={() => setIsDetailModalOpen(false)}
@@ -1161,8 +1167,8 @@ export default function TraspasosManager({ user, sucursalesProp = null, products
 
               <button
                 type="button"
-                onClick={() => window.print()}
-                className="bg-gray-900 hover:bg-black text-white font-black text-xs px-5 py-2.5 rounded-xl shadow-md flex items-center gap-2 cursor-pointer transition-all"
+                onClick={() => handlePrint()}
+                className="bg-gray-900 hover:bg-black text-white font-black text-xs px-5 py-2.5 rounded-xl shadow-md flex items-center gap-2 cursor-pointer transition-all active:scale-95"
               >
                 <Printer size={15} /> Imprimir Comprobante de Remisión
               </button>
