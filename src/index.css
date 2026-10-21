@@ -1,1 +1,26 @@
 @import "tailwindcss";
+
+@media print {
+  /* Ocultar cualquier botón, barra de acciones o elementos de interfaz en cualquier impresión */
+  .no-print,
+  .print-hidden,
+  [data-no-print],
+  button,
+  nav,
+  aside,
+  header {
+    display: none !important;
+  }
+
+  /* Asegurar que los colores, fondos y contrastes se impriman con fidelidad */
+  body, #root {
+    background-color: transparent !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Evitar sombras oscuras en modales al enviar a impresión */
+  .shadow-2xl, .shadow-xl, .shadow-lg, .shadow-md, .shadow-sm, .shadow-inner {
+    box-shadow: none !important;
+  }
+}

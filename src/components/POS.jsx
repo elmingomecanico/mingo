@@ -2435,7 +2435,7 @@ export default function POS() {
       {completedSale && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm animate-in fade-in duration-200 overflow-hidden">
           <div className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
-            <div className="p-3 sm:p-4 text-center border-b border-gray-100 bg-gray-50/80 flex justify-between items-center shrink-0">
+            <div className="p-3 sm:p-4 text-center border-b border-gray-100 bg-gray-50/80 flex justify-between items-center shrink-0 no-print print:hidden">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs font-bold text-green-700 bg-green-50 px-2.5 py-1 rounded-full border border-green-200">
                   {completedSalesList.length > 1 
@@ -2453,7 +2453,7 @@ export default function POS() {
 
             {/* PESTAÑAS SELECTORAS SI HAY MÚLTIPLES FACTURAS EMITIDAS */}
             {completedSalesList.length > 1 && (
-              <div className="flex items-center gap-1.5 p-2 bg-purple-50 border-b border-purple-100 overflow-x-auto shrink-0">
+              <div className="flex items-center gap-1.5 p-2 bg-purple-50 border-b border-purple-100 overflow-x-auto shrink-0 no-print print:hidden">
                 <span className="text-[11px] font-bold text-purple-900 uppercase shrink-0 pl-1">
                   Ver Factura:
                 </span>
@@ -2483,7 +2483,7 @@ export default function POS() {
             </div>
 
             {/* BOTONES DE IMPRESIÓN Y ACCIONES */}
-            <div className="p-3 sm:p-4 bg-white border-t border-gray-100 space-y-2 shrink-0">
+            <div className="p-3 sm:p-4 bg-white border-t border-gray-100 space-y-2 shrink-0 no-print print:hidden">
               {completedSalesList.length > 1 ? (
                 <div className="space-y-2">
                   <div className="grid grid-cols-2 gap-2">

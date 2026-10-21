@@ -8,6 +8,7 @@ import {
   Columns, AlignLeft, AlignCenter, Split, CheckCircle2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useReactToPrint } from 'react-to-print';
 import TicketPrinter from '../TicketPrinter';
 
 export const DEFAULT_PRINT_CONFIG = {
@@ -131,15 +132,17 @@ export default function PrintFormatEditor({ user }) {
     }
   };
 
-  const handlePrintTest = () => {
-    window.print();
-  };
+  const handlePrintTest = useReactToPrint({
+    contentRef: previewRef,
+    documentTitle: `Prueba_Ticket_${config.ancho_papel || '80mm'}`,
+    pageStyle: `@page { size: ${config.ancho_papel === '58mm' ? '58mm' : '80mm'} auto; margin: 0; } @media print { body { -webkit-print-color-adjust: exact; } .no-print, button { display: none !important; } }`
+  });
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       
-      {/* ENCABEZADO */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+      {/* ENCABEZADO (No se imprime) */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl border border-gray-100 shadow-sm no-print print:hidden">
         <div>
           <h2 className="text-xl font-black text-gray-900 flex items-center gap-2">
             <Printer className="text-blue-600" size={24} />
@@ -154,7 +157,7 @@ export default function PrintFormatEditor({ user }) {
           <button
             type="button"
             onClick={handleReset}
-            className="px-3.5 py-2.5 text-xs font-bold text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-xl transition-colors flex items-center gap-1.5"
+            className="px-3.5 py-2.5 text-xs font-bold text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
             title="Restablecer valores originales"
           >
             <RotateCcw size={15} /> Restablecer
@@ -162,8 +165,8 @@ export default function PrintFormatEditor({ user }) {
 
           <button
             type="button"
-            onClick={handlePrintTest}
-            className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold text-xs sm:text-sm rounded-xl transition-colors flex items-center gap-1.5"
+            onClick={() => handlePrintTest()}
+            className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold text-xs sm:text-sm rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
           >
             <Printer size={16} /> Probar Impresión
           </button>
@@ -183,7 +186,7 @@ export default function PrintFormatEditor({ user }) {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         
         {/* LADO IZQUIERDO: CONTROLES DEL EDITOR */}
-        <div className="lg:col-span-7 space-y-5">
+        <div className="lg:col-span-7 space-y-5 no-print print:hidden">
 
           {/* SECCIÓN 1: DISEÑO Y UBICACIÓN DE ARTÍCULOS Y PRECIOS (P.U. VS TOTAL) */}
           <div className="bg-white p-5 rounded-2xl border-2 border-blue-100 shadow-sm space-y-4">
@@ -566,9 +569,9 @@ export default function PrintFormatEditor({ user }) {
 
         {/* LADO DERECHO: VISTA PREVIA EN VIVO (SIMULADOR DE TICKET TÉRMICO) */}
         <div className="lg:col-span-5 sticky top-6">
-          <div className="bg-gray-900 p-3 sm:p-4 rounded-2xl shadow-xl space-y-3">
+          <div className="bg-gray-900 p-3 sm:p-4 rounded-2xl shadow-xl space-y-3 print:bg-white print:p-0 print:shadow-none">
             
-            <div className="flex items-center justify-between text-white border-b border-gray-800 pb-2">
+            <div className="flex items-center justify-between text-white border-b border-gray-800 pb-2 no-print print:hidden">
               <span className="text-xs font-black tracking-wider uppercase flex items-center gap-1.5 text-blue-300">
                 <Eye size={16} /> Vista Previa en Vivo ({config.ancho_papel})
               </span>
@@ -578,7 +581,7 @@ export default function PrintFormatEditor({ user }) {
             </div>
 
             {/* SIMULADOR EXACTO EN VIVO USANDO TICKETPRINTER */}
-            <div className="overflow-x-auto flex justify-center py-2 bg-gray-950/50 rounded-xl p-2">
+            <div className="overflow-x-auto flex justify-center py-2 bg-gray-950/50 rounded-xl p-2 print:bg-white print:p-0">
               <TicketPrinter
                 ref={previewRef}
                 sale={demoSale}
@@ -587,7 +590,7 @@ export default function PrintFormatEditor({ user }) {
               />
             </div>
 
-            <p className="text-[10px] text-gray-400 text-center">
+            <p className="text-[10px] text-gray-400 text-center no-print print:hidden">
               Cualquier cambio de estilo, separación o texto se refleja de inmediato en el simulador. Al hacer clic en <strong>"Guardar Formato"</strong> se aplicará a todas las impresiones físicas de la empresa.
             </p>
 

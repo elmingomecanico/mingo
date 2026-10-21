@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ref, set, push, onValue } from 'firebase/database';
 import { rtdb } from '../../firebase';
 import { 
@@ -7,6 +7,7 @@ import {
   Lock, RefreshCw, ShieldCheck, Edit3
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useReactToPrint } from 'react-to-print';
 
 export default function AsientoApertura({ 
   asientoApertura = null, 
@@ -183,9 +184,12 @@ export default function AsientoApertura({
     }
   };
 
-  const handlePrint = () => {
-    window.print();
-  };
+  const printRef = useRef(null);
+  const handlePrint = useReactToPrint({
+    contentRef: printRef,
+    documentTitle: `Balance_Inicial_${asientoApertura?.numero_asiento || 'Asiento_Apertura'}`,
+    pageStyle: `@page { size: letter portrait; margin: 15mm; } @media print { body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; } .no-print, button { display: none !important; } }`
+  });
 
   // Si ya está certificado y no estamos editando, mostrar Ficha Oficial
   if (asientoApertura && !isEditing) {
@@ -196,8 +200,8 @@ export default function AsientoApertura({
     return (
       <div className="space-y-6 animate-in fade-in duration-300">
         
-        {/* ENCABEZADO DE FICHA CERTIFICADA */}
-        <div className="bg-white p-6 rounded-2xl border border-emerald-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        {/* ENCABEZADO DE FICHA CERTIFICADA (CONTROLES DE PANTALLA - EXCLUIDOS DE LA IMPRESIÓN) */}
+        <div className="bg-white p-6 rounded-2xl border border-emerald-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4 no-print print:hidden">
           <div className="flex items-center gap-3.5">
             <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
               <ShieldCheck size={28} />
@@ -219,15 +223,17 @@ export default function AsientoApertura({
 
           <div className="flex items-center gap-2 w-full md:w-auto">
             <button
-              onClick={handlePrint}
-              className="flex-1 md:flex-none px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs sm:text-sm rounded-xl flex items-center justify-center gap-1.5 transition-colors"
+              type="button"
+              onClick={() => handlePrint()}
+              className="flex-1 md:flex-none px-4 py-2 bg-gray-900 hover:bg-black text-white font-bold text-xs sm:text-sm rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-md active:scale-95"
             >
               <Printer size={16} /> Imprimir Balance
             </button>
             {user?.rol === 'SuperAdmin' && (
               <button
+                type="button"
                 onClick={() => setIsEditing(true)}
-                className="flex-1 md:flex-none px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs sm:text-sm rounded-xl flex items-center justify-center gap-1.5 transition-colors"
+                className="flex-1 md:flex-none px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs sm:text-sm rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
               >
                 <Edit3 size={16} /> Ajustar Valores
               </button>
@@ -235,129 +241,170 @@ export default function AsientoApertura({
           </div>
         </div>
 
-        {/* TARJETAS RESUMEN DE LA ECUACIÓN CONTABLE */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between">
-            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">
-              1. Total Activo Inicial
-            </span>
-            <span className="text-xl sm:text-2xl font-black text-emerald-700 block mt-1 break-words leading-tight">
-              C$ {act.toLocaleString('es-NI', { minimumFractionDigits: 2 })}
-            </span>
-            <span className="text-[11px] text-gray-500 font-medium mt-1 block">
-              Cajas + Bancos + Inventario + CxC
-            </span>
+        {/* CONTENEDOR DEL DOCUMENTO OFICIAL IMPRIMIBLE (EXCLUSIVO) */}
+        <div ref={printRef} className="space-y-6 bg-white p-6 rounded-2xl border border-gray-100 shadow-sm print:p-0 print:border-none print:shadow-none">
+          
+          {/* ENCABEZADO FORMAL PARA IMPRESIÓN */}
+          <div className="border-b-2 border-gray-900 pb-4 flex justify-between items-start">
+            <div>
+              <h1 className="text-xl font-black text-gray-950 tracking-tight">TALLER Y REPUESTOS EL MINGO</h1>
+              <p className="text-xs text-gray-500">Mantenimiento Mecánico Especializado y Venta de Repuestos</p>
+              <p className="text-xs font-mono text-gray-600 mt-1">Tel: +505 8294 3669 • elmingomecanico@gmail.com</p>
+            </div>
+            <div className="text-right">
+              <div className="inline-block bg-emerald-50 border-2 border-emerald-600 px-3 py-1.5 rounded-xl">
+                <span className="text-[10px] font-bold uppercase text-emerald-800 block">Balance Oficial de Apertura</span>
+                <strong className="text-base font-black font-mono text-emerald-950">
+                  {asientoApertura.numero_asiento || 'ASIENTO-001'}
+                </strong>
+              </div>
+              <p className="text-[11px] text-gray-500 mt-1">Fecha de Corte: {asientoApertura.fecha_corte}</p>
+            </div>
           </div>
 
-          <div className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between">
-            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">
-              2. Total Pasivo Inicial
-            </span>
-            <span className="text-xl sm:text-2xl font-black text-rose-600 block mt-1 break-words leading-tight">
-              C$ {pas.toLocaleString('es-NI', { minimumFractionDigits: 2 })}
-            </span>
-            <span className="text-[11px] text-gray-500 font-medium mt-1 block">
-              Deudas pendientes a Proveedores (CxP)
-            </span>
+          {/* TARJETAS RESUMEN DE LA ECUACIÓN CONTABLE */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between">
+              <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">
+                1. Total Activo Inicial
+              </span>
+              <span className="text-xl sm:text-2xl font-black text-emerald-700 block mt-1 break-words leading-tight">
+                C$ {act.toLocaleString('es-NI', { minimumFractionDigits: 2 })}
+              </span>
+              <span className="text-[11px] text-gray-500 font-medium mt-1 block">
+                Cajas + Bancos + Inventario + CxC
+              </span>
+            </div>
+
+            <div className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between">
+              <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">
+                2. Total Pasivo Inicial
+              </span>
+              <span className="text-xl sm:text-2xl font-black text-rose-600 block mt-1 break-words leading-tight">
+                C$ {pas.toLocaleString('es-NI', { minimumFractionDigits: 2 })}
+              </span>
+              <span className="text-[11px] text-gray-500 font-medium mt-1 block">
+                Deudas pendientes a Proveedores (CxP)
+              </span>
+            </div>
+
+            <div className="bg-gradient-to-br from-blue-900 to-indigo-950 text-white p-4 sm:p-5 rounded-2xl shadow-md flex flex-col justify-between">
+              <span className="text-xs font-bold text-blue-200 uppercase tracking-wider block">
+                3. Capital Social / Patrimonio
+              </span>
+              <span className="text-xl sm:text-2xl font-black text-white block mt-1 break-words leading-tight">
+                C$ {pat.toLocaleString('es-NI', { minimumFractionDigits: 2 })}
+              </span>
+              <span className="text-[11px] text-blue-300 font-medium mt-1 block">
+                Activo - Pasivo = Aporte Neto de Socios
+              </span>
+            </div>
           </div>
 
-          <div className="bg-gradient-to-br from-blue-900 to-indigo-950 text-white p-4 sm:p-5 rounded-2xl shadow-md flex flex-col justify-between">
-            <span className="text-xs font-bold text-blue-200 uppercase tracking-wider block">
-              3. Capital Social / Patrimonio
-            </span>
-            <span className="text-xl sm:text-2xl font-black text-white block mt-1 break-words leading-tight">
-              C$ {pat.toLocaleString('es-NI', { minimumFractionDigits: 2 })}
-            </span>
-            <span className="text-[11px] text-blue-300 font-medium mt-1 block">
-              Activo - Pasivo = Aporte Neto de Socios
-            </span>
-          </div>
-        </div>
+          {/* DETALLE COMPLETO DEL BALANCE INICIAL */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-6">
+            <h3 className="text-base font-black text-gray-900 border-b pb-3">
+              Desglose Auditado del Asiento de Apertura
+            </h3>
 
-        {/* DETALLE COMPLETO DEL BALANCE INICIAL */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-6">
-          <h3 className="text-base font-black text-gray-900 border-b pb-3">
-            Desglose Auditado del Asiento de Apertura
-          </h3>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            
-            {/* LADO IZQUIERDO: ACTIVOS */}
-            <div className="space-y-4">
-              <h4 className="text-xs font-black uppercase tracking-wider text-emerald-700 flex items-center gap-1.5">
-                <CheckCircle2 size={14} /> Activos Circulantes e Inventario
-              </h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               
-              <div className="bg-gray-50 p-4 rounded-xl space-y-2.5 text-xs">
-                <div className="flex justify-between items-center py-1 border-b border-gray-200">
-                  <span className="font-bold text-gray-600">Fondo Efectivo en Caja Principal:</span>
-                  <span className="font-mono font-black text-gray-800">
-                    C$ {Number(asientoApertura.fondo_caja_principal || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center py-1 border-b border-gray-200">
-                  <span className="font-bold text-gray-600">Fondo Efectivo en Caja Norte:</span>
-                  <span className="font-mono font-black text-gray-800">
-                    C$ {Number(asientoApertura.fondo_caja_norte || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center py-1 border-b border-gray-200">
-                  <span className="font-bold text-gray-600">Disponibilidad en Cuentas Bancarias:</span>
-                  <span className="font-mono font-black text-gray-800">
-                    C$ {Number(asientoApertura.total_bancos || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center py-1 border-b border-gray-200">
-                  <span className="font-bold text-gray-600">Inventario Físico Inicial (Valorizado):</span>
-                  <span className="font-mono font-black text-gray-800">
-                    C$ {Number(asientoApertura.inventario_inicial_valorizado || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center py-1">
-                  <span className="font-bold text-gray-600">Cuentas por Cobrar Iniciales (Clientes):</span>
-                  <span className="font-mono font-black text-gray-800">
-                    C$ {Number(asientoApertura.cxc_inicial_clientes || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* LADO DERECHO: PASIVOS Y CAPITAL */}
-            <div className="space-y-4">
-              <h4 className="text-xs font-black uppercase tracking-wider text-rose-700 flex items-center gap-1.5">
-                <AlertCircle size={14} /> Pasivos y Patrimonio Inicial
-              </h4>
-
-              <div className="bg-gray-50 p-4 rounded-xl space-y-2.5 text-xs">
-                <div className="flex justify-between items-center py-1 border-b border-gray-200">
-                  <span className="font-bold text-gray-600">Cuentas por Pagar Iniciales (Proveedores):</span>
-                  <span className="font-mono font-black text-rose-600">
-                    C$ {Number(asientoApertura.cxp_inicial_proveedores || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center py-1 border-b border-gray-200">
-                  <span className="font-bold text-gray-600">Total Pasivo (Obligaciones):</span>
-                  <span className="font-mono font-black text-rose-600">
-                    C$ {Number(asientoApertura.total_pasivo || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center py-2 bg-blue-50/70 px-2 rounded-lg mt-3">
-                  <span className="font-black text-blue-900">Capital Social Inicial Certificado:</span>
-                  <span className="font-mono font-black text-blue-900 text-sm">
-                    C$ {Number(asientoApertura.capital_patrimonio_inicial || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })}
-                  </span>
+              {/* LADO IZQUIERDO: ACTIVOS */}
+              <div className="space-y-4">
+                <h4 className="text-xs font-black uppercase tracking-wider text-emerald-700 flex items-center gap-1.5">
+                  <CheckCircle2 size={14} /> Activos Circulantes e Inventario
+                </h4>
+                
+                <div className="bg-gray-50 p-4 rounded-xl space-y-2.5 text-xs">
+                  <div className="flex justify-between items-center py-1 border-b border-gray-200">
+                    <span className="font-bold text-gray-600">Fondo Efectivo en Caja Principal:</span>
+                    <span className="font-mono font-black text-gray-800">
+                      C$ {Number(asientoApertura.fondo_caja_principal || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-gray-200">
+                    <span className="font-bold text-gray-600">Fondo Efectivo en Caja Norte:</span>
+                    <span className="font-mono font-black text-gray-800">
+                      C$ {Number(asientoApertura.fondo_caja_norte || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-gray-200">
+                    <span className="font-bold text-gray-600">Disponibilidad en Cuentas Bancarias:</span>
+                    <span className="font-mono font-black text-gray-800">
+                      C$ {Number(asientoApertura.total_bancos || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-gray-200">
+                    <span className="font-bold text-gray-600">Inventario Físico Inicial (Valorizado):</span>
+                    <span className="font-mono font-black text-gray-800">
+                      C$ {Number(asientoApertura.inventario_inicial_valorizado || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center py-1">
+                    <span className="font-bold text-gray-600">Cuentas por Cobrar Iniciales (Clientes):</span>
+                    <span className="font-mono font-black text-gray-800">
+                      C$ {Number(asientoApertura.cxc_inicial_clientes || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
                 </div>
               </div>
 
-              {asientoApertura.notas && (
-                <div className="p-3 bg-amber-50/60 rounded-xl border border-amber-100 text-xs text-amber-900">
-                  <span className="font-bold block mb-0.5">Notas de la Certificación:</span>
-                  <p className="text-gray-600 leading-relaxed">{asientoApertura.notas}</p>
-                </div>
-              )}
-            </div>
+              {/* LADO DERECHO: PASIVOS Y CAPITAL */}
+              <div className="space-y-4">
+                <h4 className="text-xs font-black uppercase tracking-wider text-rose-700 flex items-center gap-1.5">
+                  <AlertCircle size={14} /> Pasivos y Patrimonio Inicial
+                </h4>
 
+                <div className="bg-gray-50 p-4 rounded-xl space-y-2.5 text-xs">
+                  <div className="flex justify-between items-center py-1 border-b border-gray-200">
+                    <span className="font-bold text-gray-600">Cuentas por Pagar Iniciales (Proveedores):</span>
+                    <span className="font-mono font-black text-rose-600">
+                      C$ {Number(asientoApertura.cxp_inicial_proveedores || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-gray-200">
+                    <span className="font-bold text-gray-600">Total Pasivo (Obligaciones):</span>
+                    <span className="font-mono font-black text-rose-600">
+                      C$ {Number(asientoApertura.total_pasivo || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center py-2 bg-blue-50/70 px-2 rounded-lg mt-3">
+                    <span className="font-black text-blue-900">Capital Social Inicial Certificado:</span>
+                    <span className="font-mono font-black text-blue-900 text-sm">
+                      C$ {Number(asientoApertura.capital_patrimonio_inicial || 0).toLocaleString('es-NI', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                </div>
+
+                {asientoApertura.notas && (
+                  <div className="p-3 bg-amber-50/60 rounded-xl border border-amber-100 text-xs text-amber-900">
+                    <span className="font-bold block mb-0.5">Notas de la Certificación:</span>
+                    <p className="text-gray-600 leading-relaxed">{asientoApertura.notas}</p>
+                  </div>
+                )}
+              </div>
+
+            </div>
           </div>
+
+          {/* FIRMAS DE AUDITORÍA Y CERTIFICACIÓN */}
+          <div className="pt-8 grid grid-cols-2 gap-8 text-center text-xs">
+            <div>
+              <div className="border-t border-gray-400 pt-1.5 font-bold text-gray-800">
+                Contabilidad / Auditoría
+              </div>
+              <p className="text-[10px] text-gray-400 font-mono">Firma y Cédula</p>
+            </div>
+            <div>
+              <div className="border-t border-gray-400 pt-1.5 font-bold text-gray-800">
+                Gerencia General
+              </div>
+              <p className="text-[10px] text-gray-400 font-mono">
+                {asientoApertura.certificado_por || 'Aprobado'}
+              </p>
+            </div>
+          </div>
+
         </div>
 
       </div>

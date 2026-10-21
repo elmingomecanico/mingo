@@ -31,7 +31,7 @@ export default function CashCloseModal({
   const handlePrint = useReactToPrint({
     contentRef: printRef,
     documentTitle: `Cierre_Caja_${closedTurnoData?.numero_turno || 'POS'}`,
-    pageStyle: `@page { size: 80mm auto; margin: 0; } @media print { body { -webkit-print-color-adjust: exact; } }`
+    pageStyle: `@page { size: 80mm auto; margin: 0; } @media print { body { -webkit-print-color-adjust: exact; } .no-print, button { display: none !important; } }`
   });
 
   // Cargar movimientos de salida del turno actual
@@ -425,7 +425,7 @@ export default function CashCloseModal({
       {closedTurnoData && (
         <div className="fixed inset-0 bg-black/70 z-[60] flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm animate-in fade-in duration-200 overflow-hidden">
           <div className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
-            <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50 shrink-0">
+            <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50 shrink-0 no-print print:hidden">
               <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full">
                 ✓ Turno Cerrado: {closedTurnoData.numero_turno}
               </span>
@@ -436,7 +436,7 @@ export default function CashCloseModal({
               <CashTicketPrinter data={closedTurnoData} type="cierre" isPreview={true} />
             </div>
 
-            <div className="p-3 sm:p-4 bg-white border-t border-gray-100 space-y-2 shrink-0">
+            <div className="p-3 sm:p-4 bg-white border-t border-gray-100 space-y-2 shrink-0 no-print print:hidden">
               <button
                 type="button"
                 onClick={handlePrint}
