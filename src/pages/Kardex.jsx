@@ -3,19 +3,28 @@ import { ref, onValue, push, set } from 'firebase/database';
 import { rtdb } from '../firebase';
 import { 
   Activity, ArrowDownRight, ArrowUpRight, Search, Filter, 
-  RefreshCw, Package, ShoppingBag, ShoppingCart, SlidersHorizontal 
+  RefreshCw, Package, ShoppingBag, ShoppingCart, SlidersHorizontal, ArrowRightLeft
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function Kardex() {
   const [movimientos, setMovimientos] = useState([]);
   const [productos, setProductos] = useState({});
+  const [sucursalesMap, setSucursalesMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filtroSucursal, setFiltroSucursal] = useState('Todas');
   const [filtroTipo, setFiltroTipo] = useState('Todos');
 
   useEffect(() => {
+    // 0. Cargar sucursales para nombres y códigos visibles
+    const sucRef = ref(rtdb, 'configuracion/sucursales');
+    const unsubSuc = onValue(sucRef, (snapshot) => {
+      if (snapshot.exists()) {
+        setSucursalesMap(snapshot.val());
+      }
+    });
+
     // 1. Cargar catálogo maestro de productos para resolución de nombres
     const prodRef = ref(rtdb, 'productos');
     let prodsMap = {};
@@ -54,8 +63,13 @@ export default function Kardex() {
           const suc = node.id_sucursal || pathSucursal || 'SUC-01';
           const rawTipo = (node.tipo_movimiento || node.tipo || 'Salida').toString();
           const isEntrada = rawTipo.toLowerCase().includes('entrada');
-          const tipoMov = isEntrada ? (rawTipo.includes('Ajuste') ? 'Entrada por Ajuste' : 'Entrada por Compra') 
-                                    : (rawTipo.includes('Ajuste') ? 'Salida por Ajuste' : 'Salida por Venta');
+          
+          let tipoMov = isEntrada ? 'Entrada por Compra' : 'Salida por Venta';
+          if (rawTipo.toLowerCase().includes('traspaso')) {
+            tipoMov = isEntrada ? 'Entrada por Traspaso' : 'Salida por Traspaso';
+          } else if (rawTipo.toLowerCase().includes('ajuste')) {
+            tipoMov = isEntrada ? 'Entrada por Ajuste' : 'Salida por Ajuste';
+          }
 
           let refId = node.id_referencia || '';
           if (!refId && node.motivo) {
@@ -189,6 +203,10 @@ export default function Kardex() {
     // Filtro por tipo
     if (filtroTipo === 'Entradas' && !m.isEntrada) return false;
     if (filtroTipo === 'Salidas' && m.isEntrada) return false;
+    if (filtroTipo === 'Ventas' && !m.tipo_movimiento.toLowerCase().includes('venta')) return false;
+    if (filtroTipo === 'Compras' && !m.tipo_movimiento.toLowerCase().includes('compra')) return false;
+    if (filtroTipo === 'Traspasos' && !m.tipo_movimiento.toLowerCase().includes('traspaso')) return false;
+    if (filtroTipo === 'Ajustes' && !m.tipo_movimiento.toLowerCase().includes('ajuste')) return false;
 
     // Filtro por texto
     if (!search.trim()) return true;
@@ -289,8 +307,14 @@ export default function Kardex() {
               className="border border-gray-200 p-2 rounded-xl text-xs font-bold text-gray-700 bg-white outline-none focus:ring-2 focus:ring-purple-400"
             >
               <option value="Todas">Todas las Sucursales</option>
-              <option value="SUC-01">Sucursal Principal (SUC-01)</option>
-              <option value="SUC-02">Sucursal Norte (SUC-02)</option>
+              {Object.keys(sucursalesMap).map(sucId => {
+                const s = sucursalesMap[sucId];
+                return (
+                  <option key={sucId} value={sucId}>
+                    [{s.codigo_visible || sucId}] {s.nombre || s.short || sucId}
+                  </option>
+                );
+              })}
             </select>
 
             <select
@@ -299,8 +323,10 @@ export default function Kardex() {
               className="border border-gray-200 p-2 rounded-xl text-xs font-bold text-gray-700 bg-white outline-none focus:ring-2 focus:ring-purple-400"
             >
               <option value="Todos">Todos los Movimientos</option>
-              <option value="Salidas">Solo Salidas (Ventas)</option>
-              <option value="Entradas">Solo Entradas (Compras)</option>
+              <option value="Ventas">Solo Ventas (Salidas)</option>
+              <option value="Compras">Solo Compras (Entradas)</option>
+              <option value="Traspasos">Solo Traspasos entre Sucursales</option>
+              <option value="Ajustes">Solo Ajustes de Inventario</option>
             </select>
           </div>
         </div>
@@ -350,11 +376,16 @@ export default function Kardex() {
 
                       <td className="p-4">
                         <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full font-bold text-xs ${
-                          isEntrada 
-                            ? 'bg-green-100 text-green-800 border border-green-200' 
-                            : 'bg-red-50 text-red-700 border border-red-200'
+                          mov.tipo_movimiento.toLowerCase().includes('traspaso')
+                            ? 'bg-purple-100 text-purple-900 border border-purple-200'
+                            : isEntrada 
+                              ? 'bg-green-100 text-green-800 border border-green-200' 
+                              : 'bg-red-50 text-red-700 border border-red-200'
                         }`}>
-                          {isEntrada ? <ArrowDownRight size={13} /> : <ArrowUpRight size={13} />}
+                          {mov.tipo_movimiento.toLowerCase().includes('traspaso') 
+                            ? <ArrowRightLeft size={13} className="text-purple-700" />
+                            : (isEntrada ? <ArrowDownRight size={13} /> : <ArrowUpRight size={13} />)
+                          }
                           {mov.tipo_movimiento}
                         </span>
                       </td>
@@ -381,8 +412,10 @@ export default function Kardex() {
                       </td>
 
                       <td className="p-4 text-gray-600">
-                        <span className="bg-gray-100 font-semibold px-2 py-0.5 rounded text-xs">
-                          {mov.id_sucursal}
+                        <span className="bg-gray-100 font-semibold px-2 py-0.5 rounded text-xs" title={sucursalesMap[mov.id_sucursal]?.nombre || mov.id_sucursal}>
+                          {sucursalesMap[mov.id_sucursal]?.codigo_visible 
+                            ? `[${sucursalesMap[mov.id_sucursal].codigo_visible}] ${sucursalesMap[mov.id_sucursal]?.short || sucursalesMap[mov.id_sucursal]?.nombre || ''}`
+                            : mov.id_sucursal}
                         </span>
                       </td>
 

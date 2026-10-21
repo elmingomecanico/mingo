@@ -5,7 +5,7 @@ import {
   Search, Plus, Edit2, Trash2, Package, History, Maximize2, ScanBarcode, 
   Sliders, ShieldCheck, AlertTriangle, CheckCircle2, Percent, 
   RotateCcw, Sparkles, AlertCircle, Building2, Layers, Check, X,
-  Hash, Lock
+  Hash, Lock, ArrowRightLeft
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Select from 'react-select';
@@ -13,6 +13,7 @@ import BarcodeScannerModal from '../components/BarcodeScannerModal';
 import ImagePreviewModal from '../components/ImagePreviewModal';
 import { DEFAULT_CONSECUTIVOS, formatConsecutive } from '../components/catalogos/ConsecutivosManager';
 import ProductCatalogsManager from '../components/inventario/ProductCatalogsManager';
+import TraspasosManager from '../components/inventario/TraspasosManager';
 import { compressImageToWebP, saveProductImage, subscribeProductImages, resolveProductImage } from '../utils/storageService';
 import { consumeNextConsecutiveAtomic, checkDuplicateCodigoVisible } from '../utils/consecutivosService';
 import { deleteProductCleanly } from '../utils/integrityService';
@@ -41,7 +42,7 @@ export const getMaxAllowedDiscount = (product, globalPoliticas) => {
 };
 
 export default function Inventario() {
-  const [activeTab, setActiveTab] = useState('catalogo'); // 'catalogo' | 'ajustes' | 'politicas' | 'tablas_catalogos'
+  const [activeTab, setActiveTab] = useState('catalogo'); // 'catalogo' | 'traspasos' | 'ajustes' | 'politicas' | 'tablas_catalogos'
   const [rawProducts, setRawProducts] = useState([]);
   const [productImagesMap, setProductImagesMap] = useState({});
   const [inventory, setInventory] = useState({});
@@ -49,6 +50,10 @@ export default function Inventario() {
   const [ajustes, setAjustes] = useState([]);
   const [search, setSearch] = useState('');
   const [sucursal, setSucursal] = useState('SUC-01');
+  const [sucursalesList, setSucursalesList] = useState([
+    { id: 'SUC-01', nombre: 'Sucursal Principal', codigo_visible: 'SUC-1' },
+    { id: 'SUC-02', nombre: 'Sucursal Norte', codigo_visible: 'SUC-2' }
+  ]);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [consecutivosConfig, setConsecutivosConfig] = useState(DEFAULT_CONSECUTIVOS);
@@ -132,6 +137,15 @@ export default function Inventario() {
     const modRef = ref(rtdb, 'catalogos/modelos');
     const ajustesRef = ref(rtdb, `ajustes_inventario/${sucursal}`);
     const consRef = ref(rtdb, 'configuracion/consecutivos');
+    const sucursalesRef = ref(rtdb, 'configuracion/sucursales');
+
+    const unsubSucursales = onValue(sucursalesRef, (snap) => {
+      if (snap.exists()) {
+        const val = snap.val();
+        const list = Object.keys(val).map(k => ({ id: k, ...val[k] })).filter(s => s.estado !== 'Inactiva');
+        if (list.length > 0) setSucursalesList(list);
+      }
+    });
 
     const unsubProds = onValue(prodsRef, (snapshot) => {
       if (snapshot.exists()) {
@@ -189,7 +203,7 @@ export default function Inventario() {
     });
 
     return () => {
-      unsubProds(); unsubImgs(); unsubInv(); unsubAllInv(); unsubPoliticas(); unsubCat(); unsubUbi(); unsubMod(); unsubAjustes(); unsubCons();
+      unsubProds(); unsubImgs(); unsubInv(); unsubAllInv(); unsubPoliticas(); unsubCat(); unsubUbi(); unsubMod(); unsubAjustes(); unsubCons(); unsubSucursales();
     };
   }, [sucursal]);
 
@@ -508,8 +522,11 @@ export default function Inventario() {
             onChange={(e) => setSucursal(e.target.value)}
             className="border-gray-200 bg-white border p-2.5 rounded-lg font-medium text-gray-700 shadow-sm outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <option value="SUC-01">Sucursal Principal (SUC-01)</option>
-            <option value="SUC-02">Sucursal Norte (SUC-02)</option>
+            {sucursalesList.map(s => (
+              <option key={s.id} value={s.id}>
+                {s.nombre || s.name} ({s.codigo_visible || s.id})
+              </option>
+            ))}
           </select>
         </div>
       </div>
@@ -517,6 +534,9 @@ export default function Inventario() {
       {/* Tabs */}
       <div className="flex gap-2 overflow-x-auto border-b border-gray-200">
         <button onClick={() => setActiveTab('catalogo')} className={`px-4 py-2 font-bold text-sm border-b-2 transition-colors ${activeTab === 'catalogo' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Catálogo de Productos</button>
+        <button onClick={() => setActiveTab('traspasos')} className={`px-4 py-2 font-bold text-sm border-b-2 transition-colors flex items-center gap-1.5 ${activeTab === 'traspasos' ? 'border-emerald-600 text-emerald-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+          <ArrowRightLeft size={16} /> Traspasos entre Sucursales
+        </button>
         <button onClick={() => setActiveTab('ajustes')} className={`px-4 py-2 font-bold text-sm border-b-2 transition-colors ${activeTab === 'ajustes' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Ajustes de Inventario</button>
         <button onClick={() => setActiveTab('politicas')} className={`px-4 py-2 font-bold text-sm border-b-2 transition-colors flex items-center gap-1.5 ${activeTab === 'politicas' ? 'border-amber-600 text-amber-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
           <ShieldCheck size={16} /> Políticas y Condiciones (Gerencia)
@@ -1066,9 +1086,7 @@ export default function Inventario() {
                     }
 
                     return listFiltered.map(p => {
-                      const stockP = allInventory['SUC-01']?.[p.id]?.stock_actual || 0;
-                      const stockN = allInventory['SUC-02']?.[p.id]?.stock_actual || 0;
-                      const totalStock = stockP + stockN;
+                      const totalStock = sucursalesList.reduce((acc, s) => acc + (allInventory[s.id]?.[p.id]?.stock_actual || 0), 0);
                       const negEffective = canSellNegative(p, politicas);
                       const currentNegRule = p.permitir_negativo || 'heredar';
                       const currentAllowsDisc = p.permite_descuento !== undefined ? Boolean(p.permite_descuento) : true;
@@ -1096,14 +1114,19 @@ export default function Inventario() {
 
                           {/* STOCK POR SUCURSALES */}
                           <td className="p-3.5 text-center">
-                            <div className="inline-flex items-center gap-2 bg-gray-50 border border-gray-200 px-2 py-1 rounded-xl text-xs">
-                              <span title="Sucursal Principal (SUC-01)" className={stockP <= 0 ? 'text-rose-600 font-bold' : 'text-gray-700'}>
-                                P: {stockP}
-                              </span>
-                              <span className="text-gray-300">|</span>
-                              <span title="Sucursal Norte (SUC-02)" className={stockN <= 0 ? 'text-rose-600 font-bold' : 'text-gray-700'}>
-                                N: {stockN}
-                              </span>
+                            <div className="inline-flex items-center gap-1.5 bg-gray-50 border border-gray-200 px-2.5 py-1 rounded-xl text-xs flex-wrap justify-center">
+                              {sucursalesList.map((s, sIdx) => {
+                                const stockVal = allInventory[s.id]?.[p.id]?.stock_actual || 0;
+                                const shortCode = s.codigo_visible || s.short || s.id;
+                                return (
+                                  <React.Fragment key={s.id}>
+                                    <span title={`${s.nombre || s.name} (${s.id})`} className={stockVal <= 0 ? 'text-rose-600 font-bold' : 'text-gray-700'}>
+                                      {shortCode}: {stockVal}
+                                    </span>
+                                    {sIdx < sucursalesList.length - 1 && <span className="text-gray-300">|</span>}
+                                  </React.Fragment>
+                                );
+                              })}
                               <span className="text-gray-300">|</span>
                               <span className={`font-black ${totalStock <= 0 ? 'text-rose-600' : 'text-green-700'}`}>
                                 Tot: {totalStock}
@@ -1181,6 +1204,15 @@ export default function Inventario() {
             </div>
           </div>
         </div>
+      )}
+
+      {activeTab === 'traspasos' && (
+        <TraspasosManager 
+          user={JSON.parse(localStorage.getItem('mingo_user') || '{}')} 
+          sucursalesProp={sucursalesList}
+          productsProp={products}
+          inventoryProp={allInventory}
+        />
       )}
 
       {activeTab === 'tablas_catalogos' && (
@@ -1328,7 +1360,9 @@ export default function Inventario() {
                 <div className="space-y-4">
                   <h3 className="font-bold text-blue-900 border-b pb-2 text-xs sm:text-sm uppercase tracking-wider flex items-center justify-between">
                     <span>Inventario de Bodega</span>
-                    <span className="text-blue-600 bg-blue-100 px-2 py-0.5 rounded text-xs">{sucursal}</span>
+                    <span className="text-blue-600 bg-blue-100 px-2 py-0.5 rounded text-xs font-mono font-bold">
+                      {sucursalesList.find(s => s.id === sucursal)?.codigo_visible || sucursal}
+                    </span>
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                     <div>

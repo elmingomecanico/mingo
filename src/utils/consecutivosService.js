@@ -7,7 +7,7 @@ import { DEFAULT_CONSECUTIVOS, formatConsecutive } from '../components/catalogos
  * (`ventas`, `productos`, `servicios`, `ordenes_taller`) directamente desde `configuracion/consecutivos/{entidad}`.
  * Evita colisiones cuando múltiples cajeros o bodegueros guardan registros simultáneamente.
  *
- * @param {'ventas'|'productos'|'servicios'|'ordenes_taller'} entidad
+ * @param {'ventas'|'productos'|'servicios'|'ordenes_taller'|'traspasos'} entidad
  * @param {Object|null} branchObj Objeto de sucursal opcional (para prefijo de sucursal en facturas)
  * @returns {Promise<{ numeroAsignado: number, codigoFormateado: string }>}
  */

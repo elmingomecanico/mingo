@@ -33,7 +33,7 @@ export const getBranchName = (sucId, list = null) => {
 export const getBranchShort = (sucId, list = null) => {
   const branches = list || SUCURSALES || DEFAULT_SUCURSALES;
   const found = branches.find(s => s.id === sucId);
-  return found ? (found.short || found.nombre || sucId) : sucId;
+  return found ? (found.codigo_visible || found.short || found.nombre || sucId) : sucId;
 };
 
 export default function POS() {
@@ -1481,7 +1481,7 @@ export default function POS() {
                 className="border border-gray-200 p-2 sm:p-2.5 rounded-xl bg-gray-50 font-bold text-xs sm:text-sm text-gray-700 outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
               >
                 {sucursalesList.map(s => (
-                  <option key={s.id} value={s.id}>{s.nombre || s.name} ({s.id})</option>
+                  <option key={s.id} value={s.id}>{s.nombre || s.name} ({s.codigo_visible || s.id})</option>
                 ))}
               </select>
             ) : (
@@ -1680,7 +1680,7 @@ export default function POS() {
                   className="border border-gray-200 p-2 rounded-lg bg-gray-50 font-bold text-sm text-gray-700 outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
                 >
                   {sucursalesList.map(s => (
-                    <option key={s.id} value={s.id}>{s.nombre || s.name} ({s.id})</option>
+                    <option key={s.id} value={s.id}>{s.nombre || s.name} ({s.codigo_visible || s.id})</option>
                   ))}
                 </select>
               ) : (

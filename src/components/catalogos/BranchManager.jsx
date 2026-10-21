@@ -3,7 +3,7 @@ import { ref, onValue, set, update } from 'firebase/database';
 import { rtdb } from '../../firebase';
 import { 
   Building2, Plus, Edit2, CheckCircle2, XCircle, MapPin, 
-  Phone, User, Hash, Palette, ShieldCheck, Sparkles, AlertCircle
+  Phone, User, Hash, Palette, ShieldCheck, Sparkles, AlertCircle, Lock
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -40,6 +40,7 @@ export default function BranchManager({ user }) {
 
   const [formData, setFormData] = useState({
     id: '',
+    codigo_visible: '',
     nombre: '',
     short: '',
     direccion: '',
@@ -57,6 +58,7 @@ export default function BranchManager({ user }) {
         const val = snap.val();
         const list = Object.keys(val).map(key => ({
           id: key,
+          codigo_visible: val[key].codigo_visible || key,
           ...val[key]
         }));
         setSucursales(list);
@@ -64,7 +66,7 @@ export default function BranchManager({ user }) {
         // Inicializar con las sucursales por defecto para no arrancar vacíos
         const initMap = {};
         DEFAULT_SUCURSALES.forEach(s => {
-          initMap[s.id] = s;
+          initMap[s.id] = { ...s, codigo_visible: s.codigo_visible || s.id };
         });
         await set(sucRef, initMap);
         setSucursales(DEFAULT_SUCURSALES);
@@ -80,6 +82,7 @@ export default function BranchManager({ user }) {
       setEditingBranch(branch);
       setFormData({
         id: branch.id,
+        codigo_visible: branch.codigo_visible || branch.id,
         nombre: branch.nombre || branch.name || '',
         short: branch.short || '',
         direccion: branch.direccion || '',
@@ -90,13 +93,15 @@ export default function BranchManager({ user }) {
         estado: branch.estado || 'Activa'
       });
     } else {
-      // Proponer siguiente ID disponible (ej: SUC-03)
+      // Proponer siguiente ID disponible (ej: SUC-03) y código visible (ej: SUC-3)
       const nextNum = sucursales.length + 1;
       const suggestedId = `SUC-${nextNum.toString().padStart(2, '0')}`;
+      const suggestedCodigoVisible = `SUC-${nextNum}`;
 
       setEditingBranch(null);
       setFormData({
         id: suggestedId,
+        codigo_visible: suggestedCodigoVisible,
         nombre: '',
         short: '',
         direccion: '',
@@ -112,14 +117,26 @@ export default function BranchManager({ user }) {
 
   const handleSave = async (e) => {
     e.preventDefault();
-    const cleanId = formData.id.trim().toUpperCase().replace(/\s+/g, '-');
-    if (!cleanId) return toast.error('El código identificador de la sucursal es requerido');
+    const cleanId = (editingBranch ? editingBranch.id : formData.id).trim().toUpperCase().replace(/\s+/g, '-');
+    const cleanCodigoVisible = (formData.codigo_visible || cleanId).trim().toUpperCase();
+
+    if (!cleanCodigoVisible) return toast.error('El código visible de la sucursal es requerido');
     if (!formData.nombre.trim()) return toast.error('El nombre de la sucursal es requerido');
+
+    // Validación de NO duplicidad en el código visible
+    const isDuplicateCode = sucursales.some(s => 
+      (!editingBranch || s.id !== editingBranch.id) && 
+      (s.codigo_visible || s.id).trim().toUpperCase() === cleanCodigoVisible
+    );
+    if (isDuplicateCode) {
+      return toast.error(`El código visible "${cleanCodigoVisible}" ya pertenece a otra sucursal. Ingrese uno diferente.`);
+    }
 
     try {
       const branchRef = ref(rtdb, `configuracion/sucursales/${cleanId}`);
-      await set(branchRef, {
+      const payload = {
         id: cleanId,
+        codigo_visible: cleanCodigoVisible,
         nombre: formData.nombre.trim(),
         name: formData.nombre.trim(),
         short: formData.short.trim() || formData.nombre.trim().split(' ')[0],
@@ -131,9 +148,11 @@ export default function BranchManager({ user }) {
         estado: formData.estado,
         actualizado_en: new Date().toISOString(),
         actualizado_por: user?.nombre_completo || 'SuperAdmin'
-      });
+      };
 
-      toast.success(editingBranch ? 'Sucursal actualizada con éxito' : 'Nueva sucursal registrada con éxito');
+      await update(branchRef, payload);
+
+      toast.success(editingBranch ? `Sucursal actualizada con éxito (${cleanCodigoVisible})` : `Nueva sucursal registrada (${cleanCodigoVisible})`);
       setIsModalOpen(false);
     } catch (err) {
       toast.error('Error al guardar sucursal: ' + err.message);
@@ -201,8 +220,11 @@ export default function BranchManager({ user }) {
                 <div className="flex items-start justify-between gap-2 mb-3">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md border font-mono ${colorCls}`}>
-                        {s.id}
+                      <span className={`text-[11px] font-black uppercase px-2.5 py-0.5 rounded-md border font-mono ${colorCls}`}>
+                        {s.codigo_visible || s.id}
+                      </span>
+                      <span className="text-[10px] text-gray-400 font-mono">
+                        (ID: {s.id})
                       </span>
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isActiva ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}>
                         {isActiva ? '● Activa' : '○ Inactiva'}
@@ -296,19 +318,48 @@ export default function BranchManager({ user }) {
                 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-bold text-gray-600 uppercase mb-1">
-                      Código Identificador *
+                    <label className="block text-xs font-bold text-gray-700 uppercase mb-1 flex items-center justify-between">
+                      <span className="flex items-center gap-1">Código Visible / Comercial *</span>
+                      <span className="text-[10px] text-blue-600 font-bold lowercase">editable</span>
                     </label>
                     <input
                       required
                       type="text"
-                      disabled={!!editingBranch}
-                      placeholder="Ej: SUC-03"
-                      value={formData.id}
-                      onChange={e => setFormData({ ...formData, id: e.target.value })}
-                      className="w-full border p-2.5 rounded-xl text-sm font-bold font-mono uppercase outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+                      placeholder="Ej: SUC-1, SUC-01, CENTRAL..."
+                      value={formData.codigo_visible}
+                      onChange={e => setFormData({ ...formData, codigo_visible: e.target.value })}
+                      className="w-full border-2 border-blue-200 p-2.5 rounded-xl text-sm font-bold font-mono uppercase outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
                     />
-                    <p className="text-[10px] text-gray-400 mt-0.5">Clave única de la sucursal (ej: SUC-01, SUC-02, SUC-03)</p>
+                    <p className="text-[10px] text-gray-500 mt-0.5">El código que verán los usuarios en tickets, reportes y pantallas (ej. SUC-1)</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1 flex items-center gap-1">
+                      <Lock size={12} className="text-gray-400" /> ID Interno del Sistema
+                    </label>
+                    <input
+                      type="text"
+                      disabled
+                      value={formData.id}
+                      className="w-full border p-2.5 rounded-xl text-sm font-bold font-mono uppercase bg-gray-100 text-gray-500 cursor-not-allowed"
+                    />
+                    <p className="text-[10px] text-gray-400 mt-0.5">Llave primaria inmutable para garantizar la integridad histórica</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 uppercase mb-1">
+                      Nombre Oficial de la Sucursal *
+                    </label>
+                    <input
+                      required
+                      type="text"
+                      placeholder="Ej: Sucursal Principal - Taller El Mingo"
+                      value={formData.nombre}
+                      onChange={e => setFormData({ ...formData, nombre: e.target.value })}
+                      className="w-full border p-2.5 rounded-xl text-sm font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500"
+                    />
                   </div>
 
                   <div>
@@ -318,27 +369,13 @@ export default function BranchManager({ user }) {
                     <input
                       required
                       type="text"
-                      placeholder="Ej: Linda Vista, Central..."
+                      placeholder="Ej: Principal, Norte, Central..."
                       value={formData.short}
                       onChange={e => setFormData({ ...formData, short: e.target.value })}
                       className="w-full border p-2.5 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500"
                     />
-                    <p className="text-[10px] text-gray-400 mt-0.5">Para botones y selectores compactos en POS</p>
+                    <p className="text-[10px] text-gray-400 mt-0.5">Para botones y selectores compactos</p>
                   </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-gray-600 uppercase mb-1">
-                    Nombre Oficial de la Sucursal *
-                  </label>
-                  <input
-                    required
-                    type="text"
-                    placeholder="Ej: Sucursal Linda Vista - Taller El Mingo"
-                    value={formData.nombre}
-                    onChange={e => setFormData({ ...formData, nombre: e.target.value })}
-                    className="w-full border p-2.5 rounded-xl text-sm font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500"
-                  />
                 </div>
 
                 <div>
