@@ -21,6 +21,7 @@ export default function Servicios() {
   });
 
   useEffect(() => {
+    const safetyTimer = setTimeout(() => setLoading(false), 3000);
     const servRef = ref(rtdb, 'servicios');
     const unsubServ = onValue(servRef, (snapshot) => {
       if (snapshot.exists()) {
@@ -31,7 +32,7 @@ export default function Servicios() {
         setServicios([]);
       }
       setLoading(false);
-    });
+    }, () => setLoading(false));
 
     const consRef = ref(rtdb, 'configuracion/consecutivos');
     const unsubCons = onValue(consRef, (snapshot) => {
@@ -41,6 +42,7 @@ export default function Servicios() {
     });
 
     return () => {
+      clearTimeout(safetyTimer);
       unsubServ();
       unsubCons();
     };

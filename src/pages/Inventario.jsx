@@ -147,6 +147,8 @@ export default function Inventario() {
       }
     });
 
+    const safetyTimer = setTimeout(() => setLoading(false), 3000);
+
     const unsubProds = onValue(prodsRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
@@ -154,7 +156,7 @@ export default function Inventario() {
       } else {
         setRawProducts([]);
       }
-    });
+    }, () => setLoading(false));
 
     const unsubImgs = subscribeProductImages(setProductImagesMap);
 
@@ -162,12 +164,12 @@ export default function Inventario() {
       if (snapshot.exists()) setInventory(snapshot.val());
       else setInventory({});
       setLoading(false);
-    });
+    }, () => setLoading(false));
 
     const unsubAllInv = onValue(allInvRef, (snapshot) => {
       if (snapshot.exists()) setAllInventory(snapshot.val());
       else setAllInventory({});
-    });
+    }, () => setLoading(false));
 
     const unsubPoliticas = onValue(politicasRef, (snapshot) => {
       if (snapshot.exists()) {
@@ -203,6 +205,7 @@ export default function Inventario() {
     });
 
     return () => {
+      clearTimeout(safetyTimer);
       unsubProds(); unsubImgs(); unsubInv(); unsubAllInv(); unsubPoliticas(); unsubCat(); unsubUbi(); unsubMod(); unsubAjustes(); unsubCons(); unsubSucursales();
     };
   }, [sucursal]);

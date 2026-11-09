@@ -178,17 +178,20 @@ export default function Kardex() {
       setLoading(false);
     };
 
+    const safetyTimer = setTimeout(() => setLoading(false), 3000);
+
     const unsubKardex = onValue(kardexRef, (snapshot) => {
       rawKardex = snapshot.exists() ? snapshot.val() : {};
       processAll();
-    });
+    }, () => setLoading(false));
 
     const unsubVentas = onValue(ventasRef, (snapshot) => {
       rawVentas = snapshot.exists() ? snapshot.val() : {};
       processAll();
-    });
+    }, () => setLoading(false));
 
     return () => {
+      clearTimeout(safetyTimer);
       unsubProd();
       unsubKardex();
       unsubVentas();

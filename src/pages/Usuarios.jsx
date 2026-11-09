@@ -71,6 +71,7 @@ export default function Usuarios() {
   });
 
   useEffect(() => {
+    const safetyTimer = setTimeout(() => setLoading(false), 3000);
     const usersRef = ref(rtdb, 'usuarios');
     const unsub = onValue(usersRef, (snapshot) => {
       if (snapshot.exists()) {
@@ -81,7 +82,7 @@ export default function Usuarios() {
         setUsuarios([]);
       }
       setLoading(false);
-    });
+    }, () => setLoading(false));
 
     const cajasRef = ref(rtdb, 'configuracion/cajas');
     const unsubCajas = onValue(cajasRef, (snapshot) => {

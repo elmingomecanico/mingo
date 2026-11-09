@@ -125,6 +125,8 @@ export default function Compras() {
       } else setInventario({});
     });
 
+    const safetyTimer = setTimeout(() => setLoading(false), 3000);
+
     const unsubComp = onValue(compRef, (snapshot) => {
       if (snapshot.exists()) {
         const val = snapshot.val();
@@ -133,7 +135,7 @@ export default function Compras() {
         setCompras(parsed);
       } else setCompras([]);
       setLoading(false);
-    });
+    }, () => setLoading(false));
 
     const unsubCat = onValue(catRef, (snapshot) => {
       if (snapshot.exists()) {
@@ -148,6 +150,7 @@ export default function Compras() {
     });
 
     return () => { 
+      clearTimeout(safetyTimer);
       unsubProv(); unsubProd(); unsubImages(); unsubInv(); unsubComp(); unsubCat(); unsubUbi(); 
     };
   }, [sucursal]);

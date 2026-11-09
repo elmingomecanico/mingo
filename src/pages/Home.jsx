@@ -13,8 +13,21 @@ export default function Home() {
   const [totalCxCPendiente, setTotalCxCPendiente] = useState(0);
   const [totalCxPPendiente, setTotalCxPPendiente] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [hasConnectionIssue, setHasConnectionIssue] = useState(false);
 
   useEffect(() => {
+    // Timeout de seguridad: Si la base de datos tarda más de 2.5s o falla por permisos,
+    // liberamos el estado de carga para no congelar la pantalla.
+    const safetyTimeout = setTimeout(() => {
+      setLoading(false);
+    }, 2500);
+
+    const handleError = (source, err) => {
+      console.warn(`[Dashboard] Advertencia al sincronizar ${source}:`, err?.message || err);
+      setHasConnectionIssue(true);
+      setLoading(false);
+    };
+
     // 1. Obtener Ventas de Hoy
     const ventasRef = ref(rtdb, 'ventas');
     const unsubVentas = onValue(ventasRef, (snapshot) => {
@@ -33,10 +46,9 @@ export default function Home() {
         setVentasHoy(hoyCount);
         setMontoVentasHoy(hoyMonto);
       }
-    });
+    }, (err) => handleError('ventas', err));
 
     // 2. Obtener Alertas de Stock
-    // Necesitamos productos e inventario
     const prodRef = ref(rtdb, 'productos');
     const invRef = ref(rtdb, `inventario/${user?.id_sucursal || 'SUC-01'}`);
     
@@ -65,14 +77,14 @@ export default function Home() {
         productos = Object.keys(snapshot.val()).map(k => ({ id: k, ...snapshot.val()[k] }));
         calcStock();
       }
-    });
+    }, (err) => handleError('productos', err));
 
     const unsubInv = onValue(invRef, (snapshot) => {
       if (snapshot.exists()) {
         inventario = snapshot.val();
         calcStock();
       }
-    });
+    }, (err) => handleError('inventario', err));
 
     // 3. Obtener CxC Pendiente
     const cxcRef = ref(rtdb, 'cxc');
@@ -86,7 +98,7 @@ export default function Home() {
         });
       }
       setTotalCxCPendiente(pending);
-    });
+    }, (err) => handleError('cxc', err));
 
     // 4. Obtener CxP Pendiente
     const cxpRef = ref(rtdb, 'cxp');
@@ -101,9 +113,10 @@ export default function Home() {
       }
       setTotalCxPPendiente(pending);
       setLoading(false);
-    });
+    }, (err) => handleError('cxp', err));
 
     return () => {
+      clearTimeout(safetyTimeout);
       unsubVentas();
       unsubProd();
       unsubInv();
@@ -122,7 +135,15 @@ export default function Home() {
   ];
 
   if (loading) {
-    return <div className="p-8 text-center text-gray-500">Cargando métricas...</div>;
+    return (
+      <div className="p-12 flex flex-col items-center justify-center space-y-4 text-center min-h-[300px]">
+        <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+        <div>
+          <p className="text-sm font-bold text-gray-700">Sincronizando métricas con Firebase...</p>
+          <p className="text-xs text-gray-400 mt-1">Conectando con la base de datos en tiempo real</p>
+        </div>
+      </div>
+    );
   }
 
   return (

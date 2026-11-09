@@ -36,6 +36,7 @@ export default function Clientes() {
   });
 
   useEffect(() => {
+    const timer = setTimeout(() => setLoading(false), 3000);
     const listRef = ref(rtdb, 'clientes');
     const unsub = onValue(listRef, (snapshot) => {
       if (snapshot.exists()) {
@@ -46,8 +47,12 @@ export default function Clientes() {
         setClientes([]);
       }
       setLoading(false);
-    });
-    return () => unsub();
+    }, () => setLoading(false));
+
+    return () => {
+      clearTimeout(timer);
+      unsub();
+    };
   }, []);
 
   const handleOpenModal = (item = null) => {

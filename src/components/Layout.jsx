@@ -4,6 +4,7 @@ import { Home, ShoppingCart, Package, BarChart2, Settings, LogOut, Activity, Use
 import { Toaster } from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import logoIcon from '../assets/logo-icon.jpg';
+import FirebaseHealthBanner from './FirebaseHealthBanner';
 
 export default function Layout({ children }) {
   const location = useLocation();
@@ -188,6 +189,7 @@ export default function Layout({ children }) {
         </div>
 
         <div className="flex-1 overflow-y-auto bg-gray-50/50 p-4 md:p-8 pb-20 md:pb-8">
+          <FirebaseHealthBanner />
           {children}
         </div>
       </div>

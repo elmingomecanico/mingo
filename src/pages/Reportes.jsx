@@ -54,6 +54,7 @@ export default function Reportes() {
   };
 
   useEffect(() => {
+    const safetyTimer = setTimeout(() => setLoading(false), 3000);
     const ventasRef = ref(rtdb, 'ventas');
     const turnosRef = ref(rtdb, 'turnos_caja');
     
@@ -70,7 +71,7 @@ export default function Reportes() {
         setVentas([]);
       }
       setLoading(false);
-    });
+    }, () => setLoading(false));
 
     const unsubTurnos = onValue(turnosRef, (snapshot) => {
       if (snapshot.exists()) {

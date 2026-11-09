@@ -51,7 +51,12 @@ export function AuthProvider({ children }) {
         return false;
       }
     } catch (error) {
-      toast.error("Error de conexión: " + error.message);
+      const msg = error?.message || '';
+      if (msg.includes('permission_denied') || msg.includes('Permission denied')) {
+        toast.error("Error de permisos en Firebase: Las reglas de la base de datos están bloqueadas o expiraron. Verifique las reglas en la consola de Firebase.", { duration: 6000 });
+      } else {
+        toast.error("Error de conexión: " + error.message);
+      }
       return false;
     }
   };
