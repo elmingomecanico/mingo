@@ -5,27 +5,47 @@ export default function ConfirmModal({ isOpen, title, message, onConfirm, onCanc
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in overflow-hidden">
-      <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden flex flex-col max-h-[92vh] scale-in-center">
-        <div className="p-4 sm:p-6 overflow-y-auto flex-1">
-          <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-4 ${isDanger ? 'bg-red-100 text-red-600' : 'bg-yellow-100 text-yellow-600'}`}>
-            <AlertTriangle size={24} />
+    <div 
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+      onClick={onCancel}
+    >
+      <div 
+        className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 border border-gray-100"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="p-5 sm:p-6">
+          <div className="flex items-start gap-3.5">
+            <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 shadow-xs ${isDanger ? 'bg-rose-50 text-rose-600 border border-rose-100' : 'bg-amber-50 text-amber-600 border border-amber-100'}`}>
+              <AlertTriangle size={22} />
+            </div>
+            <div className="flex-1 min-w-0 pt-0.5">
+              <h2 className="text-base sm:text-lg font-black text-gray-900 leading-snug">{title}</h2>
+              <div className="mt-2 text-xs sm:text-sm text-gray-600 leading-relaxed whitespace-pre-line">{message}</div>
+            </div>
+            <button 
+              type="button" 
+              onClick={onCancel}
+              className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100 transition-colors"
+            >
+              <X size={18} />
+            </button>
           </div>
-          <h2 className="text-xl font-black text-gray-800 mb-2">{title}</h2>
-          <p className="text-gray-500 text-sm leading-relaxed">{message}</p>
         </div>
         
-        <div className="p-3 sm:p-4 bg-gray-50 flex justify-end gap-3 border-t border-gray-100 shrink-0">
+        <div className="p-3 sm:p-4 bg-gray-50/90 border-t border-gray-100 flex justify-end gap-2.5 shrink-0">
           <button 
+            type="button"
             onClick={onCancel} 
-            className="px-4 py-2 rounded-xl text-gray-600 font-bold hover:bg-gray-200 transition-colors"
+            className="px-4 py-2 rounded-xl text-gray-700 font-bold hover:bg-gray-200 text-xs sm:text-sm transition-colors cursor-pointer"
           >
             {cancelText}
           </button>
           <button 
+            type="button"
             onClick={onConfirm} 
-            className={`px-5 py-2 rounded-xl font-bold text-white shadow-md transition-all active:scale-95 ${
-              isDanger ? 'bg-red-600 hover:bg-red-700 shadow-red-200' : 'bg-yellow-500 hover:bg-yellow-600 shadow-yellow-200'
+            autoFocus
+            className={`px-5 py-2 rounded-xl font-bold text-white text-xs sm:text-sm shadow-md transition-all active:scale-95 cursor-pointer ${
+              isDanger ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-200' : 'bg-amber-500 hover:bg-amber-600 shadow-amber-200'
             }`}
           >
             {confirmText}

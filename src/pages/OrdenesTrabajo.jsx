@@ -3,9 +3,11 @@ import { ref, onValue, update, remove } from 'firebase/database';
 import { rtdb } from '../firebase';
 import { Wrench, Clock, CheckCircle2, AlertCircle, User, FileText, DollarSign, Award, Sparkles, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useConfirm } from '../context/ConfirmContext';
 import { useAuth } from '../context/AuthContext';
 
 export default function OrdenesTrabajo() {
+  const { confirm } = useConfirm();
   const { user } = useAuth();
   const [ordenes, setOrdenes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -83,9 +85,14 @@ export default function OrdenesTrabajo() {
 
   const handleDeleteOT = async (ot) => {
     const num = ot.numero_factura || ot.id;
-    if (!window.confirm(`¿Estás seguro de eliminar la Orden de Trabajo de la factura ${num}? Esta acción eliminará el registro de prueba.`)) {
-      return;
-    }
+    const ok = await confirm({
+      title: '¿Eliminar Orden de Trabajo?',
+      message: `¿Estás seguro de eliminar la Orden de Trabajo de la factura ${num}?`,
+      confirmText: 'Sí, Eliminar Orden',
+      cancelText: 'Cancelar',
+      isDanger: true
+    });
+    if (!ok) return;
     try {
       await remove(ref(rtdb, `ordenes_trabajo/${ot.id}`));
       toast.success(`Orden de Trabajo eliminada correctamente`);

@@ -8,9 +8,11 @@ import CashTicketPrinter from '../components/CashTicketPrinter';
 import ReporteGerencialCajas from '../components/reportes/ReporteGerencialCajas';
 import { useAuth } from '../context/AuthContext';
 import { reverseAndDeleteSale } from '../utils/integrityService';
+import { useConfirm } from '../context/ConfirmContext';
 
 export default function Reportes() {
   const { user } = useAuth();
+  const { confirm } = useConfirm();
   const [activeTab, setActiveTab] = useState('gerencial'); // 'gerencial' | 'ventas' | 'cierres'
   const [ventas, setVentas] = useState([]);
   const [turnos, setTurnos] = useState([]);
@@ -28,9 +30,14 @@ export default function Reportes() {
 
   const handleDeleteVenta = async (venta) => {
     const num = venta.numero_factura || venta.id;
-    if (!window.confirm(`¿Estás seguro de anular/eliminar la factura ${num}?\n\nEsta acción ejecutará una reversión completa en cascada:\n• Devolverá el stock físico de los repuestos vendidos a la bodega\n• Registrará la entrada por anulación en el Kardex\n• Eliminará la Cuenta por Cobrar (CxC), Orden de Trabajo (OT) o Deuda de Empleado asociada\n• Revertirá el ingreso en el turno de caja o cuenta bancaria.`)) {
-      return;
-    }
+    const ok = await confirm({
+      title: '¿Anular y Eliminar Factura?',
+      message: `¿Estás seguro de anular/eliminar la factura ${num}?\n\nEsta acción ejecutará una reversión completa en cascada:\n• Devolverá el stock físico de los repuestos vendidos a la bodega\n• Registrará la entrada por anulación en el Kardex\n• Eliminará la Cuenta por Cobrar (CxC), Orden de Trabajo (OT) o Deuda de Empleado asociada\n• Revertirá el ingreso en el turno de caja o cuenta bancaria.`,
+      confirmText: 'Sí, Anular Factura',
+      cancelText: 'Cancelar',
+      isDanger: true
+    });
+    if (!ok) return;
     const toastId = toast.loading(`Anulando venta ${num} y revirtiendo registros...`);
     try {
       await reverseAndDeleteSale(venta, user?.nombre_completo || 'SuperAdmin');
@@ -42,9 +49,14 @@ export default function Reportes() {
 
   const handleDeleteTurno = async (turno) => {
     const num = turno.numero_turno || turno.id;
-    if (!window.confirm(`¿Estás seguro de eliminar el registro de turno de caja ${num}? Se eliminará el acta de arqueo.`)) {
-      return;
-    }
+    const ok = await confirm({
+      title: '¿Eliminar Turno de Caja?',
+      message: `¿Estás seguro de eliminar el registro de turno de caja ${num}? Se eliminará el acta de arqueo.`,
+      confirmText: 'Sí, Eliminar Turno',
+      cancelText: 'Cancelar',
+      isDanger: true
+    });
+    if (!ok) return;
     try {
       await remove(ref(rtdb, `turnos_caja/${turno.id}`));
       toast.success(`Turno ${num} eliminado correctamente`);
@@ -359,7 +371,7 @@ export default function Reportes() {
                     return (
                       <tr key={turno.id} className="hover:bg-gray-50 transition-colors">
                         <td className="p-4 font-mono font-black text-gray-800">
-                          {turno.numero_turno || turno.id.substring(0, 8)}
+                          {turno.numero_turno || (turno.id?.startsWith('-') ? 'TURNO' : turno.id)}
                         </td>
                         <td className="p-4 text-xs text-gray-600">
                           <div>

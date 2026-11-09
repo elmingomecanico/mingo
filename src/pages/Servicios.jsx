@@ -5,8 +5,10 @@ import { Wrench, Plus, Edit2, Trash2, Search, DollarSign, Hash, Lock, Sparkles }
 import toast from 'react-hot-toast';
 import { DEFAULT_CONSECUTIVOS, formatConsecutive } from '../components/catalogos/ConsecutivosManager';
 import { consumeNextConsecutiveAtomic, checkDuplicateCodigoVisible } from '../utils/consecutivosService';
+import { useConfirm } from '../context/ConfirmContext';
 
 export default function Servicios() {
+  const { confirm } = useConfirm();
   const [servicios, setServicios] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -132,7 +134,14 @@ export default function Servicios() {
   };
 
   const handleDelete = async (id, nombre) => {
-    if (!window.confirm(`¿Estás seguro de eliminar el servicio "${nombre}"?`)) return;
+    const ok = await confirm({
+      title: '¿Eliminar servicio?',
+      message: `¿Estás seguro de eliminar el servicio "${nombre}" del catálogo?`,
+      confirmText: 'Sí, Eliminar Servicio',
+      cancelText: 'Cancelar',
+      isDanger: true
+    });
+    if (!ok) return;
     try {
       await remove(ref(rtdb, `servicios/${id}`));
       toast.success("Servicio eliminado");
@@ -208,11 +217,6 @@ export default function Servicios() {
                         <span className="font-mono font-bold text-xs text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
                           {serv.codigo_visible || serv.id}
                         </span>
-                        {serv.codigo_visible && serv.codigo_visible !== serv.id && (
-                          <span className="font-mono text-[9px] text-gray-400 truncate max-w-[100px]" title={`UUID interno en Firebase: ${serv.id}`}>
-                            UUID: {serv.id.substring(0, 8)}...
-                          </span>
-                        )}
                       </div>
                     </td>
                     <td className="p-4 font-bold text-gray-800">{serv.nombre}</td>
@@ -248,7 +252,7 @@ export default function Servicios() {
                 </h2>
                 {editingId && (
                   <span className="text-[10px] font-mono text-gray-500 flex items-center gap-1">
-                    <Lock size={10} /> UUID: {editingId}
+                    <span className="font-bold text-purple-700">{formData.codigo_visible}</span>
                   </span>
                 )}
               </div>
@@ -282,7 +286,7 @@ export default function Servicios() {
                     className="w-full border-2 border-purple-300 p-2.5 rounded-xl outline-none focus:border-purple-600 font-mono font-bold text-sm text-purple-900 bg-white"
                   />
                   <p className="text-[11px] text-purple-800 leading-tight">
-                    ✨ <strong>Personalizable:</strong> Letras, números y símbolos permitidos con UUID único interno.
+                    ✨ <strong>Personalizable:</strong> Letras, números y guiones permitidos. Puedes editarlo libremente en cualquier momento.
                   </p>
                 </div>
 

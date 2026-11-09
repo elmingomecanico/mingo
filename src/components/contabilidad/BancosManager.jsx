@@ -8,6 +8,7 @@ import {
   Sparkles, Wallet, Landmark, ShieldCheck, Tag, Info
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useConfirm } from '../../context/ConfirmContext';
 
 export const BANCOS_NICARAGUA = [
   'BAC Credomatic',
@@ -293,9 +294,14 @@ export default function BancosManager({ cuentasBancarias = [], movimientosBancar
     if (!cuentaOrigen || !cuentaDestino) return toast.error('Cuentas no encontradas');
 
     if ((Number(cuentaOrigen.saldo_actual) || 0) < montoNum) {
-      if (!window.confirm(`⚠️ Advertencia: La cuenta origen tiene C$ ${Number(cuentaOrigen.saldo_actual || 0).toFixed(2)}, menor al monto a transferir (${montoNum.toFixed(2)}). ¿Desea proceder con saldo negativo?`)) {
-        return;
-      }
+      const ok = await confirm({
+        title: 'Advertencia de Saldo Insuficiente',
+        message: `La cuenta origen tiene C$ ${Number(cuentaOrigen.saldo_actual || 0).toFixed(2)}, menor al monto a transferir (${montoNum.toFixed(2)}).\n\n¿Desea proceder con saldo negativo?`,
+        confirmText: 'Proceder con saldo negativo',
+        cancelText: 'Cancelar',
+        isDanger: true
+      });
+      if (!ok) return;
     }
 
     try {

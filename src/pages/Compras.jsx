@@ -663,18 +663,25 @@ export default function Compras() {
     }
   };
 
-  const handleDeleteCompra = async (compra) => {
+  const handleDeleteCompra = (compra) => {
     const num = compra.numero_factura || compra.id;
-    if (!window.confirm(`¿Estás seguro de anular/eliminar la compra "${num}" de ${compra.nombre_proveedor}?\n\nEsta acción:\n• Revertirá del inventario las unidades ingresadas\n• Registrará la salida por anulación en el Kardex\n• Eliminará la Cuenta por Pagar (CxP) o egreso contable asociado.`)) {
-      return;
-    }
-    const toastId = toast.loading(`Anulando compra ${num} y revirtiendo stock...`);
-    try {
-      await reverseAndDeletePurchase(compra, 'Compras');
-      toast.success(`Compra "${num}" anulada y stock revertido correctamente`, { id: toastId });
-    } catch (err) {
-      toast.error('Error al anular compra: ' + err.message, { id: toastId });
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: '¿Anular y Eliminar Factura de Compra?',
+      message: `¿Estás seguro de anular/eliminar la compra "${num}" de ${compra.nombre_proveedor}?\n\nEsta acción ejecutará una reversión completa:\n• Revertirá del inventario las unidades ingresadas\n• Registrará la salida por anulación en el Kardex\n• Eliminará la Cuenta por Pagar (CxP) o egreso contable asociado.`,
+      isDanger: true,
+      confirmText: 'Sí, Anular Compra',
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        const toastId = toast.loading(`Anulando compra ${num} y revirtiendo stock...`);
+        try {
+          await reverseAndDeletePurchase(compra, 'Compras');
+          toast.success(`Compra "${num}" anulada y stock revertido correctamente`, { id: toastId });
+        } catch (err) {
+          toast.error('Error al anular compra: ' + err.message, { id: toastId });
+        }
+      }
+    });
   };
 
   return (

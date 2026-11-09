@@ -24,6 +24,7 @@ import {
 } from '../utils/storageService';
 import { consumeNextConsecutiveAtomic, checkDuplicateCodigoVisible } from '../utils/consecutivosService';
 import { deleteProductCleanly } from '../utils/integrityService';
+import { useConfirm } from '../context/ConfirmContext';
 
 export const canSellNegative = (product, globalPoliticas) => {
   if (!product) return false;
@@ -64,6 +65,7 @@ export default function Inventario() {
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [consecutivosConfig, setConsecutivosConfig] = useState(DEFAULT_CONSECUTIVOS);
+  const { confirm } = useConfirm();
 
   // Hidratar productos con su imagen desde el nodo independiente WebP o R2
   const products = React.useMemo(() => {
@@ -247,7 +249,14 @@ export default function Inventario() {
       actionType === 'habilitar_descuentos' ? '¿Habilitar descuentos a TODOS los productos?' :
       '¿Bloquear descuentos a TODOS los productos?';
 
-    if (!window.confirm(confirmMsg)) return;
+    const ok = await confirm({
+      title: 'Actualización Masiva de Políticas',
+      message: confirmMsg,
+      confirmText: 'Aplicar Cambio',
+      cancelText: 'Cancelar',
+      isDanger: actionType === 'bloquear_todos' || actionType === 'bloquear_descuentos'
+    });
+    if (!ok) return;
 
     setSavingPoliticas(true);
     try {
@@ -347,9 +356,15 @@ export default function Inventario() {
   };
 
   const handleDeleteProduct = async (id, name) => {
-    if (!window.confirm(`¿Estás seguro de eliminar el producto "${name}"? Se eliminará del catálogo, del nodo de imágenes y del inventario de todas las sucursales.`)) {
-      return;
-    }
+    const ok = await confirm({
+      title: '¿Eliminar producto del catálogo?',
+      message: `¿Estás seguro de eliminar el producto "${name}"?\n\nEsta acción eliminará el repuesto del catálogo general, sus imágenes y sus existencias en todas las sucursales.`,
+      confirmText: 'Sí, Eliminar Producto',
+      cancelText: 'Cancelar',
+      isDanger: true
+    });
+    if (!ok) return;
+
     try {
       await deleteProductCleanly(id);
       toast.success(`Producto "${name}" eliminado limpiamente de todas las sucursales`);
@@ -731,11 +746,6 @@ export default function Inventario() {
                               <span className="font-mono font-bold text-xs text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
                                 {prod.codigo_visible || prod.id}
                               </span>
-                              {prod.codigo_visible && prod.codigo_visible !== prod.id && (
-                                <span className="font-mono text-[9px] text-gray-400 truncate max-w-[100px]" title={`UUID interno en base de datos: ${prod.id}`}>
-                                  UUID: {prod.id.substring(0, 8)}...
-                                </span>
-                              )}
                             </div>
                           </div>
                         </td>
@@ -1319,13 +1329,20 @@ export default function Inventario() {
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm animate-in fade-in overflow-hidden">
           <div className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
             <div className="p-4 sm:p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/80 shrink-0">
-              <h2 className="text-base sm:text-lg font-black text-gray-800">
-                {editingId ? `Editar Producto: ${editingId}` : 'Nuevo Producto'}
-              </h2>
+              <div className="flex flex-col">
+                <h2 className="text-base sm:text-lg font-black text-gray-800">
+                  {editingId ? 'Editar Producto' : 'Nuevo Producto'}
+                </h2>
+                {editingId && (
+                  <p className="text-xs text-blue-700 font-bold truncate max-w-sm sm:max-w-md mt-0.5">
+                    {formData.name || 'Sin nombre'} {formData.codigo_visible ? `(${formData.codigo_visible})` : ''}
+                  </p>
+                )}
+              </div>
               <button 
                 type="button" 
                 onClick={() => setIsModalOpen(false)} 
-                className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors font-bold text-xl"
+                className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors font-bold text-xl cursor-pointer"
               >
                 &times;
               </button>
@@ -1337,11 +1354,9 @@ export default function Inventario() {
                 <div className="space-y-4">
                   <h3 className="font-bold text-blue-900 border-b pb-2 text-xs sm:text-sm uppercase tracking-wider flex items-center justify-between">
                     <span>Identificación Comercial y Códigos</span>
-                    {editingId && (
-                      <span className="text-[11px] font-mono font-semibold bg-gray-100 text-gray-600 px-2.5 py-0.5 rounded-full flex items-center gap-1 border border-gray-200">
-                        <Lock size={11} /> UUID: {editingId}
-                      </span>
-                    )}
+                    <span className="text-[11px] font-semibold bg-emerald-50 text-emerald-700 px-2.5 py-0.5 rounded-full flex items-center gap-1 border border-emerald-200">
+                      <ShieldCheck size={12} /> Registro Protegido
+                    </span>
                   </h3>
 
                   {/* Campo de Código Visible / SKU Comercial */}
@@ -1369,8 +1384,9 @@ export default function Inventario() {
                       placeholder="Ej: #REP-001, 10W40*, MOT-YMH-01, etc."
                       className="w-full border-2 border-blue-300 p-2.5 rounded-xl outline-none focus:border-blue-600 font-mono font-bold text-sm text-blue-900 bg-white"
                     />
-                    <p className="text-[11px] text-blue-800 leading-tight">
-                      ✨ <strong>Libertad de formato:</strong> Puede contener letras, números y símbolos especiales. Cada producto mantiene un UUID interno único e inalterable en base de datos.
+                    <p className="text-[11px] text-blue-800 leading-tight flex items-center gap-1">
+                      <Sparkles size={12} className="text-blue-600 shrink-0" />
+                      <span><strong>Libertad de formato:</strong> Puede contener letras, números y guiones. Puedes editarlo libremente en cualquier momento sin alterar ventas ni existencias.</span>
                     </p>
                   </div>
 

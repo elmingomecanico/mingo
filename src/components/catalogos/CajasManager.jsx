@@ -6,6 +6,7 @@ import {
   UserX, ShieldCheck, Sparkles, AlertCircle, Building2, Lock, LockOpen 
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useConfirm } from '../../context/ConfirmContext';
 
 export const DEFAULT_CAJAS = [
   {
@@ -274,9 +275,14 @@ export default function CajasManager({ user }) {
     if (turnosAbiertos[caja.id]) {
       return toast.error(`No puedes eliminar "${caja.nombre}" porque tiene un turno de caja abierto en este momento.`);
     }
-    if (!window.confirm(`¿Estás seguro de eliminar la caja registradora "${caja.nombre}" (${caja.codigo})? Esta acción no se puede deshacer.`)) {
-      return;
-    }
+    const ok = await confirm({
+      title: '¿Eliminar caja registradora?',
+      message: `¿Estás seguro de eliminar la caja registradora "${caja.nombre}" (${caja.codigo})? Esta acción no se puede deshacer.`,
+      confirmText: 'Sí, Eliminar Caja',
+      cancelText: 'Cancelar',
+      isDanger: true
+    });
+    if (!ok) return;
 
     try {
       if (caja.usuario_asignado_id) {

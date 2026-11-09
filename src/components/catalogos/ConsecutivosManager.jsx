@@ -6,6 +6,7 @@ import {
   Wrench, ShieldCheck, CheckCircle2, AlertCircle, Info, Lock, ArrowRightLeft
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useConfirm } from '../../context/ConfirmContext';
 
 export const DEFAULT_CONSECUTIVOS = {
   ventas: {
@@ -105,7 +106,15 @@ export default function ConsecutivosManager({ user }) {
   };
 
   const handleReset = async () => {
-    if (!window.confirm('¿Desea restablecer las reglas de numeración a los valores estándar?')) return;
+    const ok = await confirm({
+      title: '¿Restablecer reglas de numeración?',
+      message: '¿Desea restablecer todas las reglas de numeración y correlativos a los valores estándar de fábrica?',
+      confirmText: 'Restablecer',
+      cancelText: 'Cancelar',
+      isDanger: false,
+      type: 'warning'
+    });
+    if (!ok) return;
     setConfig(DEFAULT_CONSECUTIVOS);
     try {
       await set(ref(rtdb, 'configuracion/consecutivos'), DEFAULT_CONSECUTIVOS);

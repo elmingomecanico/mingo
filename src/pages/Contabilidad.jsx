@@ -9,6 +9,7 @@ import {
   Wallet, Building, PieChart, Scale, ArrowRightLeft, Building2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useConfirm } from '../context/ConfirmContext';
 import Select from 'react-select';
 import TokenizedSearchSelect from '../components/TokenizedSearchSelect';
 import BancosManager from '../components/contabilidad/BancosManager';
@@ -40,6 +41,7 @@ const CATEGORIAS_INGRESOS_DEFAULT = [
 ];
 
 export default function Contabilidad() {
+  const { confirm } = useConfirm();
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('flujo'); // 'flujo' | 'bancos' | 'apertura' | 'cxp' | 'resultados' | 'categorias'
   
@@ -521,7 +523,14 @@ export default function Contabilidad() {
 
   // Anular Movimiento Manual
   const handleDeleteManualMov = async (id, concepto) => {
-    if (!window.confirm(`¿Está seguro de anular el movimiento contable "${concepto}"?`)) return;
+    const ok = await confirm({
+      title: '¿Anular movimiento contable?',
+      message: `¿Está seguro de anular el movimiento contable "${concepto}"?`,
+      confirmText: 'Sí, Anular Movimiento',
+      cancelText: 'Cancelar',
+      isDanger: true
+    });
+    if (!ok) return;
     try {
       await remove(ref(rtdb, `movimientos_contables/${id}`));
       toast.success('Movimiento contable anulado');

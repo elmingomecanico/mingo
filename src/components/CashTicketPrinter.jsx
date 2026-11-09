@@ -16,7 +16,7 @@ const CashTicketPrinter = forwardRef(({ data, type = 'cierre', isPreview = false
           <h2 className="font-black text-base uppercase tracking-tight">TALLER EL MINGO</h2>
           <p className="text-[11px] font-bold">VALE DE ENTREGA / SALIDA DE EFECTIVO</p>
           <p className="text-[10px]">Sucursal: {mov.sucursal || 'Principal (SUC-01)'}</p>
-          <p className="text-[10px]">Turno: {mov.numero_turno || mov.id_turno?.substring(0, 8) || 'N/A'}</p>
+          <p className="text-[10px]">Turno: {mov.numero_turno || (mov.id_turno?.startsWith('-') ? 'TURNO' : mov.id_turno) || 'N/A'}</p>
         </div>
 
         <div className="py-2 border-b border-black border-dashed text-[11px] space-y-1">
@@ -93,7 +93,7 @@ const CashTicketPrinter = forwardRef(({ data, type = 'cierre', isPreview = false
         <h2 className="font-black text-base uppercase tracking-tight">TALLER EL MINGO</h2>
         <p className="text-[11px] font-bold">ACTA DE ARQUEO Y CIERRE DE CAJA</p>
         <p className="text-[10px]">Sucursal: {turno.sucursal || 'Principal (SUC-01)'}</p>
-        <p className="text-[10px] font-black">TURNO: {turno.numero_turno || turno.id?.substring(0, 8)}</p>
+        <p className="text-[10px] font-black">TURNO: {turno.numero_turno || (turno.id?.startsWith('-') ? 'ACTA DE CIERRE' : turno.id)}</p>
       </div>
 
       {/* METADATOS TURNO */}

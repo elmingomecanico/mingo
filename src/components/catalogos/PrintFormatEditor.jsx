@@ -8,6 +8,7 @@ import {
   Columns, AlignLeft, AlignCenter, Split, CheckCircle2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useConfirm } from '../../context/ConfirmContext';
 import { useReactToPrint } from 'react-to-print';
 import TicketPrinter from '../TicketPrinter';
 
@@ -122,7 +123,15 @@ export default function PrintFormatEditor({ user }) {
   };
 
   const handleReset = async () => {
-    if (!window.confirm('¿Desea restablecer el formato de impresión a los valores predeterminados?')) return;
+    const ok = await confirm({
+      title: '¿Restablecer formato de impresión?',
+      message: '¿Desea restablecer el formato de impresión de comprobantes a los valores predeterminados?',
+      confirmText: 'Restablecer',
+      cancelText: 'Cancelar',
+      isDanger: false,
+      type: 'warning'
+    });
+    if (!ok) return;
     setConfig(DEFAULT_PRINT_CONFIG);
     try {
       await set(ref(rtdb, 'configuracion/formatos_impresion'), DEFAULT_PRINT_CONFIG);

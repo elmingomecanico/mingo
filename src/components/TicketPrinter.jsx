@@ -93,7 +93,7 @@ const TicketPrinter = forwardRef(({ sale, isPreview = false, customConfig = null
       <div className={`py-2 ${dividerClass} text-[10px] space-y-0.5`}>
         <div className="flex justify-between">
           <span><strong>FACTURA:</strong></span>
-          <span className="font-bold">{sale.numero_factura || sale.id?.substring(0, 8)}</span>
+          <span className="font-bold">{sale.numero_factura || (sale.id?.startsWith('-') ? 'FACTURA' : sale.id)}</span>
         </div>
         <div className="flex justify-between">
           <span>FECHA:</span>

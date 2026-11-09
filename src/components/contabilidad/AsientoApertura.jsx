@@ -7,6 +7,7 @@ import {
   Lock, RefreshCw, ShieldCheck, Edit3
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useConfirm } from '../../context/ConfirmContext';
 import { useReactToPrint } from 'react-to-print';
 
 export default function AsientoApertura({ 
@@ -125,9 +126,15 @@ export default function AsientoApertura({
       return toast.error('Debe ingresar al menos un saldo de Activo (Caja, Banco o Inventario) para registrar el asiento');
     }
 
-    if (!window.confirm(`¿Está seguro de certificar el Asiento Inicial de Apertura con un Capital Social de C$ ${capitalPatrimonio.toLocaleString('es-NI', { minimumFractionDigits: 2 })}?`)) {
-      return;
-    }
+    const ok = await confirm({
+      title: 'Certificar Asiento Inicial de Apertura',
+      message: `¿Está seguro de certificar el Asiento Inicial de Apertura con un Capital Social de C$ ${capitalPatrimonio.toLocaleString('es-NI', { minimumFractionDigits: 2 })}?`,
+      confirmText: 'Certificar Asiento',
+      cancelText: 'Cancelar',
+      isDanger: false,
+      type: 'info'
+    });
+    if (!ok) return;
 
     try {
       const nowIso = new Date().toISOString();

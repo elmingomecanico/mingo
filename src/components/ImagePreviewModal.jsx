@@ -9,7 +9,7 @@ export default function ImagePreviewModal({ isOpen, onClose, product }) {
 
   const initialCover = product?.image || product?.imagen_url || product?.image_url || (typeof product === 'string' ? product : '');
   const productName = product?.name || product?.nombre || 'Foto del Producto';
-  const productId = product?.id || '';
+  const displayCode = product?.codigo_visible || product?.codigo || (product?.id && !product.id.startsWith('-') ? product.id : '');
   const productPrice = product?.price || product?.precio || 0;
   const productCategory = product?.cat || product?.categoria || '';
 
@@ -75,7 +75,7 @@ export default function ImagePreviewModal({ isOpen, onClose, product }) {
             <div>
               <h3 className="font-bold text-sm truncate max-w-[280px]">{productName}</h3>
               <div className="flex items-center gap-2">
-                {productId && <span className="text-[11px] font-mono text-gray-400">{productId}</span>}
+                {displayCode && <span className="text-[11px] font-mono text-blue-300 font-bold bg-blue-900/60 px-1.5 py-0.5 rounded border border-blue-700/50">{displayCode}</span>}
                 {galleryImages.length > 1 && (
                   <span className="text-[10px] bg-blue-500/20 text-blue-300 font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
                     <Layers size={10} /> Foto {activeIdx + 1} de {galleryImages.length} (Paquete R2)

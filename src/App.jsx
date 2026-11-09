@@ -1,6 +1,7 @@
 import React from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
+import { ConfirmProvider } from './context/ConfirmContext'
 import Layout from './components/Layout'
 import POS from './components/POS'
 import Home from './pages/Home'
@@ -115,7 +116,9 @@ function App() {
   return (
     <ErrorBoundary>
       <AuthProvider>
-        <AppRouter />
+        <ConfirmProvider>
+          <AppRouter />
+        </ConfirmProvider>
       </AuthProvider>
     </ErrorBoundary>
   )

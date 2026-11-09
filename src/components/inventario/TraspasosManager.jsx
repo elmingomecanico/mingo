@@ -7,6 +7,7 @@ import {
   Trash2, ChevronRight, Hash, ArrowRight, ShieldCheck, Sparkles, Eye, Download
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useConfirm } from '../../context/ConfirmContext';
 import Select from 'react-select';
 import { useReactToPrint } from 'react-to-print';
 import { consumeNextConsecutiveAtomic, checkDuplicateCodigoVisible } from '../../utils/consecutivosService';
@@ -257,9 +258,15 @@ export default function TraspasosManager({ user, sucursalesProp = null, products
     const sucOrigen = sucursalesMap[origenId] || { nombre: origenId, codigo_visible: origenId };
     const sucDestino = sucursalesMap[destinoId] || { nombre: destinoId, codigo_visible: destinoId };
 
-    if (!window.confirm(`¿Confirmas el traspaso de ${totalPiezas} piezas desde [${sucOrigen.codigo_visible}] ${sucOrigen.nombre} hacia [${sucDestino.codigo_visible}] ${sucDestino.nombre}?`)) {
-      return;
-    }
+    const ok = await confirm({
+      title: 'Confirmar Traspaso de Inventario',
+      message: `¿Confirmas el traspaso de ${totalPiezas} piezas desde [${sucOrigen.codigo_visible}] ${sucOrigen.nombre} hacia [${sucDestino.codigo_visible}] ${sucDestino.nombre}?\n\nEl stock se transferirá inmediatamente entre ambas bodegas.`,
+      confirmText: 'Confirmar y Enviar Traspaso',
+      cancelText: 'Cancelar',
+      isDanger: false,
+      type: 'info'
+    });
+    if (!ok) return;
 
     setIsSubmitting(true);
     try {

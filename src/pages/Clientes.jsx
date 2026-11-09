@@ -4,6 +4,7 @@ import { rtdb } from '../firebase';
 import { Users, Plus, Edit2, Trash2, Search, Phone, FileText, CreditCard, Percent, ShieldCheck, Gift, CheckSquare } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { validateClienteDeletion } from '../utils/integrityService';
+import { useConfirm } from '../context/ConfirmContext';
 
 const defaultMetodosDescuento = {
   Efectivo: true,
@@ -13,6 +14,7 @@ const defaultMetodosDescuento = {
 };
 
 export default function Clientes() {
+  const { confirm } = useConfirm();
   const [clientes, setClientes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -138,7 +140,14 @@ export default function Clientes() {
         toast.error(check.reason, { duration: 6000 });
         return;
       }
-      if (!window.confirm(`¿Estás seguro de eliminar a "${nombre}"?`)) return;
+      const ok = await confirm({
+        title: '¿Eliminar cliente?',
+        message: `¿Estás seguro de eliminar a "${nombre}" del registro de clientes?`,
+        confirmText: 'Sí, Eliminar Cliente',
+        cancelText: 'Cancelar',
+        isDanger: true
+      });
+      if (!ok) return;
       await remove(ref(rtdb, `clientes/${id}`));
       toast.success("Cliente eliminado");
     } catch (error) {

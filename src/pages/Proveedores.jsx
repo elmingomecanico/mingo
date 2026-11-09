@@ -4,8 +4,10 @@ import { rtdb } from '../firebase';
 import { Truck, Plus, Edit2, Trash2, Search, Phone, FileText } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { validateProveedorDeletion } from '../utils/integrityService';
+import { useConfirm } from '../context/ConfirmContext';
 
 export default function Proveedores() {
+  const { confirm } = useConfirm();
   const [proveedores, setProveedores] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -94,7 +96,14 @@ export default function Proveedores() {
         toast.error(check.reason, { duration: 6000 });
         return;
       }
-      if (!window.confirm(`¿Estás seguro de eliminar al proveedor "${nombre}"?`)) return;
+      const ok = await confirm({
+        title: '¿Eliminar proveedor?',
+        message: `¿Estás seguro de eliminar al proveedor "${nombre}"?`,
+        confirmText: 'Sí, Eliminar Proveedor',
+        cancelText: 'Cancelar',
+        isDanger: true
+      });
+      if (!ok) return;
       await remove(ref(rtdb, `proveedores/${id}`));
       toast.success("Proveedor eliminado");
     } catch (error) {
