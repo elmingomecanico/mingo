@@ -5,7 +5,7 @@ import {
   Search, Plus, Edit2, Trash2, Package, History, Maximize2, ScanBarcode, 
   Sliders, ShieldCheck, AlertTriangle, CheckCircle2, Percent, 
   RotateCcw, Sparkles, AlertCircle, Building2, Layers, Check, X,
-  Hash, Lock, ArrowRightLeft
+  Hash, Lock, ArrowRightLeft, Star, UploadCloud, Image as ImageIcon
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Select from 'react-select';
@@ -14,7 +14,14 @@ import ImagePreviewModal from '../components/ImagePreviewModal';
 import { DEFAULT_CONSECUTIVOS, formatConsecutive } from '../components/catalogos/ConsecutivosManager';
 import ProductCatalogsManager from '../components/inventario/ProductCatalogsManager';
 import TraspasosManager from '../components/inventario/TraspasosManager';
-import { compressImageToWebP, saveProductImage, subscribeProductImages, resolveProductImage } from '../utils/storageService';
+import { 
+  compressImageToWebP, 
+  saveProductBundle, 
+  saveProductImage, 
+  fetchProductBundle, 
+  subscribeProductImages, 
+  resolveProductImage 
+} from '../utils/storageService';
 import { consumeNextConsecutiveAtomic, checkDuplicateCodigoVisible } from '../utils/consecutivosService';
 import { deleteProductCleanly } from '../utils/integrityService';
 
@@ -90,7 +97,7 @@ export default function Inventario() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [formData, setFormData] = useState({
-    codigo_visible: '', name: '', price: '', cost: '', cat: '', stock_actual: 0, stock_minimo: 0, ubicacion: '', compatibilidad: [], image: '',
+    codigo_visible: '', name: '', price: '', cost: '', cat: '', stock_actual: 0, stock_minimo: 0, ubicacion: '', compatibilidad: [], image: '', images: [],
     permitir_negativo: 'heredar', permite_descuento: true, descuento_maximo: 15
   });
 
@@ -292,6 +299,10 @@ export default function Inventario() {
     if (prod) {
       setEditingId(prod.id);
       const invData = inventory[prod.id] || { stock_actual: 0, stock_minimo: 0, ubicacion: '' };
+      const initialImages = Array.isArray(prod.images) && prod.images.length > 0
+        ? [...prod.images]
+        : (prod.image ? [prod.image] : []);
+
       setFormData({
         codigo_visible: prod.codigo_visible || prod.id,
         name: prod.name,
@@ -303,10 +314,24 @@ export default function Inventario() {
         ubicacion: invData.ubicacion || '',
         compatibilidad: prod.compatibilidad || [],
         image: prod.image || '',
+        images: initialImages,
         permitir_negativo: prod.permitir_negativo || 'heredar',
         permite_descuento: prod.permite_descuento !== undefined ? Boolean(prod.permite_descuento) : true,
         descuento_maximo: prod.descuento_maximo !== undefined ? Number(prod.descuento_maximo) : 15
       });
+
+      // Si el producto tiene un paquete en Cloudflare R2 (bundle_url), cargar las hasta 4 fotos en el formulario
+      if (prod.bundle_url) {
+        fetchProductBundle(prod.bundle_url).then(imgs => {
+          if (imgs && imgs.length > 0) {
+            setFormData(prev => ({
+              ...prev,
+              images: imgs,
+              image: imgs[0] || prev.image
+            }));
+          }
+        }).catch(err => console.warn('Error al cargar bundle R2:', err));
+      }
     } else {
       setEditingId(null);
       const prodCfg = consecutivosConfig?.productos || DEFAULT_CONSECUTIVOS.productos;
@@ -314,7 +339,7 @@ export default function Inventario() {
       const suggestedCode = formatConsecutive(prodCfg, nextNum);
       setFormData({ 
         codigo_visible: suggestedCode,
-        name: '', price: '', cost: '', cat: '', stock_actual: 0, stock_minimo: 0, ubicacion: '', compatibilidad: [], image: '',
+        name: '', price: '', cost: '', cat: '', stock_actual: 0, stock_minimo: 0, ubicacion: '', compatibilidad: [], image: '', images: [],
         permitir_negativo: 'heredar', permite_descuento: true, descuento_maximo: 15
       });
     }
@@ -342,17 +367,73 @@ export default function Inventario() {
   };
 
   const handleImageUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    if (!file.type.startsWith('image/')) return toast.error('Seleccione un archivo de imagen válido');
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
 
-    try {
-      const webpDataUrl = await compressImageToWebP(file, 420, 0.72);
-      setFormData(prev => ({ ...prev, image: webpDataUrl }));
-      toast.success('Imagen comprimida a WebP ultraligero (Lista para nodo independiente / R2)');
-    } catch (err) {
-      toast.error('Error al procesar imagen: ' + err.message);
+    const currentImages = formData.images || (formData.image ? [formData.image] : []);
+    const availableSlots = 4 - currentImages.length;
+    if (availableSlots <= 0) {
+      toast.error('Has alcanzado el límite máximo de 4 fotos por producto');
+      return;
     }
+
+    const filesToProcess = files.slice(0, availableSlots);
+    const validFiles = filesToProcess.filter(f => f.type.startsWith('image/'));
+    if (validFiles.length === 0) {
+      return toast.error('Seleccione archivos de imagen válidos (JPG, PNG, WebP)');
+    }
+
+    const toastId = toast.loading(`Comprimiendo ${validFiles.length} foto(s) a WebP ultraligero...`);
+    try {
+      const compressedList = [];
+      for (const file of validFiles) {
+        const webp = await compressImageToWebP(file, 480, 0.74);
+        compressedList.push(webp);
+      }
+      const newImages = [...currentImages, ...compressedList].slice(0, 4);
+      setFormData(prev => ({
+        ...prev,
+        images: newImages,
+        image: newImages[0] || ''
+      }));
+      toast.success(
+        `Se ${newImages.length === 1 ? 'agregó 1 foto' : `agregaron fotos (${newImages.length}/4)`}. Listas para Cloudflare R2`,
+        { id: toastId }
+      );
+    } catch (err) {
+      toast.error('Error al procesar imágenes: ' + err.message, { id: toastId });
+    } finally {
+      e.target.value = '';
+    }
+  };
+
+  const handleRemoveImage = (indexToRemove) => {
+    setFormData(prev => {
+      const currentList = prev.images || (prev.image ? [prev.image] : []);
+      const updated = currentList.filter((_, i) => i !== indexToRemove);
+      return {
+        ...prev,
+        images: updated,
+        image: updated[0] || ''
+      };
+    });
+    toast.success('Foto eliminada del paquete');
+  };
+
+  const handleSetCoverImage = (index) => {
+    if (index === 0) return;
+    setFormData(prev => {
+      const currentList = prev.images || (prev.image ? [prev.image] : []);
+      const list = [...currentList];
+      const [selected] = list.splice(index, 1);
+      list.unshift(selected);
+      return {
+        ...prev,
+        images: list,
+        image: list[0] || ''
+      };
+    });
+    toast.success('Foto establecida como portada principal', { icon: '⭐' });
   };
 
   const handleSave = async (e) => {
@@ -393,10 +474,14 @@ export default function Inventario() {
         }
       }
 
-      // Guardar la imagen comprimida WebP en el nodo independiente `productos_imagenes/{prodId}` (o Cloudflare R2)
-      let imgMeta = { has_image: false, image_url: '' };
-      if (formData.image) {
-        imgMeta = await saveProductImage(prodId, formData.image);
+      // Guardar el paquete de hasta 4 fotos en Cloudflare R2 (1 archivo .webp de portada + 1 archivo _bundle.json con las 4 fotos)
+      let imgMeta = { has_image: false, image_url: '', bundle_url: '', total_fotos: 0 };
+      const imagesToSave = formData.images && formData.images.length > 0 
+        ? formData.images 
+        : (formData.image ? [formData.image] : []);
+
+      if (imagesToSave.length > 0) {
+        imgMeta = await saveProductBundle(prodId, imagesToSave);
       }
 
       const prodRef = ref(rtdb, `productos/${prodId}`);
@@ -410,7 +495,9 @@ export default function Inventario() {
         compatibilidad: formData.compatibilidad || [],
         has_image: imgMeta.has_image,
         image_url: imgMeta.image_url || '',
-        image: '', // El Base64 WebP vive en `productos_imagenes/{prodId}` para mantener ligero el árbol de productos
+        bundle_url: imgMeta.bundle_url || '',
+        total_fotos: imgMeta.total_fotos || 0,
+        image: '', // Las imágenes residen optimizadas en Cloudflare R2 y nodo independiente
         permitir_negativo: formData.permitir_negativo || 'heredar',
         permite_descuento: formData.permite_descuento !== undefined ? Boolean(formData.permite_descuento) : true,
         descuento_maximo: Number(formData.descuento_maximo) || 15
@@ -624,11 +711,16 @@ export default function Inventario() {
                         <td className="p-4">
                           <div className="flex items-center gap-3">
                             {prod.image ? (
-                              <div className="relative group cursor-pointer" onClick={() => setSelectedPreviewProduct(prod)} title="Ver foto en grande">
+                              <div className="relative group cursor-pointer" onClick={() => setSelectedPreviewProduct(prod)} title="Ver fotos en grande">
                                 <img src={prod.image} alt={prod.name} className="w-10 h-10 rounded-lg object-cover border border-gray-200 shadow-sm transition-opacity group-hover:opacity-80" />
                                 <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/20 rounded-lg transition-opacity">
                                   <Maximize2 size={16} className="text-white drop-shadow" />
                                 </div>
+                                {(prod.total_fotos > 1 || prod.bundle_url) && (
+                                  <span className="absolute -bottom-1 -right-1 bg-blue-600 text-white text-[9px] font-bold px-1 rounded-full shadow flex items-center gap-0.5">
+                                    <Layers size={8} /> {prod.total_fotos || 4}
+                                  </span>
+                                )}
                               </div>
                             ) : (
                               <div className="w-10 h-10 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-300">
@@ -1344,17 +1436,118 @@ export default function Inventario() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Imagen del Producto (Opcional)</label>
-                    <div className="flex items-center gap-4">
-                      {formData.image && (
-                        <div className="relative group cursor-pointer" onClick={() => setSelectedPreviewProduct({ name: formData.name || 'Vista previa', image: formData.image })}>
-                          <img src={formData.image} alt="Vista previa" className="w-16 h-16 object-cover rounded-xl border border-gray-200" />
-                          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/20 rounded-xl">
-                            <Maximize2 size={16} className="text-white drop-shadow" />
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-xs font-bold text-gray-700 uppercase flex items-center gap-1.5">
+                        <ImageIcon size={15} className="text-blue-600" />
+                        Fotos del Producto (Hasta 4 fotos en Cloudflare R2)
+                      </label>
+                      <span className="text-[11px] font-mono font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+                        {(formData.images || (formData.image ? [formData.image] : [])).length} / 4 fotos
+                      </span>
+                    </div>
+
+                    {/* Explicación de 1 sola lectura Tipo B */}
+                    <div className="mb-3 p-2.5 bg-blue-50/70 border border-blue-200/60 rounded-xl text-[11px] text-blue-900 flex items-start gap-2">
+                      <Sparkles size={14} className="text-blue-600 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-bold">Paquete Inteligente Cloudflare R2:</span> Las fotos se comprimen en WebP y se agrupan en un solo paquete. Al abrir el producto, Cloudflare cuenta <span className="font-bold underline">1 sola lectura Tipo B</span> para ver las 4 fotos.
+                      </div>
+                    </div>
+
+                    {/* Grid de hasta 4 fotos */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                      {(formData.images || (formData.image ? [formData.image] : [])).map((imgSrc, idx) => (
+                        <div 
+                          key={idx} 
+                          className="relative group rounded-xl border-2 overflow-hidden bg-gray-900 border-gray-200 aspect-square flex items-center justify-center shadow-xs"
+                        >
+                          <img 
+                            src={imgSrc} 
+                            alt={`Foto ${idx + 1}`} 
+                            className="w-full h-full object-cover transition-transform group-hover:scale-105" 
+                          />
+
+                          {/* Badge de Portada / Posición */}
+                          <div className="absolute top-1.5 left-1.5 pointer-events-none">
+                            {idx === 0 ? (
+                              <span className="bg-amber-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-0.5 shadow">
+                                <Star size={9} fill="currentColor" /> Portada
+                              </span>
+                            ) : (
+                              <span className="bg-black/60 backdrop-blur-xs text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md shadow">
+                                #{idx + 1}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Acciones flotantes */}
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-1.5">
+                            <div className="flex justify-end gap-1">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRemoveImage(idx);
+                                }}
+                                className="w-6 h-6 rounded-full bg-rose-600 text-white flex items-center justify-center hover:bg-rose-700 transition-colors shadow cursor-pointer"
+                                title="Eliminar foto"
+                              >
+                                <X size={13} />
+                              </button>
+                            </div>
+
+                            <div className="flex justify-between items-center gap-1">
+                              {idx > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleSetCoverImage(idx);
+                                  }}
+                                  className="text-[9px] font-bold bg-amber-500 hover:bg-amber-600 text-white px-1.5 py-1 rounded-md transition-colors shadow flex items-center gap-0.5 cursor-pointer"
+                                  title="Establecer como foto principal"
+                                >
+                                  <Star size={9} /> Portada
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => setSelectedPreviewProduct({ 
+                                  name: formData.name || 'Vista previa', 
+                                  images: formData.images || [imgSrc],
+                                  image: imgSrc 
+                                })}
+                                className="ml-auto w-6 h-6 rounded-full bg-white/80 hover:bg-white text-gray-800 flex items-center justify-center shadow transition-colors cursor-pointer"
+                                title="Ampliar imagen"
+                              >
+                                <Maximize2 size={12} />
+                              </button>
+                            </div>
                           </div>
                         </div>
+                      ))}
+
+                      {/* Botón de subida si aún quedan espacios (< 4) */}
+                      {(formData.images || (formData.image ? [formData.image] : [])).length < 4 && (
+                        <label className="border-2 border-dashed border-blue-300 hover:border-blue-500 bg-blue-50/40 hover:bg-blue-50/80 rounded-xl aspect-square flex flex-col items-center justify-center p-2 text-center cursor-pointer transition-all group">
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            multiple 
+                            onChange={handleImageUpload} 
+                            className="hidden" 
+                          />
+                          <div className="w-8 h-8 rounded-full bg-blue-100 group-hover:bg-blue-200 text-blue-600 flex items-center justify-center mb-1 transition-colors">
+                            <UploadCloud size={18} />
+                          </div>
+                          <span className="text-[11px] font-bold text-blue-700 leading-tight">
+                            {(formData.images || []).length === 0 ? 'Agregar Fotos' : 'Añadir Foto'}
+                          </span>
+                          <span className="text-[9px] text-gray-400 mt-0.5">
+                            Quedan {4 - (formData.images || (formData.image ? [formData.image] : [])).length} de 4
+                          </span>
+                        </label>
                       )}
-                      <input type="file" accept="image/*" onChange={handleImageUpload} className="text-xs sm:text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
                     </div>
                   </div>
 
