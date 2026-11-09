@@ -169,7 +169,51 @@ export async function onRequestOptions() {
   });
 }
 
-export async function onRequestGet() {
+export async function onRequestGet({ request }) {
+  try {
+    const urlObj = new URL(request.url);
+    const bundleKey = urlObj.searchParams.get('bundleKey') || urlObj.searchParams.get('key');
+    const bundleUrl = urlObj.searchParams.get('bundleUrl') || urlObj.searchParams.get('url');
+
+    if (bundleKey || bundleUrl) {
+      const fullUrl = bundleKey 
+        ? `${R2_CONFIG.publicDomain}/${bundleKey.replace(/^\/+/, '')}`
+        : bundleUrl;
+      
+      const fetchUrl = fullUrl.includes('?') 
+        ? `${fullUrl}&_t=${Date.now()}` 
+        : `${fullUrl}?_t=${Date.now()}`;
+
+      const r2Res = await fetch(fetchUrl);
+      if (!r2Res.ok) {
+        return new Response(JSON.stringify({ error: `R2 respondió status ${r2Res.status}` }), {
+          status: r2Res.status,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Content-Type': 'application/json'
+          }
+        });
+      }
+      const data = await r2Res.json();
+      return new Response(JSON.stringify(data), {
+        status: 200,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache, no-store, must-revalidate'
+        }
+      });
+    }
+  } catch (err) {
+    return new Response(JSON.stringify({ error: err.message }), {
+      status: 500,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Content-Type': 'application/json'
+      }
+    });
+  }
+
   return new Response(JSON.stringify({
     status: 'online',
     provider: 'Cloudflare R2',

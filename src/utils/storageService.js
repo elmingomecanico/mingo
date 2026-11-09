@@ -91,41 +91,52 @@ export const compressImageToWebP = (fileOrDataUrl, maxSize = 480, quality = 0.75
   return new Promise((resolve, reject) => {
     if (!fileOrDataUrl) return resolve('');
 
-    // Si ya es un dataUrl
-    if (typeof fileOrDataUrl === 'string' && fileOrDataUrl.startsWith('data:image/webp')) {
-      return resolve(fileOrDataUrl);
+    // Si ya es un dataUrl WebP o si es una URL remota de R2 (http/https), resolver directamente
+    if (typeof fileOrDataUrl === 'string') {
+      if (fileOrDataUrl.startsWith('data:image/webp') || fileOrDataUrl.startsWith('http://') || fileOrDataUrl.startsWith('https://')) {
+        return resolve(fileOrDataUrl);
+      }
     }
 
     const processImg = (src) => {
       const img = new Image();
-      img.onerror = () => reject(new Error('Formato de imagen inválido'));
+      img.onerror = () => {
+        // Si falla por CORS o formato, devolver src original para no colgar el guardado
+        resolve(src);
+      };
       img.onload = () => {
-        const canvas = document.createElement('canvas');
-        let width = img.width;
-        let height = img.height;
+        try {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
 
-        if (width > height) {
-          if (width > maxSize) {
-            height = Math.round((height * maxSize) / width);
-            width = maxSize;
+          if (width > height) {
+            if (width > maxSize) {
+              height = Math.round((height * maxSize) / width);
+              width = maxSize;
+            }
+          } else {
+            if (height > maxSize) {
+              width = Math.round((width * maxSize) / height);
+              height = maxSize;
+            }
           }
-        } else {
-          if (height > maxSize) {
-            width = Math.round((width * maxSize) / height);
-            height = maxSize;
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+
+          let compressedDataUrl = canvas.toDataURL('image/webp', quality);
+          if (!compressedDataUrl.startsWith('data:image/webp')) {
+            compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
           }
+          resolve(compressedDataUrl);
+        } catch (canvasErr) {
+          // Si el canvas está protegido por CORS (tainted), no colgar: resolver con src
+          console.warn('Canvas export protegido, usando fuente original:', canvasErr);
+          resolve(src);
         }
-
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, width, height);
-
-        let compressedDataUrl = canvas.toDataURL('image/webp', quality);
-        if (!compressedDataUrl.startsWith('data:image/webp')) {
-          compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
-        }
-        resolve(compressedDataUrl);
       };
       img.src = src;
     };
@@ -224,14 +235,19 @@ export const saveProductBundle = async (productId, imagesList = []) => {
   // 1. Subir la Foto de Portada (para miniaturas y listas rápidas)
   const timestamp = Date.now();
   const coverKey = `productos/${productId}.webp`;
-  const base64Clean = coverBase64.replace(/^data:image\/\w+;base64,/, '');
-  const binaryString = atob(base64Clean);
-  const bytes = new Uint8Array(binaryString.length);
-  for (let i = 0; i < binaryString.length; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
+  let coverUrl = `${R2_CONFIG.R2_PUBLIC_DOMAIN}/${coverKey}?v=${timestamp}`;
+
+  if (coverBase64 && coverBase64.startsWith('data:')) {
+    const base64Clean = coverBase64.replace(/^data:image\/\w+;base64,/, '');
+    const binaryString = atob(base64Clean);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    await sendToR2(coverKey, bytes.buffer, 'image/webp');
+  } else if (coverBase64 && (coverBase64.startsWith('http://') || coverBase64.startsWith('https://'))) {
+    coverUrl = coverBase64.includes('?v=') ? coverBase64 : `${coverBase64}?v=${timestamp}`;
   }
-  await sendToR2(coverKey, bytes.buffer, 'image/webp');
-  const coverUrl = `${R2_CONFIG.R2_PUBLIC_DOMAIN}/${coverKey}?v=${timestamp}`;
 
   // 2. Subir el Paquete Completo de hasta 4 fotos en un solo archivo JSON
   // Este archivo único garantiza que descargar las 4 fotos cuente como 1 sola lectura Tipo B

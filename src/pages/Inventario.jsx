@@ -5,7 +5,8 @@ import {
   Search, Plus, Edit2, Trash2, Package, History, Maximize2, ScanBarcode, 
   Sliders, ShieldCheck, AlertTriangle, CheckCircle2, Percent, 
   RotateCcw, Sparkles, AlertCircle, Building2, Layers, Check, X,
-  Hash, Lock, ArrowRightLeft, Star, UploadCloud, Image as ImageIcon, Wrench
+  Hash, Lock, ArrowRightLeft, Star, UploadCloud, Image as ImageIcon, Wrench,
+  Globe, Store, MapPin, Loader2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Select from 'react-select';
@@ -20,7 +21,8 @@ import {
   saveProductImage, 
   fetchProductBundle, 
   subscribeProductImages, 
-  resolveProductImage 
+  resolveProductImage,
+  deleteProductImage
 } from '../utils/storageService';
 import { consumeNextConsecutiveAtomic, checkDuplicateCodigoVisible } from '../utils/consecutivosService';
 import { deleteProductCleanly } from '../utils/integrityService';
@@ -102,7 +104,8 @@ export default function Inventario() {
   const [formData, setFormData] = useState({
     codigo_visible: '', name: '', price: '', cost: '', cat: '', stock_actual: 0, stock_minimo: 0, ubicacion: '', compatibilidad: [], image: '', images: [],
     permitir_negativo: 'heredar', permite_descuento: true, descuento_maximo: 15,
-    aplica_mano_obra: false, id_servicio_asociado: '', nombre_mano_obra: '', precio_mano_obra: ''
+    aplica_mano_obra: false, id_servicio_asociado: '', nombre_mano_obra: '', precio_mano_obra: '',
+    alcance_sucursales: 'todas', sucursales_seleccionadas: []
   });
 
   // Modal State para Ajustes
@@ -317,12 +320,13 @@ export default function Inventario() {
   };
 
   const handleOpenModal = (prod = null) => {
+    const allSucursalIds = sucursalesList.map(s => s.id);
     if (prod) {
       setEditingId(prod.id);
       const invData = inventory[prod.id] || { stock_actual: 0, stock_minimo: 0, ubicacion: '' };
       const initialImages = Array.isArray(prod.images) && prod.images.length > 0
         ? [...prod.images]
-        : (prod.image ? [prod.image] : []);
+        : (prod.image_url ? [prod.image_url] : (prod.image ? [prod.image] : []));
 
       setFormData({
         codigo_visible: prod.codigo_visible || prod.id,
@@ -330,12 +334,14 @@ export default function Inventario() {
         price: prod.price,
         cost: prod.cost || 0,
         cat: prod.cat || '',
-        stock_actual: invData.stock_actual,
+        stock_actual: invData.stock_actual || 0,
         stock_minimo: invData.stock_minimo || 0,
         ubicacion: invData.ubicacion || '',
         compatibilidad: prod.compatibilidad || [],
-        image: prod.image || '',
+        image: prod.image_url || prod.image || '',
         images: initialImages,
+        alcance_sucursales: 'todas',
+        sucursales_seleccionadas: allSucursalIds,
         permitir_negativo: prod.permitir_negativo || 'heredar',
         permite_descuento: prod.permite_descuento !== undefined ? Boolean(prod.permite_descuento) : true,
         descuento_maximo: prod.descuento_maximo !== undefined ? Number(prod.descuento_maximo) : 15,
@@ -345,15 +351,21 @@ export default function Inventario() {
         precio_mano_obra: prod.precio_mano_obra !== undefined && prod.precio_mano_obra !== null ? prod.precio_mano_obra : ''
       });
 
-      // Si el producto tiene un paquete en Cloudflare R2 (bundle_url), cargar las hasta 4 fotos en el formulario
+      // Si el producto tiene un paquete en Cloudflare R2 (bundle_url), cargar las fotos en el formulario
       if (prod.bundle_url) {
         fetchProductBundle(prod.bundle_url).then(imgs => {
           if (imgs && imgs.length > 0) {
-            setFormData(prev => ({
-              ...prev,
-              images: imgs,
-              image: imgs[0] || prev.image
-            }));
+            setFormData(prev => {
+              // Solo actualizar si el usuario no ha agregado ya fotos nuevas mientras cargaba el bundle
+              if (!prev.images || prev.images.length <= 1) {
+                return {
+                  ...prev,
+                  images: imgs,
+                  image: imgs[0] || prev.image
+                };
+              }
+              return prev;
+            });
           }
         }).catch(err => console.warn('Error al cargar bundle R2:', err));
       }
@@ -366,7 +378,8 @@ export default function Inventario() {
         codigo_visible: suggestedCode,
         name: '', price: '', cost: '', cat: '', stock_actual: 0, stock_minimo: 0, ubicacion: '', compatibilidad: [], image: '', images: [],
         permitir_negativo: 'heredar', permite_descuento: true, descuento_maximo: 15,
-        aplica_mano_obra: false, id_servicio_asociado: '', nombre_mano_obra: '', precio_mano_obra: ''
+        aplica_mano_obra: false, id_servicio_asociado: '', nombre_mano_obra: '', precio_mano_obra: '',
+        alcance_sucursales: 'todas', sucursales_seleccionadas: allSucursalIds
       });
     }
     setIsModalOpen(true);
@@ -471,7 +484,23 @@ export default function Inventario() {
   const handleSave = async (e) => {
     e.preventDefault();
     if (isSubmitting) return;
+
+    // 1. Validaciones previas con Toast explícito
+    if (!formData.name?.trim()) {
+      return toast.error('El nombre del producto es obligatorio');
+    }
+    if (!formData.codigo_visible?.trim()) {
+      return toast.error('El código visible o SKU es obligatorio');
+    }
+    if (formData.price === '' || isNaN(Number(formData.price)) || Number(formData.price) < 0) {
+      return toast.error('Ingrese un precio de venta válido (mayor o igual a 0)');
+    }
+    if (formData.aplica_mano_obra && (formData.precio_mano_obra === '' || isNaN(Number(formData.precio_mano_obra)) || Number(formData.precio_mano_obra) < 0)) {
+      return toast.error('Ingrese un precio válido para la mano de obra vinculada');
+    }
+
     setIsSubmitting(true);
+    const saveToastId = toast.loading(editingId ? 'Guardando cambios del producto...' : 'Creando producto en catálogo...');
 
     try {
       let prodId = editingId;
@@ -501,29 +530,43 @@ export default function Inventario() {
           const nextAtomic = await consumeNextConsecutiveAtomic('productos');
           codigoFinal = nextAtomic.codigoFormateado;
         } else {
+          toast.dismiss(saveToastId);
           setIsSubmitting(false);
           return toast.error(`El código visible "${codigoFinal}" ya está asignado al producto "${dupCheck.conflictItem?.name}". Elija un código único.`);
         }
       }
 
-      // Guardar el paquete de hasta 4 fotos en Cloudflare R2 (1 archivo .webp de portada + 1 archivo _bundle.json con las 4 fotos)
+      // Guardar el paquete de hasta 4 fotos en Cloudflare R2
       let imgMeta = { has_image: false, image_url: '', bundle_url: '', total_fotos: 0 };
       const imagesToSave = formData.images && formData.images.length > 0 
         ? formData.images 
         : (formData.image ? [formData.image] : []);
 
       if (imagesToSave.length > 0) {
-        imgMeta = await saveProductBundle(prodId, imagesToSave);
+        try {
+          imgMeta = await saveProductBundle(prodId, imagesToSave);
+        } catch (imgErr) {
+          console.error('Error al sincronizar imágenes con R2:', imgErr);
+          toast.error('Aviso: Las fotos no se pudieron procesar completamente en R2, se conservan los datos de texto.', { duration: 4000 });
+        }
+      } else if (editingId) {
+        // Si el usuario retiró todas las imágenes del producto
+        try {
+          await deleteProductImage(prodId);
+        } catch (delErr) {
+          console.warn('Error al limpiar imagen en RTDB:', delErr);
+        }
       }
 
+      // 2. Guardar en Catálogo Maestro Centralizado (productos/${prodId})
       const prodRef = ref(rtdb, `productos/${prodId}`);
       await set(prodRef, {
         id: prodId,
         codigo_visible: codigoFinal,
         name: formData.name.trim(),
         price: Number(formData.price),
-        cost: Number(formData.cost),
-        cat: formData.cat,
+        cost: Number(formData.cost) || 0,
+        cat: formData.cat || '',
         compatibilidad: formData.compatibilidad || [],
         has_image: imgMeta.has_image,
         image_url: imgMeta.image_url || '',
@@ -536,27 +579,49 @@ export default function Inventario() {
         aplica_mano_obra: Boolean(formData.aplica_mano_obra),
         id_servicio_asociado: formData.aplica_mano_obra ? (formData.id_servicio_asociado || '') : '',
         nombre_mano_obra: formData.aplica_mano_obra ? (formData.nombre_mano_obra?.trim() || '') : '',
-        precio_mano_obra: formData.aplica_mano_obra ? (Number(formData.precio_mano_obra) || 0) : 0
+        precio_mano_obra: formData.aplica_mano_obra ? (Number(formData.precio_mano_obra) || 0) : 0,
+        fecha_actualizacion: new Date().toISOString()
       });
 
-      const invRef = ref(rtdb, `inventario/${sucursal}/${prodId}`);
-      if (!editingId) {
-        await set(invRef, {
-          stock_actual: Number(formData.stock_actual),
-          stock_minimo: Number(formData.stock_minimo),
-          ubicacion: formData.ubicacion
-        });
+      // 3. Sincronización de Bodega / Inventario por Sucursales
+      let targetSucursales = [];
+      if (formData.alcance_sucursales === 'todas') {
+        targetSucursales = sucursalesList.map(s => s.id);
+        if (!targetSucursales.includes(sucursal)) targetSucursales.push(sucursal);
+      } else if (formData.alcance_sucursales === 'seleccion') {
+        targetSucursales = formData.sucursales_seleccionadas || [sucursal];
+        if (targetSucursales.length === 0) targetSucursales = [sucursal];
       } else {
-        // IMPORTANTE: Usar update() únicamente en stock_minimo y ubicacion para JAMÁS pisar stock_actual en ventas simultáneas
-        await update(invRef, {
-          stock_minimo: Number(formData.stock_minimo),
-          ubicacion: formData.ubicacion
-        });
+        targetSucursales = [sucursal];
       }
 
-      toast.success(editingId ? 'Producto actualizado sin alterar stock en curso' : `Producto creado (${codigoFinal})`);
+      for (const sucId of targetSucursales) {
+        const branchInvRef = ref(rtdb, `inventario/${sucId}/${prodId}`);
+        if (!editingId) {
+          // Producto nuevo: la sucursal actual recibe el stock inicial; las demás inician en 0
+          const initialStock = (sucId === sucursal) ? (Number(formData.stock_actual) || 0) : 0;
+          await set(branchInvRef, {
+            stock_actual: initialStock,
+            stock_minimo: Number(formData.stock_minimo) || 0,
+            ubicacion: formData.ubicacion || ''
+          });
+        } else {
+          // Edición de producto: NUNCA pisar stock_actual existente en ninguna sucursal
+          await update(branchInvRef, {
+            stock_minimo: Number(formData.stock_minimo) || 0,
+            ubicacion: formData.ubicacion || ''
+          });
+        }
+      }
+
+      toast.dismiss(saveToastId);
+      const sucCount = targetSucursales.length;
+      const sucText = sucCount === 1 ? 'en sucursal actual' : `sincronizado en ${sucCount} sucursales`;
+      toast.success(editingId ? `Producto actualizado (${sucText})` : `Producto "${codigoFinal}" creado (${sucText})`);
       setIsModalOpen(false);
     } catch (error) {
+      toast.dismiss(saveToastId);
+      console.error('Error al guardar producto:', error);
       toast.error('Error al guardar: ' + error.message);
     } finally {
       setIsSubmitting(false);
@@ -1375,9 +1440,25 @@ export default function Inventario() {
               </button>
             </div>
             
-            <form onSubmit={handleSave} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+            <form onSubmit={handleSave} noValidate className="flex flex-col flex-1 min-h-0 overflow-hidden">
               <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-6">
                 
+                {/* Banner Catálogo Maestro Centralizado */}
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200/90 rounded-2xl p-3 sm:p-3.5 flex items-start gap-3 text-xs text-blue-900 shadow-xs">
+                  <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-sm mt-0.5">
+                    <Globe size={18} />
+                  </div>
+                  <div className="flex-1">
+                    <div className="font-bold uppercase tracking-wider text-[11px] text-blue-900 flex items-center gap-2">
+                      <span>Catálogo Maestro Centralizado</span>
+                      <span className="bg-blue-600 text-white text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">Multisucursal</span>
+                    </div>
+                    <p className="text-slate-600 text-[11px] mt-1 leading-relaxed">
+                      El código visible, nombre, categoría, fotos HD en Cloudflare R2, precio de venta, costo y mano de obra aplican de forma automática y unificada en <strong>todas las sucursales</strong> ({sucursalesList.length} activas).
+                    </p>
+                  </div>
+                </div>
+
                 <div className="space-y-4">
                   <h3 className="font-bold text-blue-900 border-b pb-2 text-xs sm:text-sm uppercase tracking-wider flex items-center justify-between">
                     <span>Identificación Comercial y Códigos</span>
@@ -1597,12 +1678,72 @@ export default function Inventario() {
                 </div>
 
                 <div className="space-y-4">
-                  <h3 className="font-bold text-blue-900 border-b pb-2 text-xs sm:text-sm uppercase tracking-wider flex items-center justify-between">
-                    <span>Inventario de Bodega</span>
-                    <span className="text-blue-600 bg-blue-100 px-2 py-0.5 rounded text-xs font-mono font-bold">
-                      {sucursalesList.find(s => s.id === sucursal)?.codigo_visible || sucursal}
+                  <div className="flex items-center justify-between border-b pb-2">
+                    <h3 className="font-bold text-blue-900 text-xs sm:text-sm uppercase tracking-wider flex items-center gap-2">
+                      <Store size={15} className="text-blue-700" />
+                      <span>Inventario de Bodega</span>
+                    </h3>
+                    <span className="text-blue-700 bg-blue-100 px-2.5 py-0.5 rounded-full text-xs font-mono font-bold border border-blue-200">
+                      Sede Activa: {sucursalesList.find(s => s.id === sucursal)?.codigo_visible || sucursal}
                     </span>
-                  </h3>
+                  </div>
+
+                  {/* Selector de Alcance de Sucursales */}
+                  <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 space-y-2.5">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                      <label className="text-xs font-bold text-slate-800 uppercase flex items-center gap-1.5">
+                        <Globe size={14} className="text-blue-600" />
+                        ¿En qué sucursales sincronizar bodega?
+                      </label>
+                      <span className="text-[11px] font-semibold text-slate-500">
+                        {sucursalesList.length} sucursales configuradas
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setFormData(prev => ({ ...prev, alcance_sucursales: 'todas' }))}
+                        className={`p-2.5 rounded-xl border text-left flex items-start gap-2.5 transition-all cursor-pointer ${
+                          formData.alcance_sucursales === 'todas'
+                            ? 'bg-blue-50/90 border-blue-500 text-blue-950 font-bold ring-2 ring-blue-500/20 shadow-xs'
+                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        <Globe size={16} className={`shrink-0 mt-0.5 ${formData.alcance_sucursales === 'todas' ? 'text-blue-600' : 'text-slate-400'}`} />
+                        <div>
+                          <div className="font-bold flex items-center gap-1.5">
+                            Todas las sucursales
+                            <span className="bg-blue-600 text-white text-[9px] px-1.5 py-0.2 rounded-full font-black uppercase tracking-wider">Recomendado</span>
+                          </div>
+                          <p className="text-[10px] text-slate-500 font-normal mt-0.5 leading-snug">
+                            {editingId 
+                              ? 'Sincroniza stock mínimo y estante en todas las sucursales sin alterar sus existencias reales.' 
+                              : 'Crea el producto en todas las sucursales (con stock en esta sede y 0 en las demás).'}
+                          </p>
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setFormData(prev => ({ ...prev, alcance_sucursales: 'actual' }))}
+                        className={`p-2.5 rounded-xl border text-left flex items-start gap-2.5 transition-all cursor-pointer ${
+                          formData.alcance_sucursales === 'actual'
+                            ? 'bg-blue-50/90 border-blue-500 text-blue-950 font-bold ring-2 ring-blue-500/20 shadow-xs'
+                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        <MapPin size={16} className={`shrink-0 mt-0.5 ${formData.alcance_sucursales === 'actual' ? 'text-blue-600' : 'text-slate-400'}`} />
+                        <div>
+                          <div className="font-bold">Solo sucursal actual ({sucursalesList.find(s => s.id === sucursal)?.codigo_visible || sucursal})</div>
+                          <p className="text-[10px] text-slate-500 font-normal mt-0.5 leading-snug">
+                            Aplica cambios de stock mínimo y estante únicamente a la sucursal activa actual.
+                          </p>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                     <div>
                       <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Stock Actual</label>
@@ -1831,11 +1972,31 @@ export default function Inventario() {
               </div>
 
               <div className="p-3 sm:p-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-3 shrink-0">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2.5 rounded-xl text-gray-600 font-bold hover:bg-gray-100 text-xs sm:text-sm transition-colors">
+                <button 
+                  type="button" 
+                  onClick={() => setIsModalOpen(false)} 
+                  disabled={isSubmitting}
+                  className="px-4 py-2.5 rounded-xl text-gray-600 font-bold hover:bg-gray-100 text-xs sm:text-sm transition-colors cursor-pointer disabled:opacity-50"
+                >
                   Cancelar
                 </button>
-                <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-5 sm:px-6 py-2.5 rounded-xl font-bold shadow-md shadow-blue-200 transition-all active:scale-95 text-xs sm:text-sm">
-                  Guardar Producto
+                <button 
+                  type="submit" 
+                  disabled={isSubmitting}
+                  className={`px-5 sm:px-6 py-2.5 rounded-xl font-bold shadow-md transition-all flex items-center justify-center gap-2 text-xs sm:text-sm ${
+                    isSubmitting 
+                      ? 'bg-blue-400 cursor-not-allowed text-white shadow-none' 
+                      : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-200 active:scale-95 cursor-pointer'
+                  }`}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin text-white" />
+                      <span>Guardando Producto...</span>
+                    </>
+                  ) : (
+                    <span>Guardar Producto</span>
+                  )}
                 </button>
               </div>
             </form>
