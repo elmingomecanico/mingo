@@ -101,11 +101,20 @@ export default function Inventario() {
   // Modal State para Producto
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
+
+  // Control de cambios en imágenes (para optimizar R2 y no sobreescribir si no cambiaron)
+  const [imagesDirty, setImagesDirty] = useState(false);
+  const [originalImagesSnapshot, setOriginalImagesSnapshot] = useState([]);
+
+  // Modal para seleccionar sucursales cuando se activa el check de multi-sucursal
+  const [isBranchModalOpen, setIsBranchModalOpen] = useState(false);
+
   const [formData, setFormData] = useState({
     codigo_visible: '', name: '', price: '', cost: '', cat: '', stock_actual: 0, stock_minimo: 0, ubicacion: '', compatibilidad: [], image: '', images: [],
     permitir_negativo: 'heredar', permite_descuento: true, descuento_maximo: 15,
     aplica_mano_obra: false, id_servicio_asociado: '', nombre_mano_obra: '', precio_mano_obra: '',
-    alcance_sucursales: 'todas', sucursales_seleccionadas: []
+    guardar_en_varias_sucursales: false,
+    sucursales_destino: ['SUC-01']
   });
 
   // Modal State para Ajustes
@@ -321,12 +330,17 @@ export default function Inventario() {
 
   const handleOpenModal = (prod = null) => {
     const allSucursalIds = sucursalesList.map(s => s.id);
+    setImagesDirty(false);
+    setIsBranchModalOpen(false);
+
     if (prod) {
       setEditingId(prod.id);
       const invData = inventory[prod.id] || { stock_actual: 0, stock_minimo: 0, ubicacion: '' };
       const initialImages = Array.isArray(prod.images) && prod.images.length > 0
         ? [...prod.images]
         : (prod.image_url ? [prod.image_url] : (prod.image ? [prod.image] : []));
+
+      setOriginalImagesSnapshot(initialImages);
 
       setFormData({
         codigo_visible: prod.codigo_visible || prod.id,
@@ -340,8 +354,8 @@ export default function Inventario() {
         compatibilidad: prod.compatibilidad || [],
         image: prod.image_url || prod.image || '',
         images: initialImages,
-        alcance_sucursales: 'todas',
-        sucursales_seleccionadas: allSucursalIds,
+        guardar_en_varias_sucursales: false,
+        sucursales_destino: allSucursalIds,
         permitir_negativo: prod.permitir_negativo || 'heredar',
         permite_descuento: prod.permite_descuento !== undefined ? Boolean(prod.permite_descuento) : true,
         descuento_maximo: prod.descuento_maximo !== undefined ? Number(prod.descuento_maximo) : 15,
@@ -358,6 +372,7 @@ export default function Inventario() {
             setFormData(prev => {
               // Solo actualizar si el usuario no ha agregado ya fotos nuevas mientras cargaba el bundle
               if (!prev.images || prev.images.length <= 1) {
+                setOriginalImagesSnapshot(imgs);
                 return {
                   ...prev,
                   images: imgs,
@@ -371,6 +386,7 @@ export default function Inventario() {
       }
     } else {
       setEditingId(null);
+      setOriginalImagesSnapshot([]);
       const prodCfg = consecutivosConfig?.productos || DEFAULT_CONSECUTIVOS.productos;
       const nextNum = prodCfg.siguiente_numero || (products.length + 1);
       const suggestedCode = formatConsecutive(prodCfg, nextNum);
@@ -379,7 +395,8 @@ export default function Inventario() {
         name: '', price: '', cost: '', cat: '', stock_actual: 0, stock_minimo: 0, ubicacion: '', compatibilidad: [], image: '', images: [],
         permitir_negativo: 'heredar', permite_descuento: true, descuento_maximo: 15,
         aplica_mano_obra: false, id_servicio_asociado: '', nombre_mano_obra: '', precio_mano_obra: '',
-        alcance_sucursales: 'todas', sucursales_seleccionadas: allSucursalIds
+        guardar_en_varias_sucursales: false,
+        sucursales_destino: allSucursalIds
       });
     }
     setIsModalOpen(true);
@@ -436,6 +453,7 @@ export default function Inventario() {
         compressedList.push(webp);
       }
       const newImages = [...currentImages, ...compressedList].slice(0, 4);
+      setImagesDirty(true);
       setFormData(prev => ({
         ...prev,
         images: newImages,
@@ -453,6 +471,7 @@ export default function Inventario() {
   };
 
   const handleRemoveImage = (indexToRemove) => {
+    setImagesDirty(true);
     setFormData(prev => {
       const currentList = prev.images || (prev.image ? [prev.image] : []);
       const updated = currentList.filter((_, i) => i !== indexToRemove);
@@ -467,6 +486,7 @@ export default function Inventario() {
 
   const handleSetCoverImage = (index) => {
     if (index === 0) return;
+    setImagesDirty(true);
     setFormData(prev => {
       const currentList = prev.images || (prev.image ? [prev.image] : []);
       const list = [...currentList];
@@ -481,22 +501,9 @@ export default function Inventario() {
     toast.success('Foto establecida como portada principal', { icon: '⭐' });
   };
 
-  const handleSave = async (e) => {
-    e.preventDefault();
-    if (isSubmitting) return;
-
-    // 1. Validaciones previas con Toast explícito
-    if (!formData.name?.trim()) {
-      return toast.error('El nombre del producto es obligatorio');
-    }
-    if (!formData.codigo_visible?.trim()) {
-      return toast.error('El código visible o SKU es obligatorio');
-    }
-    if (formData.price === '' || isNaN(Number(formData.price)) || Number(formData.price) < 0) {
-      return toast.error('Ingrese un precio de venta válido (mayor o igual a 0)');
-    }
-    if (formData.aplica_mano_obra && (formData.precio_mano_obra === '' || isNaN(Number(formData.precio_mano_obra)) || Number(formData.precio_mano_obra) < 0)) {
-      return toast.error('Ingrese un precio válido para la mano de obra vinculada');
+  const executeSave = async (targetBranchIds = [sucursal]) => {
+    if (!targetBranchIds || targetBranchIds.length === 0) {
+      return toast.error('Debe seleccionar al menos una sucursal');
     }
 
     setIsSubmitting(true);
@@ -526,7 +533,6 @@ export default function Inventario() {
       const dupCheck = await checkDuplicateCodigoVisible('productos', codigoFinal, prodId);
       if (dupCheck.isDuplicate) {
         if (!editingId) {
-          // Si otro usuario acaba de tomar ese código simultáneamente, asignamos el siguiente correlativo libre
           const nextAtomic = await consumeNextConsecutiveAtomic('productos');
           codigoFinal = nextAtomic.codigoFormateado;
         } else {
@@ -536,25 +542,48 @@ export default function Inventario() {
         }
       }
 
-      // Guardar el paquete de hasta 4 fotos en Cloudflare R2
-      let imgMeta = { has_image: false, image_url: '', bundle_url: '', total_fotos: 0 };
+      // ==============================================================
+      // OPTIMIZACIÓN CLOUDFLARE R2: DETECCIÓN DE CAMBIOS REALES EN FOTOS
+      // ==============================================================
+      const currentOriginal = editingId ? rawProducts.find(p => p.id === editingId) : null;
       const imagesToSave = formData.images && formData.images.length > 0 
         ? formData.images 
         : (formData.image ? [formData.image] : []);
 
-      if (imagesToSave.length > 0) {
-        try {
-          imgMeta = await saveProductBundle(prodId, imagesToSave);
-        } catch (imgErr) {
-          console.error('Error al sincronizar imágenes con R2:', imgErr);
-          toast.error('Aviso: Las fotos no se pudieron procesar completamente en R2, se conservan los datos de texto.', { duration: 4000 });
-        }
-      } else if (editingId) {
-        // Si el usuario retiró todas las imágenes del producto
-        try {
-          await deleteProductImage(prodId);
-        } catch (delErr) {
-          console.warn('Error al limpiar imagen en RTDB:', delErr);
+      // Comprobar si hay imágenes nuevas subidas en base64 (data:image/...)
+      const hasNewBase64Images = imagesToSave.some(img => typeof img === 'string' && img.startsWith('data:'));
+
+      // Comprobar si cambiaron respecto a las fotos originales
+      const isPhotosModified = !editingId || imagesDirty || hasNewBase64Images || (
+        currentOriginal && (
+          Boolean(currentOriginal.has_image) !== (imagesToSave.length > 0) ||
+          (currentOriginal.total_fotos || 0) !== imagesToSave.length
+        )
+      );
+
+      let imgMeta = {
+        has_image: Boolean(currentOriginal?.has_image),
+        image_url: currentOriginal?.image_url || '',
+        bundle_url: currentOriginal?.bundle_url || '',
+        total_fotos: currentOriginal?.total_fotos || 0
+      };
+
+      if (isPhotosModified) {
+        if (imagesToSave.length > 0) {
+          try {
+            imgMeta = await saveProductBundle(prodId, imagesToSave);
+          } catch (imgErr) {
+            console.error('Error al sincronizar imágenes con R2:', imgErr);
+            toast.error('Aviso: No se pudieron procesar las fotos en R2; se conservan los datos de texto.', { duration: 4000 });
+          }
+        } else if (editingId) {
+          // Si el usuario retiró todas las imágenes del producto
+          try {
+            await deleteProductImage(prodId);
+          } catch (delErr) {
+            console.warn('Error al limpiar imagen en RTDB:', delErr);
+          }
+          imgMeta = { has_image: false, image_url: '', bundle_url: '', total_fotos: 0 };
         }
       }
 
@@ -583,22 +612,11 @@ export default function Inventario() {
         fecha_actualizacion: new Date().toISOString()
       });
 
-      // 3. Sincronización de Bodega / Inventario por Sucursales
-      let targetSucursales = [];
-      if (formData.alcance_sucursales === 'todas') {
-        targetSucursales = sucursalesList.map(s => s.id);
-        if (!targetSucursales.includes(sucursal)) targetSucursales.push(sucursal);
-      } else if (formData.alcance_sucursales === 'seleccion') {
-        targetSucursales = formData.sucursales_seleccionadas || [sucursal];
-        if (targetSucursales.length === 0) targetSucursales = [sucursal];
-      } else {
-        targetSucursales = [sucursal];
-      }
-
-      for (const sucId of targetSucursales) {
+      // 3. Sincronización de Bodega / Inventario por Sucursales seleccionadas
+      for (const sucId of targetBranchIds) {
         const branchInvRef = ref(rtdb, `inventario/${sucId}/${prodId}`);
         if (!editingId) {
-          // Producto nuevo: la sucursal actual recibe el stock inicial; las demás inician en 0
+          // Producto nuevo: la sucursal de trabajo actual recibe el stock inicial; las demás inician en 0
           const initialStock = (sucId === sucursal) ? (Number(formData.stock_actual) || 0) : 0;
           await set(branchInvRef, {
             stock_actual: initialStock,
@@ -615,9 +633,13 @@ export default function Inventario() {
       }
 
       toast.dismiss(saveToastId);
-      const sucCount = targetSucursales.length;
-      const sucText = sucCount === 1 ? 'en sucursal actual' : `sincronizado en ${sucCount} sucursales`;
+      const sucCount = targetBranchIds.length;
+      const sucText = sucCount === 1 
+        ? `en sucursal ${sucursalesList.find(s => s.id === targetBranchIds[0])?.codigo_visible || targetBranchIds[0]}` 
+        : `sincronizado en ${sucCount} sucursales`;
+
       toast.success(editingId ? `Producto actualizado (${sucText})` : `Producto "${codigoFinal}" creado (${sucText})`);
+      setIsBranchModalOpen(false);
       setIsModalOpen(false);
     } catch (error) {
       toast.dismiss(saveToastId);
@@ -626,6 +648,34 @@ export default function Inventario() {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleSave = async (e) => {
+    e.preventDefault();
+    if (isSubmitting) return;
+
+    // 1. Validaciones previas con Toast explícito
+    if (!formData.name?.trim()) {
+      return toast.error('El nombre del producto es obligatorio');
+    }
+    if (!formData.codigo_visible?.trim()) {
+      return toast.error('El código visible o SKU es obligatorio');
+    }
+    if (formData.price === '' || isNaN(Number(formData.price)) || Number(formData.price) < 0) {
+      return toast.error('Ingrese un precio de venta válido (mayor o igual a 0)');
+    }
+    if (formData.aplica_mano_obra && (formData.precio_mano_obra === '' || isNaN(Number(formData.precio_mano_obra)) || Number(formData.precio_mano_obra) < 0)) {
+      return toast.error('Ingrese un precio válido para la mano de obra vinculada');
+    }
+
+    // Si tiene marcado el check de guardar en varias sucursales, abrir modal de selección
+    if (formData.guardar_en_varias_sucursales) {
+      setIsBranchModalOpen(true);
+      return;
+    }
+
+    // Si no está marcado el check, guardar directamente en la sucursal actual de trabajo
+    await executeSave([sucursal]);
   };
 
   const handleSaveAjuste = async (e) => {
@@ -2000,6 +2050,165 @@ export default function Inventario() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL PARA SELECCIONAR SUCURSALES DE SINCRONIZACIÓN */}
+      {isBranchModalOpen && (
+        <div className="fixed inset-0 bg-black/70 z-60 flex items-center justify-center p-3 sm:p-4 backdrop-blur-sm animate-in fade-in overflow-hidden">
+          <div className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95">
+            {/* Header */}
+            <div className="p-4 sm:p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/90 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shadow-xs">
+                  <Store size={20} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-gray-900 leading-tight">
+                    Guardar en Varias Sucursales
+                  </h3>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Seleccione las sedes donde desea aplicar este producto
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsBranchModalOpen(false)}
+                disabled={isSubmitting}
+                className="text-gray-400 hover:text-gray-700 w-8 h-8 rounded-full flex items-center justify-center hover:bg-gray-200 transition-colors cursor-pointer text-xl font-bold leading-none disabled:opacity-50"
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Contenido / Lista de Sucursales */}
+            <div className="p-4 sm:p-5 overflow-y-auto flex-1 space-y-4">
+              {/* Barra rápida de Marcar / Desmarcar */}
+              <div className="flex items-center justify-between pb-2 border-b border-gray-100 text-xs">
+                <span className="font-bold text-gray-700">
+                  {formData.sucursales_destino?.length || 0} de {sucursalesList.length} seleccionadas
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setFormData(prev => ({ ...prev, sucursales_destino: sucursalesList.map(s => s.id) }))}
+                    className="text-blue-600 hover:text-blue-800 font-bold hover:underline cursor-pointer"
+                  >
+                    Marcar Todas
+                  </button>
+                  <span className="text-gray-300">|</span>
+                  <button
+                    type="button"
+                    onClick={() => setFormData(prev => ({ ...prev, sucursales_destino: [] }))}
+                    className="text-gray-500 hover:text-gray-800 font-medium hover:underline cursor-pointer"
+                  >
+                    Desmarcar Todas
+                  </button>
+                </div>
+              </div>
+
+              {/* Lista interactiva de sucursales */}
+              <div className="space-y-2">
+                {sucursalesList.map(s => {
+                  const isSelected = formData.sucursales_destino?.includes(s.id);
+                  const isCurrentWorkBranch = s.id === sucursal;
+                  const branchStock = allInventory[s.id]?.[editingId]?.stock_actual;
+
+                  return (
+                    <div
+                      key={s.id}
+                      onClick={() => {
+                        setFormData(prev => {
+                          const current = prev.sucursales_destino || [];
+                          const updated = current.includes(s.id)
+                            ? current.filter(id => id !== s.id)
+                            : [...current, s.id];
+                          return { ...prev, sucursales_destino: updated };
+                        });
+                      }}
+                      className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-center gap-3 select-none ${
+                        isSelected 
+                          ? 'bg-blue-50/80 border-blue-400 text-blue-950 shadow-xs' 
+                          : 'bg-white border-gray-200 hover:bg-gray-50 text-gray-700'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => {}} // Manejado por onClick del contenedor
+                        className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer accent-blue-600"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-mono text-xs font-black bg-blue-100 text-blue-800 px-2 py-0.5 rounded border border-blue-200">
+                            {s.codigo_visible || s.id}
+                          </span>
+                          <span className="font-bold text-sm truncate">
+                            {s.nombre || s.name}
+                          </span>
+                          {isCurrentWorkBranch && (
+                            <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
+                              Sede Actual
+                            </span>
+                          )}
+                        </div>
+                        {s.direccion && (
+                          <p className="text-[11px] text-gray-500 truncate mt-0.5">{s.direccion}</p>
+                        )}
+                        {editingId && branchStock !== undefined && (
+                          <p className="text-[10px] font-semibold text-slate-500 mt-1">
+                            Stock físico actual en esta sede: <strong className="text-blue-700">{branchStock} unid.</strong> (se conserva intacto)
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="text-[11px] text-slate-600 bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-1">
+                <p className="font-bold text-amber-900 flex items-center gap-1.5">
+                  <ShieldCheck size={14} className="text-amber-700" />
+                  Sincronización Inteligente de Inventario
+                </p>
+                <p className="leading-relaxed">
+                  El catálogo maestro (fotos, precio, nombre y códigos) se actualiza de forma centralizada. Las sucursales seleccionadas sincronizarán sus reglas de bodega (stock mínimo y estante), <strong>sin modificar nunca el stock físico existente</strong> en cada sede.
+                </p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-3 sm:p-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsBranchModalOpen(false)}
+                disabled={isSubmitting}
+                className="px-4 py-2.5 rounded-xl text-gray-600 font-bold hover:bg-gray-200 text-xs sm:text-sm transition-colors cursor-pointer disabled:opacity-50"
+              >
+                Volver
+              </button>
+              <button
+                type="button"
+                onClick={() => executeSave(formData.sucursales_destino)}
+                disabled={isSubmitting || (formData.sucursales_destino?.length || 0) === 0}
+                className={`px-5 sm:px-6 py-2.5 rounded-xl font-bold shadow-md transition-all flex items-center justify-center gap-2 text-xs sm:text-sm ${
+                  isSubmitting || (formData.sucursales_destino?.length || 0) === 0
+                    ? 'bg-blue-300 cursor-not-allowed text-white shadow-none'
+                    : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-200 active:scale-95 cursor-pointer'
+                }`}
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin text-white" />
+                    <span>Guardando...</span>
+                  </>
+                ) : (
+                  <span>Confirmar y Guardar ({formData.sucursales_destino?.length || 0})</span>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
