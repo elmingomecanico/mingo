@@ -72,7 +72,7 @@ async function uploadDirectS3(key, bodyBuffer, contentType = 'image/webp') {
       'x-amz-content-sha256': payloadHash,
       'Authorization': authHeader,
       'Content-Type': contentType,
-      'Cache-Control': 'public, max-age=31536000, immutable'
+      'Cache-Control': 'public, max-age=3600, stale-while-revalidate=86400'
     },
     body: bodyBuffer
   });
@@ -222,6 +222,7 @@ export const saveProductBundle = async (productId, imagesList = []) => {
   const coverBase64 = compressedList[0];
 
   // 1. Subir la Foto de Portada (para miniaturas y listas rápidas)
+  const timestamp = Date.now();
   const coverKey = `productos/${productId}.webp`;
   const base64Clean = coverBase64.replace(/^data:image\/\w+;base64,/, '');
   const binaryString = atob(base64Clean);
@@ -229,7 +230,8 @@ export const saveProductBundle = async (productId, imagesList = []) => {
   for (let i = 0; i < binaryString.length; i++) {
     bytes[i] = binaryString.charCodeAt(i);
   }
-  const coverUrl = await sendToR2(coverKey, bytes.buffer, 'image/webp');
+  await sendToR2(coverKey, bytes.buffer, 'image/webp');
+  const coverUrl = `${R2_CONFIG.R2_PUBLIC_DOMAIN}/${coverKey}?v=${timestamp}`;
 
   // 2. Subir el Paquete Completo de hasta 4 fotos en un solo archivo JSON
   // Este archivo único garantiza que descargar las 4 fotos cuente como 1 sola lectura Tipo B
@@ -242,7 +244,8 @@ export const saveProductBundle = async (productId, imagesList = []) => {
     updated_at: new Date().toISOString()
   };
   const bundleBytes = new TextEncoder().encode(JSON.stringify(bundlePayload));
-  const bundleUrl = await sendToR2(bundleKey, bundleBytes.buffer, 'application/json');
+  await sendToR2(bundleKey, bundleBytes.buffer, 'application/json');
+  const bundleUrl = `${R2_CONFIG.R2_PUBLIC_DOMAIN}/${bundleKey}?v=${timestamp}`;
 
   // Respaldo en nodo independiente de Firebase para redundancia
   try {
@@ -281,17 +284,37 @@ export const saveProductImage = async (productId, imageDataUrl) => {
  */
 export const fetchProductBundle = async (bundleUrl) => {
   if (!bundleUrl) return [];
+
+  // Intento 1: Proxy interno de Cloudflare Pages (/api/r2-bundle)
+  // Al ser del mismo origen (mingo-wnm.pages.dev), tiene CERO bloqueos de CORS
   try {
-    const res = await fetch(bundleUrl, {
-      cache: 'force-cache' // Aprovechar la caché Edge de Cloudflare (0 lecturas R2)
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return data.images || [];
-  } catch (err) {
-    console.warn('Error al obtener paquete de fotos desde R2:', err);
-    return [];
+    const proxyUrl = `/api/r2-bundle?url=${encodeURIComponent(bundleUrl)}`;
+    const res = await fetch(proxyUrl);
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.images) && data.images.length > 0) {
+        return data.images;
+      }
+    }
+  } catch (errProxy) {
+    // Si no está disponible la Pages function (ej: entorno local sin wrangler), pasa a Intento 2
   }
+
+  // Intento 2: Fetch directo al CDN público de R2 con cache-busting
+  try {
+    const directUrl = bundleUrl.includes('?') 
+      ? `${bundleUrl}&_cb=${Date.now()}` 
+      : `${bundleUrl}?_cb=${Date.now()}`;
+    const res = await fetch(directUrl);
+    if (res.ok) {
+      const data = await res.json();
+      return data.images || [];
+    }
+  } catch (errDirect) {
+    console.warn('Error al obtener paquete de fotos desde R2:', errDirect);
+  }
+
+  return [];
 };
 
 /**

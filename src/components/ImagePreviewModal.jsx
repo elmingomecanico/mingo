@@ -46,6 +46,21 @@ export default function ImagePreviewModal({ isOpen, onClose, product }) {
     }
   }, [product, initialCover]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') onClose();
+      if (e.key === 'ArrowLeft' && galleryImages.length > 1) {
+        setActiveIdx(prev => (prev > 0 ? prev - 1 : galleryImages.length - 1));
+      }
+      if (e.key === 'ArrowRight' && galleryImages.length > 1) {
+        setActiveIdx(prev => (prev < galleryImages.length - 1 ? prev + 1 : 0));
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, galleryImages.length, onClose]);
+
   if (!isOpen || !product) return null;
 
   const currentDisplayImage = galleryImages[activeIdx] || initialCover;

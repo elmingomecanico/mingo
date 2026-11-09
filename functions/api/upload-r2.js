@@ -59,7 +59,7 @@ async function uploadToR2(key, bodyBuffer, contentType = 'image/webp') {
       'x-amz-content-sha256': payloadHash,
       'Authorization': authHeader,
       'Content-Type': contentType,
-      'Cache-Control': 'public, max-age=31536000, immutable'
+      'Cache-Control': 'public, max-age=3600, stale-while-revalidate=86400'
     },
     body: bodyBuffer
   });
