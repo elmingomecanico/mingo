@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Settings, Building2, Printer, Hash, ShieldAlert, Store } from 'lucide-react';
+import { Settings, Building2, Printer, Hash, ShieldAlert, Store, Wrench } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import BranchManager from '../components/catalogos/BranchManager';
 import PrintFormatEditor from '../components/catalogos/PrintFormatEditor';
 import ConsecutivosManager from '../components/catalogos/ConsecutivosManager';
 import CajasManager from '../components/catalogos/CajasManager';
+import MaintenanceManager from '../components/catalogos/MaintenanceManager';
 
 export default function Catalogos() {
   const { user } = useAuth();
@@ -34,6 +35,12 @@ export default function Catalogos() {
       name: 'Folios y Códigos', 
       icon: <Hash size={18} />,
       desc: 'Reglas de correlativos de factura, numeración inicial y formato de códigos visibles.'
+    },
+    { 
+      id: 'mantenimiento', 
+      name: 'Puesta a Cero & Mantenimiento', 
+      icon: <Wrench size={18} className="text-amber-500" />,
+      desc: 'Purga de transacciones de prueba, puesta a cero de existencias y auditoría de códigos duplicados.'
     }
   ];
 
@@ -86,6 +93,7 @@ export default function Catalogos() {
           {activeTab === 'cajas' && <CajasManager user={user} />}
           {activeTab === 'impresion' && <PrintFormatEditor />}
           {activeTab === 'consecutivos' && <ConsecutivosManager user={user} />}
+          {activeTab === 'mantenimiento' && <MaintenanceManager user={user} />}
         </div>
       </div>
     </div>
