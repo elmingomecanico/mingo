@@ -10,6 +10,7 @@ export default function ImagePreviewModal({ isOpen, onClose, product }) {
   const initialCover = product?.image || product?.imagen_url || product?.image_url || (typeof product === 'string' ? product : '');
   const productName = product?.name || product?.nombre || 'Foto del Producto';
   const displayCode = product?.codigo_visible || product?.codigo || (product?.id && !product.id.startsWith('-') ? product.id : '');
+  const productId = product?.id || displayCode || 'foto';
   const productPrice = product?.price || product?.precio || 0;
   const productCategory = product?.cat || product?.categoria || '';
 
