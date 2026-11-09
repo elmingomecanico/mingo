@@ -1738,59 +1738,39 @@ export default function Inventario() {
                     </span>
                   </div>
 
-                  {/* Selector de Alcance de Sucursales */}
-                  <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 space-y-2.5">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                      <label className="text-xs font-bold text-slate-800 uppercase flex items-center gap-1.5">
-                        <Globe size={14} className="text-blue-600" />
-                        ¿En qué sucursales sincronizar bodega?
+                  {/* Checkbox para guardar en varias sucursales */}
+                  <div className="bg-blue-50/70 p-3.5 rounded-2xl border border-blue-200/90 space-y-2">
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        id="check_multi_sucursal"
+                        checked={Boolean(formData.guardar_en_varias_sucursales)}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setFormData(prev => ({
+                            ...prev,
+                            guardar_en_varias_sucursales: checked,
+                            sucursales_destino: checked ? sucursalesList.map(s => s.id) : [sucursal]
+                          }));
+                        }}
+                        className="w-4 h-4 mt-0.5 rounded text-blue-600 focus:ring-blue-500 cursor-pointer accent-blue-600"
+                      />
+                      <label htmlFor="check_multi_sucursal" className="flex-1 cursor-pointer select-none">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-xs sm:text-sm text-blue-950 flex items-center gap-1.5 uppercase tracking-wide">
+                            <Store size={15} className="text-blue-700" />
+                            Guardar / Sincronizar en varias sucursales
+                          </span>
+                          <span className="text-[10px] font-bold bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full border border-blue-200">
+                            {sucursalesList.length} sucursales disponibles
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-blue-800/80 mt-0.5 leading-relaxed">
+                          {formData.guardar_en_varias_sucursales 
+                            ? `Activado: Al presionar "Guardar Producto", se abrirá una ventana para elegir exactamente en qué sucursales sincronizar las existencias y estante (${formData.sucursales_destino?.length || sucursalesList.length} seleccionadas).` 
+                            : `Desactivado: Se guardará únicamente en la sede de trabajo actual (${sucursalesList.find(s => s.id === sucursal)?.codigo_visible || sucursal}).`}
+                        </p>
                       </label>
-                      <span className="text-[11px] font-semibold text-slate-500">
-                        {sucursalesList.length} sucursales configuradas
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                      <button
-                        type="button"
-                        onClick={() => setFormData(prev => ({ ...prev, alcance_sucursales: 'todas' }))}
-                        className={`p-2.5 rounded-xl border text-left flex items-start gap-2.5 transition-all cursor-pointer ${
-                          formData.alcance_sucursales === 'todas'
-                            ? 'bg-blue-50/90 border-blue-500 text-blue-950 font-bold ring-2 ring-blue-500/20 shadow-xs'
-                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                        }`}
-                      >
-                        <Globe size={16} className={`shrink-0 mt-0.5 ${formData.alcance_sucursales === 'todas' ? 'text-blue-600' : 'text-slate-400'}`} />
-                        <div>
-                          <div className="font-bold flex items-center gap-1.5">
-                            Todas las sucursales
-                            <span className="bg-blue-600 text-white text-[9px] px-1.5 py-0.2 rounded-full font-black uppercase tracking-wider">Recomendado</span>
-                          </div>
-                          <p className="text-[10px] text-slate-500 font-normal mt-0.5 leading-snug">
-                            {editingId 
-                              ? 'Sincroniza stock mínimo y estante en todas las sucursales sin alterar sus existencias reales.' 
-                              : 'Crea el producto en todas las sucursales (con stock en esta sede y 0 en las demás).'}
-                          </p>
-                        </div>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setFormData(prev => ({ ...prev, alcance_sucursales: 'actual' }))}
-                        className={`p-2.5 rounded-xl border text-left flex items-start gap-2.5 transition-all cursor-pointer ${
-                          formData.alcance_sucursales === 'actual'
-                            ? 'bg-blue-50/90 border-blue-500 text-blue-950 font-bold ring-2 ring-blue-500/20 shadow-xs'
-                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                        }`}
-                      >
-                        <MapPin size={16} className={`shrink-0 mt-0.5 ${formData.alcance_sucursales === 'actual' ? 'text-blue-600' : 'text-slate-400'}`} />
-                        <div>
-                          <div className="font-bold">Solo sucursal actual ({sucursalesList.find(s => s.id === sucursal)?.codigo_visible || sucursal})</div>
-                          <p className="text-[10px] text-slate-500 font-normal mt-0.5 leading-snug">
-                            Aplica cambios de stock mínimo y estante únicamente a la sucursal activa actual.
-                          </p>
-                        </div>
-                      </button>
                     </div>
                   </div>
 
