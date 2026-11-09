@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Home, ShoppingCart, Package, BarChart2, Settings, LogOut, Activity, Users, Wallet, Menu, X, ShieldCheck, Truck, Wrench, ShoppingBag, UserCheck, Landmark, Globe } from 'lucide-react';
+import { ref, onValue } from 'firebase/database';
+import { rtdb } from '../firebase';
+import { Home, ShoppingCart, Package, BarChart2, Settings, LogOut, Activity, Users, Wallet, Menu, X, ShieldCheck, Truck, Wrench, ShoppingBag, UserCheck, Landmark, Globe, Clock } from 'lucide-react';
 import { Toaster } from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import logoIcon from '../assets/logo-icon.jpg';
@@ -11,6 +13,21 @@ export default function Layout({ children }) {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
+  const [pendingDeliveriesCount, setPendingDeliveriesCount] = useState(0);
+
+  useEffect(() => {
+    const entregasRef = ref(rtdb, 'pendientes_entrega');
+    const unsub = onValue(entregasRef, (snap) => {
+      if (snap.exists()) {
+        const val = snap.val();
+        const pending = Object.values(val).filter(r => r.estado !== 'Entregado').length;
+        setPendingDeliveriesCount(pending);
+      } else {
+        setPendingDeliveriesCount(0);
+      }
+    });
+    return () => unsub();
+  }, []);
   
   const menuSections = [
     {
@@ -19,6 +36,7 @@ export default function Layout({ children }) {
         { name: 'Dashboard', path: '/dashboard', icon: <Home size={18} />, perm: 'VER_REPORTES' },
         { name: 'Caja POS', path: '/pos', icon: <ShoppingCart size={18} />, perm: 'VER_POS' },
         { name: 'Órdenes (Taller)', path: '/taller', icon: <Wrench size={18} />, perm: 'VER_TALLER' },
+        { name: 'Pendientes de Entrega', path: '/entregas', icon: <Clock size={18} />, perm: 'VER_POS' },
       ]
     },
     {
@@ -159,6 +177,11 @@ export default function Layout({ children }) {
                     >
                       {item.icon}
                       <span className="truncate">{item.name}</span>
+                      {item.path === '/entregas' && pendingDeliveriesCount > 0 && (
+                        <span className="ml-auto bg-amber-400 text-blue-950 text-[10px] font-black px-1.5 py-0.2 rounded-full shadow-xs">
+                          {pendingDeliveriesCount}
+                        </span>
+                      )}
                     </Link>
                   );
                 })}

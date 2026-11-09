@@ -85,6 +85,7 @@ export default function EcommerceStore() {
   // Modal de vista detallada de producto / imagen
   const [previewProduct, setPreviewProduct] = useState(null);
   const [detailModalItem, setDetailModalItem] = useState(null);
+  const [modalIncluyeInstalacion, setModalIncluyeInstalacion] = useState(false);
 
   // Guardar carrito en localStorage
   useEffect(() => {
@@ -209,6 +210,10 @@ export default function EcommerceStore() {
         price: Number(p.price || 0),
         stockDisponible,
         stockPorSucursal,
+        aplica_mano_obra: Boolean(p.aplica_mano_obra),
+        id_servicio_asociado: p.id_servicio_asociado || '',
+        nombre_mano_obra: p.nombre_mano_obra || '',
+        precio_mano_obra: Number(p.precio_mano_obra || 0),
         compatibilidad: Array.isArray(p.compatibilidad)
           ? p.compatibilidad
           : (typeof p.compatibilidad === 'string' && p.compatibilidad.trim() ? [p.compatibilidad.trim()] : [])
@@ -308,7 +313,7 @@ export default function EcommerceStore() {
   }, [hydratedProducts, selectedCategory, selectedMotoModel, onlyInStock, search, sortBy]);
 
   // Operaciones del Carrito (Solo para productos físicos)
-  const addToCart = (item, qty = 1) => {
+  const addToCart = (item, qty = 1, forceInstalacion = false) => {
     if (item.itemType === 'servicio') {
       toast.error('Los servicios de taller no se agregan al carrito. Contáctanos por WhatsApp o correo para agendar tu cita.');
       return;
@@ -317,7 +322,12 @@ export default function EcommerceStore() {
     setCart(prev => {
       const existing = prev.find(i => i.id === item.id);
       if (existing) {
-        return prev.map(i => i.id === item.id ? { ...i, qty: i.qty + qty } : i);
+        return prev.map(i => i.id === item.id ? { 
+          ...i, 
+          qty: i.qty + qty,
+          incluye_instalacion: forceInstalacion ? true : i.incluye_instalacion,
+          stockDisponible: item.stockDisponible !== undefined ? item.stockDisponible : i.stockDisponible
+        } : i);
       }
       return [
         ...prev,
@@ -329,6 +339,12 @@ export default function EcommerceStore() {
           image: item.image || '',
           itemType: 'producto',
           cat: item.cat || 'General',
+          stockDisponible: Number(item.stockDisponible || 0),
+          aplica_mano_obra: Boolean(item.aplica_mano_obra),
+          id_servicio_asociado: item.id_servicio_asociado || '',
+          nombre_mano_obra: item.nombre_mano_obra || '',
+          precio_mano_obra: Number(item.precio_mano_obra || 0),
+          incluye_instalacion: Boolean(forceInstalacion),
           qty
         }
       ];
@@ -337,6 +353,20 @@ export default function EcommerceStore() {
       icon: '🛒',
       duration: 2000
     });
+  };
+
+  const toggleItemInstalacion = (id) => {
+    setCart(prev => prev.map(item => {
+      if (item.id === id && item.aplica_mano_obra) {
+        const nextVal = !item.incluye_instalacion;
+        toast(nextVal ? 'Instalación en taller agregada' : 'Instalación en taller removida', {
+          icon: nextVal ? '🔧' : '📦',
+          duration: 1500
+        });
+        return { ...item, incluye_instalacion: nextVal };
+      }
+      return item;
+    }));
   };
 
   const updateCartQty = (id, delta) => {
@@ -361,7 +391,32 @@ export default function EcommerceStore() {
   };
 
   const cartCount = useMemo(() => cart.reduce((acc, i) => acc + i.qty, 0), [cart]);
-  const cartTotal = useMemo(() => cart.reduce((acc, i) => acc + i.price * i.qty, 0), [cart]);
+
+  const hasAnyInstallationInCart = useMemo(() => {
+    return cart.some(i => i.incluye_instalacion);
+  }, [cart]);
+
+  // Si hay algún producto con instalación, la modalidad debe ser cita en taller (no paquetería)
+  useEffect(() => {
+    if (hasAnyInstallationInCart) {
+      setCustomerInfo(prev => ({
+        ...prev,
+        modalidad: 'Cita e Instalación en Taller (Sucursal)'
+      }));
+    } else if (customerInfo.modalidad === 'Cita e Instalación en Taller (Sucursal)') {
+      setCustomerInfo(prev => ({
+        ...prev,
+        modalidad: 'Retiro en Sucursal'
+      }));
+    }
+  }, [hasAnyInstallationInCart]);
+
+  const cartTotal = useMemo(() => {
+    return cart.reduce((acc, i) => {
+      const unitLabor = i.incluye_instalacion ? Number(i.precio_mano_obra || 0) : 0;
+      return acc + ((i.price + unitLabor) * i.qty);
+    }, 0);
+  }, [cart]);
 
   // Obtener sucursal activa para contacto
   const targetSucursalObj = useMemo(() => {
@@ -384,29 +439,68 @@ export default function EcommerceStore() {
   // Generar mensaje de pedido de repuestos
   const buildOrderMessage = (itemsToOrder = cart) => {
     const branchName = targetSucursalObj?.nombre || 'Sucursal Principal';
+    const hasInstallation = itemsToOrder.some(i => i.incluye_instalacion);
+    const modalidadFinal = hasInstallation 
+      ? `Cita e Instalación en Taller (${branchName})` 
+      : customerInfo.modalidad;
+
     const lines = [
       `🏍️ *HOLA TALLER EL MINGO (${branchName.toUpperCase()})*`,
-      `Deseo realizar el siguiente pedido / cotización de repuestos desde la Tienda Online:`,
+      `Deseo realizar el siguiente pedido / cotización desde la Tienda Online:`,
       ``
     ];
 
+    let totalRepuestos = 0;
+    let totalManoObra = 0;
+    let tienePendientes = false;
+
     itemsToOrder.forEach((item, idx) => {
-      const subtotal = (item.price * item.qty).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const unitLabor = item.incluye_instalacion ? Number(item.precio_mano_obra || 0) : 0;
+      const subtotalItem = (item.price + unitLabor) * item.qty;
+      totalRepuestos += item.price * item.qty;
+      totalManoObra += unitLabor * item.qty;
+
       const codeStr = item.codigo_visible ? `[${item.codigo_visible}] ` : '';
-      lines.push(`${idx + 1}. *${item.qty}x* ${codeStr}${item.name} — *C$ ${subtotal}*`);
+      lines.push(`${idx + 1}. *${item.qty}x* ${codeStr}${item.name} — *C$ ${subtotalItem.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}*`);
+      
+      if (item.incluye_instalacion) {
+        lines.push(`   🔧 _Incluye Mano de Obra: ${item.nombre_mano_obra || 'Instalación en Taller'} (+ C$ ${unitLabor.toFixed(2)} c/u)_`);
+      }
+
+      // Desglose de disponibilidad para entrega inmediata vs pendiente
+      const stock = Number(item.stockDisponible || 0);
+      if (item.qty > stock) {
+        tienePendientes = true;
+        if (stock > 0) {
+          lines.push(`   ⚠️ _Disponibilidad: ${stock} uds entrega inmediata + ${item.qty - stock} uds pendiente de entrega (pedido especial)_`);
+        } else {
+          lines.push(`   ⚠️ _Disponibilidad: Sin stock inmediato (Bajo pedido especial / Pendiente de entrega)_`);
+        }
+      }
     });
 
-    const totalCalc = itemsToOrder.reduce((acc, i) => acc + i.price * i.qty, 0);
+    const totalGeneral = totalRepuestos + totalManoObra;
     lines.push(``);
-    lines.push(`💰 *TOTAL ESTIMADO REPUESTOS: C$ ${totalCalc.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}*`);
+    lines.push(`💰 *TOTAL GENERAL ESTIMADO: C$ ${totalGeneral.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}*`);
+    if (totalManoObra > 0) {
+      lines.push(`   • Repuestos: C$ ${totalRepuestos.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+      lines.push(`   • Mano de Obra / Instalación: C$ ${totalManoObra.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+    }
     lines.push(`────────────────────`);
 
     if (customerInfo.nombre.trim()) lines.push(`👤 *Cliente:* ${customerInfo.nombre.trim()}`);
     if (customerInfo.telefono.trim()) lines.push(`📱 *Teléfono:* ${customerInfo.telefono.trim()}`);
     if (customerInfo.modeloMoto.trim()) lines.push(`🏍️ *Moto:* ${customerInfo.modeloMoto.trim()}`);
-    lines.push(`📍 *Modalidad:* ${customerInfo.modalidad}`);
-    lines.push(`🏢 *Sucursal de Preferencia:* ${branchName}`);
-    if (customerInfo.notas.trim()) lines.push(`📝 *Nota:* ${customerInfo.notas.trim()}`);
+    lines.push(`📍 *Modalidad:* ${modalidadFinal}`);
+    if (hasInstallation) {
+      lines.push(`🔧 *Nota de Taller:* Llegaré con la moto para el montaje de repuestos.`);
+    }
+    lines.push(`🏢 *Sucursal:* ${branchName}`);
+    if (customerInfo.notas.trim()) lines.push(`📝 *Indicaciones:* ${customerInfo.notas.trim()}`);
+    if (tienePendientes) {
+      lines.push(``);
+      lines.push(`ℹ️ _Nota sobre entregas: Autorizo facturar las unidades disponibles para entrega inmediata y coordinar los pendientes de entrega._`);
+    }
 
     return lines.join('\n');
   };
@@ -886,16 +980,12 @@ export default function EcommerceStore() {
                       </span>
 
                       {hasStock ? (
-                        <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full shadow-xs ${
-                          isLowStock
-                            ? 'bg-amber-400 text-slate-950'
-                            : 'bg-emerald-500 text-white'
-                        }`}>
-                          {isLowStock ? `¡Últimas ${item.stockDisponible} uds!` : `En Stock (${item.stockDisponible})`}
+                        <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full shadow-xs bg-emerald-500 text-white">
+                          Disponible
                         </span>
                       ) : (
                         <span className="bg-slate-700 text-slate-100 text-[10px] font-bold px-2.5 py-0.5 rounded-full">
-                          Consultar Bodega
+                          Agotado
                         </span>
                       )}
                     </div>
@@ -916,6 +1006,13 @@ export default function EcommerceStore() {
                       >
                         {item.name || item.nombre}
                       </h3>
+
+                      {item.aplica_mano_obra && (
+                        <div className="mt-1.5 flex items-center gap-1.5 text-[10px] font-bold text-amber-900 bg-amber-50 border border-amber-200/90 px-2 py-0.5 rounded-md w-fit">
+                          <Wrench size={11} className="text-amber-700 shrink-0" />
+                          <span>Instalación opcional (+ C$ {Number(item.precio_mano_obra || 0).toFixed(2)})</span>
+                        </div>
+                      )}
 
                       {item.descripcion && (
                         <p className="text-xs text-slate-500 mt-1 leading-relaxed">
@@ -1261,54 +1358,100 @@ export default function EcommerceStore() {
                 <>
                   {/* Lista de repuestos en carrito */}
                   <div className="space-y-2.5">
-                    {cart.map(item => (
-                      <div key={item.id} className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                          {item.image ? (
-                            <img src={item.image} alt={item.name} className="w-12 h-12 rounded-lg object-contain bg-white border border-slate-200 shrink-0" />
-                          ) : (
-                            <div className="w-12 h-12 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
-                              <Package size={20} />
+                    {cart.map(item => {
+                      const unitLabor = item.incluye_instalacion ? Number(item.precio_mano_obra || 0) : 0;
+                      const itemUnitTotal = item.price + unitLabor;
+                      const itemSubtotal = itemUnitTotal * item.qty;
+                      const stockDisp = Number(item.stockDisponible || 0);
+                      const hasStockDeficit = item.qty > stockDisp;
+
+                      return (
+                        <div key={item.id} className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col gap-2">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                              {item.image ? (
+                                <img src={item.image} alt={item.name} className="w-12 h-12 rounded-lg object-contain bg-white border border-slate-200 shrink-0" />
+                              ) : (
+                                <div className="w-12 h-12 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
+                                  <Package size={20} />
+                                </div>
+                              )}
+                              <div className="min-w-0 flex-1">
+                                <p className="text-[10px] font-mono font-bold text-slate-400">{item.codigo_visible}</p>
+                                <p className="font-bold text-xs text-slate-800 break-words leading-snug">{item.name}</p>
+                                <p className="text-xs font-black text-blue-900 mt-0.5">
+                                  C$ {itemSubtotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  <span className="text-[10px] font-normal text-slate-500 ml-1">
+                                    (C$ {itemUnitTotal.toFixed(2)} c/u)
+                                  </span>
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="flex flex-col items-end gap-1.5 shrink-0">
+                              <button
+                                onClick={() => removeFromCart(item.id)}
+                                className="text-slate-400 hover:text-red-500 p-1 cursor-pointer"
+                                title="Quitar"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                              <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg p-0.5">
+                                <button
+                                  onClick={() => updateCartQty(item.id, -1)}
+                                  className="w-6 h-6 rounded bg-slate-100 hover:bg-slate-200 flex items-center justify-center font-bold text-xs cursor-pointer"
+                                >
+                                  -
+                                </button>
+                                <span className="text-xs font-black px-1.5">{item.qty}</span>
+                                <button
+                                  onClick={() => updateCartQty(item.id, 1)}
+                                  className="w-6 h-6 rounded bg-blue-600 text-white flex items-center justify-center font-bold text-xs cursor-pointer"
+                                >
+                                  +
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Opción de Mano de Obra en Taller */}
+                          {item.aplica_mano_obra && (
+                            <div className="pt-2 border-t border-slate-200/70">
+                              <label className="flex items-center gap-2 cursor-pointer select-none bg-white border border-amber-200 p-2 rounded-lg text-xs font-bold text-amber-950 hover:bg-amber-50/50 transition-colors">
+                                <input
+                                  type="checkbox"
+                                  checked={Boolean(item.incluye_instalacion)}
+                                  onChange={() => toggleItemInstalacion(item.id)}
+                                  className="w-4 h-4 rounded text-blue-600 accent-blue-600 cursor-pointer"
+                                />
+                                <Wrench size={13} className="text-amber-600 shrink-0" />
+                                <span className="flex-1">
+                                  {item.nombre_mano_obra || 'Incluir cambio / instalación en taller'}
+                                </span>
+                                <span className="text-amber-800 font-mono font-black shrink-0">
+                                  + C$ {Number(item.precio_mano_obra || 0).toFixed(2)}
+                                </span>
+                              </label>
                             </div>
                           )}
-                          <div className="min-w-0 flex-1">
-                            <p className="text-[10px] font-mono font-bold text-slate-400">{item.codigo_visible}</p>
-                            <p className="font-bold text-xs text-slate-800 break-words leading-snug">{item.name}</p>
-                            <p className="text-xs font-black text-blue-900 mt-0.5">
-                              C$ {(item.price * item.qty).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              <span className="text-[10px] font-normal text-slate-500 ml-1">
-                                (C$ {item.price.toFixed(2)} c/u)
-                              </span>
-                            </p>
-                          </div>
-                        </div>
 
-                        <div className="flex flex-col items-end gap-1.5 shrink-0">
-                          <button
-                            onClick={() => removeFromCart(item.id)}
-                            className="text-slate-400 hover:text-red-500 p-1 cursor-pointer"
-                            title="Quitar"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                          <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg p-0.5">
-                            <button
-                              onClick={() => updateCartQty(item.id, -1)}
-                              className="w-6 h-6 rounded bg-slate-100 hover:bg-slate-200 flex items-center justify-center font-bold text-xs cursor-pointer"
-                            >
-                              -
-                            </button>
-                            <span className="text-xs font-black px-1.5">{item.qty}</span>
-                            <button
-                              onClick={() => updateCartQty(item.id, 1)}
-                              className="w-6 h-6 rounded bg-blue-600 text-white flex items-center justify-center font-bold text-xs cursor-pointer"
-                            >
-                              +
-                            </button>
-                          </div>
+                          {/* Aviso de Entrega Inmediata vs Pendiente de Entrega */}
+                          {hasStockDeficit && (
+                            <div className="p-2 bg-amber-50 border border-amber-200 rounded-lg text-[10px] text-amber-900 leading-tight">
+                              {stockDisp > 0 ? (
+                                <span>
+                                  ⚠️ <strong>Entrega inmediata:</strong> {stockDisp} {stockDisp === 1 ? 'unidad' : 'unidades'}. <strong>Pendiente de entrega:</strong> {item.qty - stockDisp} {item.qty - stockDisp === 1 ? 'unidad' : 'unidades'} (bajo pedido especial).
+                                </span>
+                              ) : (
+                                <span>
+                                  ⚠️ <strong>Pedido Especial:</strong> No disponemos de stock físico inmediato ({item.qty} uds quedarán como pendiente de entrega).
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
 
                   {/* Formulario de entrega / retiro */}
@@ -1355,17 +1498,33 @@ export default function EcommerceStore() {
                       </div>
                       <div>
                         <label className="block text-[11px] font-bold text-slate-600 mb-1">Modalidad de Entrega</label>
-                        <select
-                          value={customerInfo.modalidad}
-                          onChange={(e) => setCustomerInfo(prev => ({ ...prev, modalidad: e.target.value }))}
-                          className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold outline-none focus:border-blue-600"
-                        >
-                          <option value="Retiro en Sucursal">Retiro en Sucursal</option>
-                          <option value="Envío por CargoTrans / Encomienda">Envío por CargoTrans / Encomienda</option>
-                          <option value="Delivery Local">Delivery Local</option>
-                        </select>
+                        {hasAnyInstallationInCart ? (
+                          <div className="w-full bg-amber-50 border border-amber-300 rounded-lg px-2.5 py-1.5 text-xs font-black text-amber-900 flex items-center gap-1.5">
+                            <Wrench size={13} className="text-amber-700 shrink-0" />
+                            <span>Cita e Instalación en Taller</span>
+                          </div>
+                        ) : (
+                          <select
+                            value={customerInfo.modalidad}
+                            onChange={(e) => setCustomerInfo(prev => ({ ...prev, modalidad: e.target.value }))}
+                            className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold outline-none focus:border-blue-600"
+                          >
+                            <option value="Retiro en Sucursal">Retiro en Sucursal</option>
+                            <option value="Envío por CargoTrans / Encomienda">Envío por CargoTrans / Encomienda</option>
+                            <option value="Delivery Local">Delivery Local</option>
+                          </select>
+                        )}
                       </div>
                     </div>
+
+                    {hasAnyInstallationInCart && (
+                      <div className="p-2.5 bg-blue-100/80 border border-blue-300 rounded-xl text-[11px] text-blue-950 font-medium flex items-start gap-2">
+                        <Wrench size={14} className="text-blue-700 shrink-0 mt-0.5" />
+                        <span>
+                          <strong>Atención en Taller:</strong> Al incluir instalación mecánica, tu pedido se programa exclusivamente para atención con tu moto en taller. No aplica envío por encomienda CargoTrans.
+                        </span>
+                      </div>
+                    )}
 
                     <div>
                       <label className="block text-[11px] font-bold text-slate-600 mb-1">Indicaciones o Nota adicional</label>
@@ -1465,7 +1624,7 @@ export default function EcommerceStore() {
                 )}
               </div>
 
-              {/* Disponibilidad por sucursal */}
+              {/* Disponibilidad por sucursal (Sin números exactos al cliente) */}
               {detailModalItem.stockPorSucursal && (
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
                   <p className="text-[11px] font-black text-slate-500 uppercase mb-2">
@@ -1477,10 +1636,10 @@ export default function EcommerceStore() {
                       return (
                         <div key={suc.id} className="bg-white border border-slate-200 rounded-lg p-2 flex items-center justify-between">
                           <span className="text-xs font-bold text-slate-700">{suc.short || suc.nombre}</span>
-                          <span className={`text-xs font-black px-2 py-0.5 rounded-full ${
+                          <span className={`text-xs font-black px-2.5 py-0.5 rounded-full ${
                             st > 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-500'
                           }`}>
-                            {st > 0 ? `${st} uds` : 'Agotado'}
+                            {st > 0 ? 'Disponible' : 'Agotado'}
                           </span>
                         </div>
                       );
@@ -1489,23 +1648,62 @@ export default function EcommerceStore() {
                 </div>
               )}
 
+              {/* Opción de Mano de Obra / Instalación en Taller */}
+              {detailModalItem.aplica_mano_obra && (
+                <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-4 space-y-2.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={modalIncluyeInstalacion}
+                        onChange={(e) => setModalIncluyeInstalacion(e.target.checked)}
+                        className="w-4 h-4 rounded text-blue-600 accent-blue-600 cursor-pointer"
+                      />
+                      <span className="text-xs font-black text-amber-950">
+                        ¿Deseas incluir la instalación / cambio en taller?
+                      </span>
+                    </label>
+                    <span className="text-xs font-mono font-black text-amber-800 bg-amber-200/80 px-2.5 py-0.5 rounded-md shrink-0">
+                      + C$ {Number(detailModalItem.precio_mano_obra || 0).toFixed(2)}
+                    </span>
+                  </div>
+
+                  <p className="text-[11px] text-amber-900 leading-relaxed pl-6">
+                    {detailModalItem.nombre_mano_obra || 'Instalación y montaje técnico en taller por mecánicos calificados.'} Llegarás con tu moto a la sucursal asignada.
+                  </p>
+
+                  {modalIncluyeInstalacion && (
+                    <div className="pt-2 border-t border-amber-200/80 flex justify-between items-center text-xs font-black text-blue-950 pl-6">
+                      <span>Presupuesto con Instalación:</span>
+                      <span className="text-base text-blue-900 font-mono">
+                        C$ {(Number(detailModalItem.price || 0) + Number(detailModalItem.precio_mano_obra || 0)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="flex items-center justify-between pt-3 border-t border-slate-200">
                 <div>
-                  <span className="text-xs text-slate-400 font-bold block">Precio Oficial</span>
+                  <span className="text-xs text-slate-400 font-bold block">
+                    {modalIncluyeInstalacion ? 'Total Repuesto + Instalación' : 'Precio Oficial'}
+                  </span>
                   <span className="text-2xl font-black text-blue-950">
-                    C$ {Number(detailModalItem.price || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    C$ {(Number(detailModalItem.price || 0) + (modalIncluyeInstalacion ? Number(detailModalItem.precio_mano_obra || 0) : 0)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
 
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => {
-                      addToCart(detailModalItem, 1);
+                      addToCart(detailModalItem, 1, modalIncluyeInstalacion);
                       setDetailModalItem(null);
+                      setModalIncluyeInstalacion(false);
                     }}
-                    className="bg-blue-600 hover:bg-blue-700 text-white font-black text-xs px-4 py-3 rounded-xl flex items-center gap-1.5 cursor-pointer"
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-black text-xs px-4 py-3 rounded-xl flex items-center gap-1.5 cursor-pointer shadow-sm hover:shadow-md transition-all"
                   >
-                    <ShoppingCart size={16} /> Agregar al Pedido
+                    <ShoppingCart size={16} />
+                    {modalIncluyeInstalacion ? 'Agregar con Instalación' : 'Agregar al Pedido'}
                   </button>
                 </div>
               </div>

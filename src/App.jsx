@@ -22,6 +22,7 @@ import OrdenesTrabajo from './pages/OrdenesTrabajo'
 import RRHH from './pages/RRHH'
 import PortalEmpleado from './pages/PortalEmpleado'
 import EcommerceStore from './pages/EcommerceStore'
+import PendientesEntrega from './pages/PendientesEntrega'
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -91,6 +92,7 @@ function AppRouter() {
         {/* RUTAS INTERNAS DEL ERP (PROTEGIDAS) */}
         <Route path="/dashboard" element={<ProtectedRoute><Home /></ProtectedRoute>} />
         <Route path="/pos" element={<ProtectedRoute perm="VER_POS"><POS /></ProtectedRoute>} />
+        <Route path="/entregas" element={<ProtectedRoute perm="VER_POS"><PendientesEntrega /></ProtectedRoute>} />
         <Route path="/taller" element={<ProtectedRoute perm="VER_TALLER"><OrdenesTrabajo /></ProtectedRoute>} />
         <Route path="/inventario" element={<ProtectedRoute perm="VER_INVENTARIO"><Inventario /></ProtectedRoute>} />
         <Route path="/clientes" element={<ProtectedRoute perm="VER_CLIENTES"><Clientes /></ProtectedRoute>} />

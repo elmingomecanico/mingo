@@ -5,7 +5,7 @@ import {
   Search, Plus, Edit2, Trash2, Package, History, Maximize2, ScanBarcode, 
   Sliders, ShieldCheck, AlertTriangle, CheckCircle2, Percent, 
   RotateCcw, Sparkles, AlertCircle, Building2, Layers, Check, X,
-  Hash, Lock, ArrowRightLeft, Star, UploadCloud, Image as ImageIcon
+  Hash, Lock, ArrowRightLeft, Star, UploadCloud, Image as ImageIcon, Wrench
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Select from 'react-select';
@@ -90,6 +90,7 @@ export default function Inventario() {
   const [categorias, setCategorias] = useState([]);
   const [ubicaciones, setUbicaciones] = useState([]);
   const [modelosMoto, setModelosMoto] = useState([]);
+  const [serviciosList, setServiciosList] = useState([]);
   
   // Imagen Ampliada y Escáner de Código de Barras
   const [selectedPreviewProduct, setSelectedPreviewProduct] = useState(null);
@@ -100,7 +101,8 @@ export default function Inventario() {
   const [editingId, setEditingId] = useState(null);
   const [formData, setFormData] = useState({
     codigo_visible: '', name: '', price: '', cost: '', cat: '', stock_actual: 0, stock_minimo: 0, ubicacion: '', compatibilidad: [], image: '', images: [],
-    permitir_negativo: 'heredar', permite_descuento: true, descuento_maximo: 15
+    permitir_negativo: 'heredar', permite_descuento: true, descuento_maximo: 15,
+    aplica_mano_obra: false, id_servicio_asociado: '', nombre_mano_obra: '', precio_mano_obra: ''
   });
 
   // Modal State para Ajustes
@@ -147,6 +149,16 @@ export default function Inventario() {
     const ajustesRef = ref(rtdb, `ajustes_inventario/${sucursal}`);
     const consRef = ref(rtdb, 'configuracion/consecutivos');
     const sucursalesRef = ref(rtdb, 'configuracion/sucursales');
+    const servRef = ref(rtdb, 'servicios');
+
+    const unsubServ = onValue(servRef, (snap) => {
+      if (snap.exists()) {
+        const val = snap.val();
+        setServiciosList(Object.keys(val).map(k => ({ id: k, ...val[k] })));
+      } else {
+        setServiciosList([]);
+      }
+    });
 
     const unsubSucursales = onValue(sucursalesRef, (snap) => {
       if (snap.exists()) {
@@ -215,7 +227,7 @@ export default function Inventario() {
 
     return () => {
       clearTimeout(safetyTimer);
-      unsubProds(); unsubImgs(); unsubInv(); unsubAllInv(); unsubPoliticas(); unsubCat(); unsubUbi(); unsubMod(); unsubAjustes(); unsubCons(); unsubSucursales();
+      unsubProds(); unsubImgs(); unsubInv(); unsubAllInv(); unsubPoliticas(); unsubCat(); unsubUbi(); unsubMod(); unsubAjustes(); unsubCons(); unsubSucursales(); unsubServ();
     };
   }, [sucursal]);
 
@@ -326,7 +338,11 @@ export default function Inventario() {
         images: initialImages,
         permitir_negativo: prod.permitir_negativo || 'heredar',
         permite_descuento: prod.permite_descuento !== undefined ? Boolean(prod.permite_descuento) : true,
-        descuento_maximo: prod.descuento_maximo !== undefined ? Number(prod.descuento_maximo) : 15
+        descuento_maximo: prod.descuento_maximo !== undefined ? Number(prod.descuento_maximo) : 15,
+        aplica_mano_obra: Boolean(prod.aplica_mano_obra),
+        id_servicio_asociado: prod.id_servicio_asociado || '',
+        nombre_mano_obra: prod.nombre_mano_obra || '',
+        precio_mano_obra: prod.precio_mano_obra !== undefined && prod.precio_mano_obra !== null ? prod.precio_mano_obra : ''
       });
 
       // Si el producto tiene un paquete en Cloudflare R2 (bundle_url), cargar las hasta 4 fotos en el formulario
@@ -349,7 +365,8 @@ export default function Inventario() {
       setFormData({ 
         codigo_visible: suggestedCode,
         name: '', price: '', cost: '', cat: '', stock_actual: 0, stock_minimo: 0, ubicacion: '', compatibilidad: [], image: '', images: [],
-        permitir_negativo: 'heredar', permite_descuento: true, descuento_maximo: 15
+        permitir_negativo: 'heredar', permite_descuento: true, descuento_maximo: 15,
+        aplica_mano_obra: false, id_servicio_asociado: '', nombre_mano_obra: '', precio_mano_obra: ''
       });
     }
     setIsModalOpen(true);
@@ -515,7 +532,11 @@ export default function Inventario() {
         image: '', // Las imágenes residen optimizadas en Cloudflare R2 y nodo independiente
         permitir_negativo: formData.permitir_negativo || 'heredar',
         permite_descuento: formData.permite_descuento !== undefined ? Boolean(formData.permite_descuento) : true,
-        descuento_maximo: Number(formData.descuento_maximo) || 15
+        descuento_maximo: Number(formData.descuento_maximo) || 15,
+        aplica_mano_obra: Boolean(formData.aplica_mano_obra),
+        id_servicio_asociado: formData.aplica_mano_obra ? (formData.id_servicio_asociado || '') : '',
+        nombre_mano_obra: formData.aplica_mano_obra ? (formData.nombre_mano_obra?.trim() || '') : '',
+        precio_mano_obra: formData.aplica_mano_obra ? (Number(formData.precio_mano_obra) || 0) : 0
       });
 
       const invRef = ref(rtdb, `inventario/${sucursal}/${prodId}`);
@@ -768,6 +789,12 @@ export default function Inventario() {
                             ) : (
                               <span className="bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] font-bold px-1.5 py-0.5 rounded">
                                 Desc. Máx: {getMaxAllowedDiscount(prod, politicas)}%
+                              </span>
+                            )}
+                            {prod.aplica_mano_obra && (
+                              <span className="bg-blue-50 border border-blue-200 text-blue-800 text-[10px] font-black px-1.5 py-0.5 rounded flex items-center gap-1" title={prod.nombre_mano_obra || 'Instalación en taller disponible'}>
+                                <Wrench size={10} className="text-blue-600" />
+                                Mano de Obra (+ C$ {Number(prod.precio_mano_obra || 0).toFixed(2)})
                               </span>
                             )}
                           </div>
@@ -1686,6 +1713,119 @@ export default function Inventario() {
                       </span>
                     </div>
                   </div>
+                </div>
+
+                {/* MANO DE OBRA & INSTALACIÓN EN TALLER (OPCIONAL) */}
+                <div className={`p-4 rounded-2xl border transition-all ${
+                  formData.aplica_mano_obra 
+                    ? 'bg-blue-50/70 border-blue-300 shadow-xs' 
+                    : 'bg-slate-50/70 border-slate-200'
+                }`}>
+                  <div className="flex items-center justify-between border-b pb-2 mb-3 border-blue-200/60">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold ${
+                        formData.aplica_mano_obra ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-500'
+                      }`}>
+                        <Wrench size={15} />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-slate-900 text-xs sm:text-sm uppercase tracking-wider flex items-center gap-1.5">
+                          Mano de Obra & Instalación en Taller
+                        </h3>
+                        <p className="text-[11px] text-slate-500">
+                          Permite al cliente cotizar la pieza instalada en moto y al cajero facturar el servicio en un clic.
+                        </p>
+                      </div>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.aplica_mano_obra}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setFormData(prev => ({
+                            ...prev,
+                            aplica_mano_obra: checked,
+                            precio_mano_obra: checked ? (prev.precio_mano_obra || '') : ''
+                          }));
+                        }}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                  </div>
+
+                  {formData.aplica_mano_obra ? (
+                    <div className="space-y-3 animate-in fade-in duration-150">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-bold text-blue-950 mb-1 uppercase">
+                            Servicio Vinculado (Catálogo de Taller)
+                          </label>
+                          <select
+                            value={formData.id_servicio_asociado}
+                            onChange={(e) => {
+                              const srvId = e.target.value;
+                              const selectedSrv = serviciosList.find(s => s.id === srvId);
+                              setFormData(prev => ({
+                                ...prev,
+                                id_servicio_asociado: srvId,
+                                nombre_mano_obra: selectedSrv ? selectedSrv.nombre : prev.nombre_mano_obra,
+                                precio_mano_obra: selectedSrv && selectedSrv.precio !== undefined ? selectedSrv.precio : prev.precio_mano_obra
+                              }));
+                            }}
+                            className="w-full border border-blue-300 bg-white p-2.5 rounded-xl outline-none focus:border-blue-500 text-xs sm:text-sm font-medium"
+                          >
+                            <option value="">-- Seleccionar o personalizar --</option>
+                            {serviciosList.map(srv => (
+                              <option key={srv.id} value={srv.id}>
+                                {srv.codigo_visible ? `[${srv.codigo_visible}] ` : ''}{srv.nombre} (C$ {Number(srv.precio || 0).toFixed(2)})
+                              </option>
+                            ))}
+                          </select>
+                          <span className="text-[10px] text-blue-800 mt-1 block leading-tight">
+                            Vínculo con el catálogo maestro de servicios de taller.
+                          </span>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-blue-950 mb-1 uppercase">
+                            Tarifa de Mano de Obra (C$) *
+                          </label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            required={formData.aplica_mano_obra}
+                            value={formData.precio_mano_obra}
+                            onChange={(e) => setFormData(prev => ({ ...prev, precio_mano_obra: e.target.value }))}
+                            placeholder="Ej. 150.00"
+                            className="w-full border border-blue-300 bg-white p-2.5 rounded-xl outline-none focus:border-blue-500 text-xs sm:text-sm font-bold text-blue-950 text-right"
+                          />
+                          <span className="text-[10px] text-blue-800 mt-1 block leading-tight">
+                            Monto exacto a cobrar al cliente por instalar esta pieza.
+                          </span>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-blue-950 mb-1 uppercase">
+                          Descripción de la Mano de Obra para el Cliente
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.nombre_mano_obra}
+                          onChange={(e) => setFormData(prev => ({ ...prev, nombre_mano_obra: e.target.value }))}
+                          placeholder="Ej. Desmontaje, montaje y calibración técnica en taller"
+                          className="w-full border border-blue-300 bg-white p-2 rounded-xl outline-none focus:border-blue-500 text-xs sm:text-sm font-medium"
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-slate-400 italic">
+                      Este producto se comercializa únicamente como pieza física sin opción de mano de obra vinculada.
+                    </p>
+                  )}
                 </div>
 
               </div>

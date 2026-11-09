@@ -90,7 +90,8 @@ export default function POS() {
     selectedCliente: { value: 'MOSTRADOR', label: 'CLIENTE DE MOSTRADOR' },
     metodoPago: 'Efectivo',
     selectedMecanico: null,
-    selectedEmpleadoDeudor: null
+    selectedEmpleadoDeudor: null,
+    mercanciaQuedaPendiente: false
   });
 
   const [tabs, setTabsState] = useState(() => {
@@ -136,6 +137,8 @@ export default function POS() {
 
   const selectedEmpleadoDeudor = activeTab.selectedEmpleadoDeudor;
   const setSelectedEmpleadoDeudor = (val) => updateActiveTab({ selectedEmpleadoDeudor: val });
+  const mercanciaQuedaPendiente = activeTab.mercanciaQuedaPendiente || false;
+  const setMercanciaQuedaPendiente = (val) => updateActiveTab({ mercanciaQuedaPendiente: val });
 
   const addNewTab = () => {
     const newTab = getDefaultTab(tabs.length + 1);
@@ -823,6 +826,38 @@ export default function POS() {
     setProductConfigModal(null);
   };
 
+  const handleAddLaborService = (productItem) => {
+    const laborPrice = Number(productItem.precio_mano_obra || 0);
+    const laborName = productItem.nombre_mano_obra || `Instalación de ${productItem.name}`;
+    const serviceId = productItem.id_servicio_asociado || `SRV-${productItem.id}`;
+    
+    // Verificar si ya existe en el carrito
+    const existing = cart.find(c => c.id === serviceId && c.type === 'servicio');
+    if (existing) {
+      toast('El servicio de instalación ya está agregado al carrito', { icon: 'ℹ️' });
+      return;
+    }
+
+    const serviceItem = {
+      id: serviceId,
+      name: laborName,
+      price: laborPrice,
+      cost: 0,
+      type: 'servicio',
+      qty: 1,
+      sucursal: productItem.sucursal || sucursal,
+      discount: 0,
+      discountPercent: 0,
+      discountMode: '$'
+    };
+
+    setCart([...cart, serviceItem]);
+    toast.success(`Servicio "${laborName}" (C$ ${laborPrice.toFixed(2)}) agregado. Asigna el mecánico responsable abajo.`, { 
+      icon: '🔧',
+      duration: 3500 
+    });
+  };
+
   const addToCart = (product, explicitSucursal = null) => {
     // Abrir modal ergonómico para definir cantidad y sucursal
     openProductModal(product, explicitSucursal);
@@ -1290,7 +1325,32 @@ export default function POS() {
 
         // Preparar paquete Multi-Path Update para que todos los documentos vinculados se escriban de forma 100% ATÓMICA
         const atomicBatch = {
-          [`ventas/${saleId}`]: newSale
+          [`ventas/${saleId}`]: newSale,
+        if (mercanciaQuedaPendiente) {
+          const pendingKey = push(ref(rtdb, 'pendientes_entrega')).key;
+          atomicBatch[`pendientes_entrega/${pendingKey}`] = {
+            id: pendingKey,
+            codigo_visible: `ENT-${humanId}`,
+            fecha_creacion: fechaVentaIso,
+            id_venta_origen: humanId,
+            cliente_nombre: nombreFinalCliente,
+            cliente_telefono: clienteDataObj?.telefono1 || '',
+            sucursal: branchId,
+            motivo: 'Mercancía pagada en Caja POS en custodia para retiro/montaje posterior',
+            estado: 'Pendiente',
+            items: branchItems.filter(it => it.type !== 'servicio').map(it => ({
+              id_producto: it.id_producto || it.id,
+              codigo_visible: it.codigo_visible || it.sku || it.id,
+              nombre: it.name,
+              precio_unitario: it.price,
+              cantidad_total: it.qty,
+              cantidad_entregada: 0,
+              cantidad_pendiente: it.qty
+            })),
+            historial_despachos: [],
+            usuario_registro: cajeroResponsable
+          };
+        }
         };
 
         // PASO 3: Si el cobro es con Tarjeta o Transferencia, acreditar en la cuenta bancaria vinculada
@@ -2241,6 +2301,17 @@ export default function POS() {
                               >
                                 <span>✏️ Modificar</span>
                               </button>
+                              {item.type !== 'servicio' && item.aplica_mano_obra && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleAddLaborService(item)}
+                                  className="bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 transition-all active:scale-95 cursor-pointer"
+                                  title="Agregar servicio de instalación en taller para esta pieza"
+                                >
+                                  <Wrench size={13} className="text-amber-700" />
+                                  <span>+ Mano de Obra (+ C$ {Number(item.precio_mano_obra || 0).toFixed(2)})</span>
+                                </button>
+                              )}
                             </div>
 
                             {/* Detalle numérico: Precio unitario y Subtotal */}
@@ -2327,6 +2398,27 @@ export default function POS() {
                 </div>
               </div>
             )}
+
+            {/* Opción: Dejar mercancía en custodia / pendiente de retiro */}
+            <div className="bg-amber-50/70 border border-amber-200/90 rounded-xl p-2.5 my-2">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={mercanciaQuedaPendiente}
+                  onChange={(e) => setMercanciaQuedaPendiente(e.target.checked)}
+                  className="w-4 h-4 rounded text-blue-600 accent-blue-600 cursor-pointer"
+                />
+                <Clock size={15} className="text-amber-700 shrink-0" />
+                <span className="text-xs font-bold text-amber-950">
+                  Dejar mercancía en custodia / Pendiente de retiro
+                </span>
+              </label>
+              {mercanciaQuedaPendiente && (
+                <p className="text-[10px] text-amber-800 mt-1 pl-6">
+                  Se registrará un expediente en <strong>Pendientes de Entrega</strong> para emitir la Orden de Entrega cuando el cliente retire los repuestos.
+                </p>
+              )}
+            </div>
 
             <div className="flex justify-between items-center text-2xl sm:text-3xl font-black pt-3 border-t border-gray-100 text-blue-900 flex-wrap gap-2">
               <span>TOTAL:</span>
