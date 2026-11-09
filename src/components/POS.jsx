@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingCart, Trash2, Search, Save, Loader, Printer, Plus, X, UserPlus, Minus, Percent, FileDown, ShieldAlert, Sparkles, RefreshCw, Gift, Lock, Camera, Maximize2, Package, ScanBarcode, LockOpen, ArrowUpRight, Calculator, CheckCircle2, AlertTriangle, Coins, DollarSign, User, Wrench, Phone, CreditCard, MapPin, Building, Layers, Store } from 'lucide-react';
+import { ShoppingCart, Trash2, Search, Save, Loader, Printer, Plus, X, UserPlus, Minus, Percent, FileDown, ShieldAlert, Sparkles, RefreshCw, Gift, Lock, Camera, Maximize2, Package, ScanBarcode, LockOpen, ArrowUpRight, Calculator, CheckCircle2, AlertTriangle, Coins, DollarSign, User, Wrench, Phone, CreditCard, MapPin, Building, Layers, Store, Clock } from 'lucide-react';
 import { ref, onValue, push, set, update, runTransaction } from 'firebase/database';
 import { rtdb } from '../firebase';
 import { useAuth } from '../context/AuthContext';
