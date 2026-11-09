@@ -91,7 +91,9 @@ export default function POS() {
     metodoPago: 'Efectivo',
     selectedMecanico: null,
     selectedEmpleadoDeudor: null,
-    mercanciaQuedaPendiente: false
+    mercanciaQuedaPendiente: false,
+    custodiaModalidad: 'todo',
+    custodiaCantidades: {}
   });
 
   const [tabs, setTabsState] = useState(() => {
@@ -139,6 +141,10 @@ export default function POS() {
   const setSelectedEmpleadoDeudor = (val) => updateActiveTab({ selectedEmpleadoDeudor: val });
   const mercanciaQuedaPendiente = activeTab.mercanciaQuedaPendiente || false;
   const setMercanciaQuedaPendiente = (val) => updateActiveTab({ mercanciaQuedaPendiente: val });
+  const custodiaModalidad = activeTab.custodiaModalidad || 'todo';
+  const setCustodiaModalidad = (val) => updateActiveTab({ custodiaModalidad: val });
+  const custodiaCantidades = activeTab.custodiaCantidades || {};
+  const setCustodiaCantidades = (val) => updateActiveTab({ custodiaCantidades: val });
 
   const addNewTab = () => {
     const newTab = getDefaultTab(tabs.length + 1);
@@ -1305,9 +1311,27 @@ export default function POS() {
           multisucursal_total_operacion: total,
           multisucursal_sucursales: branchIds,
           estado: 'Completado',
+          mercancia_pendiente: Boolean(mercanciaQuedaPendiente),
+          codigo_entrega: mercanciaQuedaPendiente ? `ENT-${humanId}` : null,
           items: branchItems.map(item => {
             const finalDesc = getItemDiscount(item);
             const finalPercent = getItemDiscountPercent(item);
+            const isPhysical = item.type !== 'servicio';
+            
+            let qtyPendiente = 0;
+            let qtyEntregadaInicial = item.qty;
+
+            if (mercanciaQuedaPendiente && isPhysical) {
+              if (custodiaModalidad === 'parcial') {
+                const userPnd = custodiaCantidades[item.id] !== undefined ? Number(custodiaCantidades[item.id]) : item.qty;
+                qtyPendiente = Math.min(item.qty, Math.max(0, userPnd));
+                qtyEntregadaInicial = Math.max(0, item.qty - qtyPendiente);
+              } else {
+                qtyPendiente = item.qty;
+                qtyEntregadaInicial = 0;
+              }
+            }
+
             return {
               id_producto: item.id,
               type: item.type || 'producto',
@@ -1318,16 +1342,51 @@ export default function POS() {
               descuento: finalDesc,
               descuento_porcentaje: finalPercent,
               subtotal: (item.price * item.qty) - finalDesc,
-              sucursal: branchId
+              sucursal: branchId,
+              cantidad_pendiente: qtyPendiente,
+              cantidad_entregada_inicial: qtyEntregadaInicial
             };
           })
         };
 
         // Preparar paquete Multi-Path Update para que todos los documentos vinculados se escriban de forma 100% ATÓMICA
         const atomicBatch = {
-          [`ventas/${saleId}`]: newSale,
+          [`ventas/${saleId}`]: newSale
+        };
+
         if (mercanciaQuedaPendiente) {
           const pendingKey = push(ref(rtdb, 'pendientes_entrega')).key;
+          const pendingItems = newSale.items
+            .filter(it => it.type !== 'servicio')
+            .map(it => ({
+              id_producto: it.id_producto,
+              codigo_visible: it.codigo_visible || it.id_producto,
+              nombre: it.name,
+              precio_unitario: it.precio_unitario,
+              cantidad_total: it.cantidad,
+              cantidad_entregada: it.cantidad_entregada_inicial || 0,
+              cantidad_pendiente: it.cantidad_pendiente !== undefined ? it.cantidad_pendiente : it.cantidad
+            }));
+
+          const totalPendiente = pendingItems.reduce((acc, it) => acc + it.cantidad_pendiente, 0);
+          const totalEntregadoInicial = pendingItems.reduce((acc, it) => acc + it.cantidad_entregada, 0);
+
+          const initialDispatch = totalEntregadoInicial > 0 ? [{
+            id_despacho: `DSP-ENT-${humanId}-0`,
+            fecha: fechaVentaIso,
+            despachado_por: cajeroResponsable,
+            recibido_por: nombreFinalCliente,
+            cedula_recibe: clienteDataObj?.identificacion || '',
+            observaciones: 'Entrega inicial en mostrador al momento de facturar',
+            items_despachados: pendingItems.filter(it => it.cantidad_entregada > 0).map(it => ({
+              id_producto: it.id_producto,
+              codigo_visible: it.codigo_visible,
+              nombre: it.nombre,
+              cantidad_despachada: it.cantidad_entregada,
+              saldo_pendiente: it.cantidad_pendiente
+            }))
+          }] : [];
+
           atomicBatch[`pendientes_entrega/${pendingKey}`] = {
             id: pendingKey,
             codigo_visible: `ENT-${humanId}`,
@@ -1335,23 +1394,17 @@ export default function POS() {
             id_venta_origen: humanId,
             cliente_nombre: nombreFinalCliente,
             cliente_telefono: clienteDataObj?.telefono1 || '',
+            cliente_identificacion: clienteDataObj?.identificacion || '',
             sucursal: branchId,
-            motivo: 'Mercancía pagada en Caja POS en custodia para retiro/montaje posterior',
-            estado: 'Pendiente',
-            items: branchItems.filter(it => it.type !== 'servicio').map(it => ({
-              id_producto: it.id_producto || it.id,
-              codigo_visible: it.codigo_visible || it.sku || it.id,
-              nombre: it.name,
-              precio_unitario: it.price,
-              cantidad_total: it.qty,
-              cantidad_entregada: 0,
-              cantidad_pendiente: it.qty
-            })),
-            historial_despachos: [],
+            motivo: totalEntregadoInicial > 0 
+              ? 'Entrega parcial en mostrador; saldo en custodia para retiro/montaje posterior'
+              : 'Mercancía pagada en Caja POS en custodia para retiro/montaje posterior',
+            estado: totalPendiente === 0 ? 'Entregado' : (totalEntregadoInicial > 0 ? 'Parcial' : 'Pendiente'),
+            items: pendingItems,
+            historial_despachos: initialDispatch,
             usuario_registro: cajeroResponsable
           };
         }
-        };
 
         // PASO 3: Si el cobro es con Tarjeta o Transferencia, acreditar en la cuenta bancaria vinculada
         if (metodoPago === 'Tarjeta' || metodoPago === 'Transferencia') {
@@ -2231,8 +2284,8 @@ export default function POS() {
 
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span className="font-mono text-xs font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
-                                    {item.id}
+                                  <span className="font-mono text-xs font-bold text-gray-700 bg-gray-100 px-1.5 py-0.5 rounded">
+                                    {item.codigo_visible || item.sku || (item.id && !item.id.startsWith('-') ? item.id : 'PROD')}
                                   </span>
                                   {item.type === 'servicio' && (
                                     <span className="text-purple-700 font-bold text-[11px] bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200">
@@ -2414,9 +2467,92 @@ export default function POS() {
                 </span>
               </label>
               {mercanciaQuedaPendiente && (
-                <p className="text-[10px] text-amber-800 mt-1 pl-6">
-                  Se registrará un expediente en <strong>Pendientes de Entrega</strong> para emitir la Orden de Entrega cuando el cliente retire los repuestos.
-                </p>
+                <div className="mt-2 pl-6 space-y-2">
+                  <p className="text-[10px] text-amber-800 leading-tight">
+                    Se generará un expediente en <strong>Pendientes de Entrega</strong> para emitir la Orden de Entrega cuando el cliente retire sus piezas.
+                  </p>
+
+                  {/* Selector de Modalidad: Todo vs Parcial */}
+                  <div className="flex items-center gap-1.5 p-1 bg-amber-100/70 rounded-lg text-xs font-bold">
+                    <button
+                      type="button"
+                      onClick={() => setCustodiaModalidad('todo')}
+                      className={`flex-1 py-1 px-2 rounded-md transition-all text-[11px] ${
+                        custodiaModalidad === 'todo'
+                          ? 'bg-amber-700 text-white shadow-xs'
+                          : 'text-amber-900 hover:bg-amber-200/60'
+                      }`}
+                    >
+                      Toda la factura ({cart.filter(i => i.type !== 'servicio').reduce((s, i) => s + (Number(i.qty) || 1), 0)} piezas)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCustodiaModalidad('parcial')}
+                      className={`flex-1 py-1 px-2 rounded-md transition-all text-[11px] ${
+                        custodiaModalidad === 'parcial'
+                          ? 'bg-amber-700 text-white shadow-xs'
+                          : 'text-amber-900 hover:bg-amber-200/60'
+                      }`}
+                    >
+                      Retiro parcial
+                    </button>
+                  </div>
+
+                  {/* Detalle por producto si es Retiro Parcial */}
+                  {custodiaModalidad === 'parcial' && (
+                    <div className="space-y-1.5 pt-1 border-t border-amber-200/60 max-h-48 overflow-y-auto pr-1">
+                      <p className="text-[10px] font-bold text-amber-950 uppercase">
+                        Indica cuántas unidades deja en custodia:
+                      </p>
+                      {cart.filter(item => item.type !== 'servicio').map(item => {
+                        const maxQty = Number(item.qty || 1);
+                        const currentPnd = custodiaCantidades[item.id] !== undefined
+                          ? Number(custodiaCantidades[item.id])
+                          : maxQty;
+                        const seLlevaAhora = Math.max(0, maxQty - currentPnd);
+
+                        return (
+                          <div key={item.id} className="bg-white/90 p-2 rounded-lg border border-amber-200 flex items-center justify-between gap-2 text-xs">
+                            <div className="min-w-0 flex-1">
+                              <p className="font-bold text-gray-900 truncate leading-tight">{item.name}</p>
+                              <p className="text-[10px] text-gray-500 font-mono">
+                                Total: {maxQty} | <span className="text-emerald-700 font-bold">Lleva hoy: {seLlevaAhora}</span>
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <span className="text-[10px] font-bold text-amber-900">Pendiente:</span>
+                              <div className="flex items-center border border-gray-300 rounded bg-white">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const next = Math.max(0, currentPnd - 1);
+                                    setCustodiaCantidades({ ...custodiaCantidades, [item.id]: next });
+                                  }}
+                                  className="w-5 h-5 flex items-center justify-center font-bold text-gray-600 hover:bg-gray-100"
+                                >
+                                  -
+                                </button>
+                                <span className="w-6 text-center font-bold font-mono text-xs">
+                                  {currentPnd}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const next = Math.min(maxQty, currentPnd + 1);
+                                    setCustodiaCantidades({ ...custodiaCantidades, [item.id]: next });
+                                  }}
+                                  className="w-5 h-5 flex items-center justify-center font-bold text-gray-600 hover:bg-gray-100"
+                                >
+                                  +
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
 

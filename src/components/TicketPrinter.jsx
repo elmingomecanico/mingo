@@ -15,6 +15,34 @@ export const formatMoney = (amount, cfg, isPU = false) => {
   return `C$${space}${formattedNumber}`;
 };
 
+
+export const renderCustodyItemBadge = (item, sale) => {
+  if (!sale?.mercancia_pendiente || item?.type === 'servicio') return null;
+  const pnd = item?.cantidad_pendiente;
+  const ent = item?.cantidad_entregada_inicial;
+  if (pnd === undefined && ent === undefined) return null;
+
+  if (pnd === 0) {
+    return (
+      <span className="text-[8px] font-bold text-emerald-800 bg-emerald-100/90 px-1 py-0.2 rounded ml-1 print:border print:border-black">
+        ✓ Entregado
+      </span>
+    );
+  }
+  if (pnd > 0 && ent > 0) {
+    return (
+      <span className="text-[8px] font-bold text-amber-900 bg-amber-100/90 px-1 py-0.2 rounded ml-1 print:border print:border-black">
+        ({ent} ent. / {pnd} pend.)
+      </span>
+    );
+  }
+  return (
+    <span className="text-[8px] font-bold text-blue-900 bg-blue-100/90 px-1 py-0.2 rounded ml-1 print:border print:border-black">
+      [PENDIENTE: {pnd}]
+    </span>
+  );
+};
+
 export const getDividerClass = (style) => {
   switch (style) {
     case 'puntos':
@@ -162,6 +190,7 @@ const TicketPrinter = forwardRef(({ sale, isPreview = false, customConfig = null
                     <span className="font-bold text-[9px] text-gray-700 mr-1">[{itemCode}]</span>
                   )}
                   <span className="font-medium text-gray-900">{item.nombre || item.name || item.id_producto}</span>
+                  {renderCustodyItemBadge(item, sale)}
                   {cfg.mostrar_codigo_producto && itemCode && skuPos === 'abajo' && (
                     <span className="text-[8px] text-gray-500 block font-mono">SKU: {itemCode}</span>
                   )}
@@ -223,6 +252,7 @@ const TicketPrinter = forwardRef(({ sale, isPreview = false, customConfig = null
                         <span className="font-bold text-[9px] text-gray-700 mr-1">[{itemCode}]</span>
                       )}
                       <span>{item.nombre || item.name || item.id_producto}</span>
+                      {renderCustodyItemBadge(item, sale)}
                       {cfg.mostrar_codigo_producto && itemCode && skuPos === 'abajo' && (
                         <span className="text-[8px] text-gray-500 block font-mono">SKU: {itemCode}</span>
                       )}
@@ -268,6 +298,7 @@ const TicketPrinter = forwardRef(({ sale, isPreview = false, customConfig = null
                       <span className="font-bold text-[9px] text-gray-600 mr-1">[{itemCode}]</span>
                     )}
                     <span>{item.nombre || item.name || item.id_producto}</span>
+                    {renderCustodyItemBadge(item, sale)}
                     <div className="text-[9px] text-gray-500 font-mono">
                       P.U.: {formatMoney(pu, cfg, true)}
                       {hasDesc && (
@@ -306,6 +337,49 @@ const TicketPrinter = forwardRef(({ sale, isPreview = false, customConfig = null
           <span className="font-mono">{formatMoney(sale.total, cfg)}</span>
         </div>
       </div>
+
+      
+      {/* SECCIÓN MERCANCÍA EN CUSTODIA / PENDIENTE DE RETIRO */}
+      {(sale.mercancia_pendiente || sale.codigo_entrega || sale.items?.some(it => (it.cantidad_pendiente || 0) > 0)) && (
+        <div className="my-2 p-1.5 border-2 border-black border-dashed text-center space-y-1 bg-gray-50/50 print:bg-white">
+          <div className="font-black text-[10px] tracking-wide uppercase">
+            ★ MERCANCÍA EN CUSTODIA ★
+          </div>
+          <div className="font-bold text-[9px] font-mono">
+            EXPEDIENTE: {sale.codigo_entrega || 'PENDIENTE DE RETIRO'}
+          </div>
+          <p className="text-[8px] leading-tight text-gray-800">
+            {sale.items?.some(it => (it.cantidad_pendiente || 0) > 0 && (it.cantidad_entregada_inicial || 0) > 0)
+              ? 'Entrega Parcial en Mostrador • Saldo Resguardado en Bodega'
+              : 'Mercancía resguardada para retiro o instalación posterior'}
+          </p>
+
+          {sale.items?.some(it => it.cantidad_pendiente !== undefined) && (
+            <div className="text-[8.5px] text-left border-t border-black border-dotted pt-1 mt-1 space-y-0.5">
+              <div className="font-bold text-[8px] text-gray-700 uppercase flex justify-between pb-0.5">
+                <span>Artículo</span>
+                <span>Estado Entrega</span>
+              </div>
+              {sale.items.filter(it => it.type !== 'servicio').map((it, idx) => {
+                const pnd = it.cantidad_pendiente !== undefined ? it.cantidad_pendiente : it.cantidad;
+                const ent = it.cantidad_entregada_inicial !== undefined ? it.cantidad_entregada_inicial : (it.cantidad - pnd);
+                return (
+                  <div key={idx} className="flex justify-between items-baseline text-[8px] leading-tight">
+                    <span className="truncate max-w-[155px] font-medium">{it.nombre || it.name}</span>
+                    <span className="font-mono font-bold whitespace-nowrap pl-1">
+                      {pnd > 0 ? (ent > 0 ? `${ent} ent. / ${pnd} pend.` : `${pnd} PEND`) : `${ent} ENT`}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <p className="text-[7.5px] italic text-gray-700 pt-0.5 border-t border-black border-dotted">
+            Conserve este comprobante para retirar o instalar en taller sus repuestos pendientes.
+          </p>
+        </div>
+      )}
 
       {/* PIE DE TICKET */}
       <div className={`text-center text-[9px] mt-3 pt-2 ${dividerClass} space-y-1`}>
