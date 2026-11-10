@@ -250,18 +250,21 @@ export const saveProductBundle = async (productId, imagesList = []) => {
   }
 
   // 2. Subir el Paquete Completo de hasta 4 fotos en un solo archivo JSON
-  // Este archivo único garantiza que descargar las 4 fotos cuente como 1 sola lectura Tipo B
-  const bundleKey = `productos/${productId}_bundle.json`;
-  const bundlePayload = {
-    productId,
-    total_fotos: compressedList.length,
-    cover_url: coverUrl,
-    images: compressedList, // [foto1, foto2, foto3, foto4]
-    updated_at: new Date().toISOString()
-  };
-  const bundleBytes = new TextEncoder().encode(JSON.stringify(bundlePayload));
-  await sendToR2(bundleKey, bundleBytes.buffer, 'application/json');
-  const bundleUrl = `${R2_CONFIG.R2_PUBLIC_DOMAIN}/${bundleKey}?v=${timestamp}`;
+  // SOLO si hay más de 1 foto. Si solo hay 1 foto, basta con la portada .webp (1 archivo, 1 sola escritura en R2)
+  let bundleUrl = '';
+  if (compressedList.length > 1) {
+    const bundleKey = `productos/${productId}_bundle.json`;
+    const bundlePayload = {
+      productId,
+      total_fotos: compressedList.length,
+      cover_url: coverUrl,
+      images: compressedList, // [foto1, foto2, foto3, foto4]
+      updated_at: new Date().toISOString()
+    };
+    const bundleBytes = new TextEncoder().encode(JSON.stringify(bundlePayload));
+    await sendToR2(bundleKey, bundleBytes.buffer, 'application/json');
+    bundleUrl = `${R2_CONFIG.R2_PUBLIC_DOMAIN}/${bundleKey}?v=${timestamp}`;
+  }
 
   // Respaldo en nodo independiente de Firebase para redundancia
   try {
