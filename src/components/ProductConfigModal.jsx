@@ -33,6 +33,40 @@ export default function ProductConfigModal({
   puedeFacturarMultisucursal = true,
   usuarioSucursal = 'SUC-01'
 }) {
+  // Sucursal seleccionada
+  const [selectedBranch, setSelectedBranch] = useState(() => {
+    return config?.sucursal || (puedeFacturarMultisucursal ? 'SUC-01' : usuarioSucursal);
+  });
+
+  // Cantidad seleccionada
+  const [qty, setQty] = useState(() => {
+    return config?.qty || 1;
+  });
+
+  // Modo y valor de descuento
+  const [discountMode, setDiscountMode] = useState(() => {
+    return config?.discountMode || (isMostrador ? 'C$' : '%');
+  });
+  const [discountVal, setDiscountVal] = useState(() => {
+    if (config?.discountMode === '%') {
+      return config?.discountPercent || 0;
+    }
+    return config?.discount || 0;
+  });
+
+  // Al abrir el modal o cambiar el producto, sincronizar
+  useEffect(() => {
+    if (!isOpen || !config || !config.product) return;
+    setSelectedBranch(config.sucursal || (puedeFacturarMultisucursal ? 'SUC-01' : usuarioSucursal));
+    setQty(config.qty || 1);
+    setDiscountMode(config.discountMode || (isMostrador ? 'C$' : '%'));
+    if (config.discountMode === '%') {
+      setDiscountVal(config.discountPercent !== undefined && config.discountPercent !== null ? config.discountPercent : 0);
+    } else {
+      setDiscountVal(config.discount !== undefined && config.discount !== null ? config.discount : 0);
+    }
+  }, [isOpen, config, isMostrador, puedeFacturarMultisucursal, usuarioSucursal]);
+
   if (!isOpen || !config || !config.product) return null;
 
   const { product, isEditing, existingCartItemId } = config;
@@ -53,39 +87,6 @@ export default function ProductConfigModal({
   const maxDiscountAllowedPct = product.descuento_maximo !== undefined && product.descuento_maximo !== null && product.descuento_maximo !== ''
     ? Number(product.descuento_maximo)
     : Number(politicasInventario?.descuento_maximo_global ?? 15);
-
-  // Sucursal seleccionada
-  const [selectedBranch, setSelectedBranch] = useState(() => {
-    return config.sucursal || (puedeFacturarMultisucursal ? 'SUC-01' : usuarioSucursal);
-  });
-
-  // Cantidad seleccionada
-  const [qty, setQty] = useState(() => {
-    return config.qty || 1;
-  });
-
-  // Modo y valor de descuento
-  const [discountMode, setDiscountMode] = useState(() => {
-    return config.discountMode || (isMostrador ? 'C$' : '%');
-  });
-  const [discountVal, setDiscountVal] = useState(() => {
-    if (config.discountMode === '%') {
-      return config.discountPercent || 0;
-    }
-    return config.discount || 0;
-  });
-
-  // Al abrir el modal o cambiar el producto, sincronizar
-  useEffect(() => {
-    setSelectedBranch(config.sucursal || (puedeFacturarMultisucursal ? 'SUC-01' : usuarioSucursal));
-    setQty(config.qty || 1);
-    setDiscountMode(config.discountMode || (isMostrador ? 'C$' : '%'));
-    if (config.discountMode === '%') {
-      setDiscountVal(config.discountPercent || 0);
-    } else {
-      setDiscountVal(config.discount || 0);
-    }
-  }, [config, isMostrador, puedeFacturarMultisucursal, usuarioSucursal]);
 
   // Stock físico registrado en la sucursal seleccionada
   const stockInSelected = isService ? 999999 : (getStock ? getStock(product.id, selectedBranch) : 9999);

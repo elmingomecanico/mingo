@@ -43,6 +43,13 @@ export const DEFAULT_CONSECUTIVOS = {
     digitos_relleno: 4,
     permitir_edicion_libre: true,
     descripcion: 'Correlativo y código de remisión para traslados de inventario entre sucursales'
+  },
+  entregas: {
+    prefijo: 'ENT-',
+    siguiente_numero: 1,
+    digitos_relleno: 4,
+    permitir_edicion_libre: true,
+    descripcion: 'Correlativo y código de remisión para órdenes de entrega y custodia'
   }
 };
 
@@ -70,7 +77,8 @@ export default function ConsecutivosManager({ user }) {
           productos: { ...DEFAULT_CONSECUTIVOS.productos, ...(val.productos || {}) },
           servicios: { ...DEFAULT_CONSECUTIVOS.servicios, ...(val.servicios || {}) },
           ordenes_taller: { ...DEFAULT_CONSECUTIVOS.ordenes_taller, ...(val.ordenes_taller || {}) },
-          traspasos: { ...DEFAULT_CONSECUTIVOS.traspasos, ...(val.traspasos || {}) }
+          traspasos: { ...DEFAULT_CONSECUTIVOS.traspasos, ...(val.traspasos || {}) },
+          entregas: { ...DEFAULT_CONSECUTIVOS.entregas, ...(val.entregas || {}) }
         });
       } else {
         setConfig(DEFAULT_CONSECUTIVOS);
@@ -567,6 +575,101 @@ export default function ConsecutivosManager({ user }) {
               <span className="font-bold text-emerald-900">Ejemplo de número de traspaso generado:</span>
               <span className="font-mono text-base font-black text-emerald-950 bg-white px-3 py-1 rounded-lg border border-emerald-300 shadow-xs">
                 {formatConsecutive(config.traspasos || DEFAULT_CONSECUTIVOS.traspasos)}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* BLOQUE 6: ÓRDENES DE ENTREGA Y CUSTODIA */}
+        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-4">
+          <div className="flex items-center justify-between border-b pb-3">
+            <h3 className="text-sm font-black text-gray-900 flex items-center gap-2">
+              <Package className="text-indigo-600" size={18} />
+              6. Órdenes de Entrega y Custodia
+            </h3>
+            <span className="text-[10px] font-mono font-bold bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-md">
+              Próximo: {formatConsecutive(config.entregas || DEFAULT_CONSECUTIVOS.entregas)}
+            </span>
+          </div>
+
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-gray-600 uppercase mb-1">
+                  Prefijo / Siglas
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ej: ENT-, E-, o en blanco"
+                  value={config.entregas?.prefijo ?? 'ENT-'}
+                  onChange={e => setConfig({
+                    ...config,
+                    entregas: { ...(config.entregas || DEFAULT_CONSECUTIVOS.entregas), prefijo: e.target.value }
+                  })}
+                  className="w-full border p-2.5 rounded-xl text-sm font-mono font-bold outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+                <p className="text-[10px] text-gray-400 mt-1">Puedes poner ENT-, E- o dejarlo vacío para sin prefijo</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-600 uppercase mb-1">
+                  Consecutivo Inicial *
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={config.entregas?.siguiente_numero || 1}
+                  onChange={e => setConfig({
+                    ...config,
+                    entregas: { ...(config.entregas || DEFAULT_CONSECUTIVOS.entregas), siguiente_numero: Math.max(1, parseInt(e.target.value) || 1) }
+                  })}
+                  className="w-full border p-2.5 rounded-xl text-sm font-mono font-black text-indigo-700 outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+                <p className="text-[10px] text-gray-400 mt-1">Número correlativo de arranque</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-600 uppercase mb-1">
+                  Relleno de Ceros
+                </label>
+                <select
+                  value={config.entregas?.digitos_relleno || 4}
+                  onChange={e => setConfig({
+                    ...config,
+                    entregas: { ...(config.entregas || DEFAULT_CONSECUTIVOS.entregas), digitos_relleno: parseInt(e.target.value) || 4 }
+                  })}
+                  className="w-full border p-2.5 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                >
+                  <option value={1}>Sin ceros (1, 2, 3...)</option>
+                  <option value={2}>2 dígitos (01, 02...)</option>
+                  <option value={3}>3 dígitos (001, 002...)</option>
+                  <option value={4}>4 dígitos (0001, 0002...)</option>
+                  <option value={5}>5 dígitos (00001...)</option>
+                </select>
+                <p className="text-[10px] text-gray-400 mt-1">Formato visual de numeración</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-gray-700 select-none">
+                <input
+                  type="checkbox"
+                  checked={config.entregas?.permitir_edicion_libre !== false}
+                  onChange={e => setConfig({
+                    ...config,
+                    entregas: { ...(config.entregas || DEFAULT_CONSECUTIVOS.entregas), permitir_edicion_libre: e.target.checked }
+                  })}
+                  className="rounded text-indigo-600 focus:ring-indigo-500"
+                />
+                Permitir al usuario modificar o personalizar el código al momento de registrar entrega
+              </label>
+            </div>
+
+            <div className="p-3 bg-indigo-50/60 rounded-xl border border-indigo-200 text-xs flex justify-between items-center">
+              <span className="font-bold text-indigo-900">Ejemplo de número de entrega generado:</span>
+              <span className="font-mono text-base font-black text-indigo-950 bg-white px-3 py-1 rounded-lg border border-indigo-300 shadow-xs">
+                {formatConsecutive(config.entregas || DEFAULT_CONSECUTIVOS.entregas)}
               </span>
             </div>
           </div>

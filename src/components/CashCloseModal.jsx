@@ -92,7 +92,7 @@ export default function CashCloseModal({
   const fondoInicial = parseFloat(activeTurno.total_inicial_cordobas) || 0;
 
   // Efectivo Teórico Esperado
-  const efectivoTeoricoEsperado = Math.max(0, fondoInicial + totalVentasEfectivo - totalSalidasEfectivo);
+  const efectivoTeoricoEsperado = fondoInicial + totalVentasEfectivo - totalSalidasEfectivo;
 
   // Conteo Físico Real del Cajero
   const contadoNio = parseFloat(montoContadoNio) || 0;

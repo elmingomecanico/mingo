@@ -88,7 +88,7 @@ export default function Kardex() {
             cantidad: Math.abs(Number(node.cantidad) || 0),
             id_referencia: refId || '-',
             stock_anterior: node.stock_anterior !== undefined ? node.stock_anterior : null,
-            stock_nuevo: node.stock_nuevo !== undefined ? node.stock_nuevo : null,
+            stock_nuevo: node.stock_nuevo !== undefined ? node.stock_nuevo : (node.stock_resultante !== undefined ? node.stock_resultante : null),
             usuario: node.usuario || 'Sistema'
           };
 

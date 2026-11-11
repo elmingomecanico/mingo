@@ -1,6 +1,6 @@
 import { ref, get, update } from 'firebase/database';
 import { rtdb } from '../firebase';
-import { DEFAULT_CONSECUTIVOS, formatConsecutive } from '../components/catalogos/ConsecutivosManager';
+import { DEFAULT_CONSECUTIVOS } from '../components/catalogos/ConsecutivosManager';
 
 /**
  * Servicio de Mantenimiento, Auditoría de Códigos y Puesta a Cero
@@ -265,7 +265,8 @@ export async function executePurgeAndResetToZero() {
     'asiento_apertura',
     'movimientos_bancarios',
     'asistencia',
-    'solicitudes_empleados'
+    'solicitudes_empleados',
+    'pendientes_entrega'
   ];
 
   transactionalNodes.forEach(node => {
@@ -280,6 +281,7 @@ export async function executePurgeAndResetToZero() {
   updates['counters/ordenes_trabajo'] = 0;
   updates['counters/cxc'] = 0;
   updates['counters/cxp'] = 0;
+  updates['counters/entregas'] = 0;
 
   // 3. Reiniciar folios en configuracion/consecutivos (ventas a 1, compras a 1, etc.)
   const cfg = val.configuracion?.consecutivos || DEFAULT_CONSECUTIVOS;
@@ -290,7 +292,8 @@ export async function executePurgeAndResetToZero() {
     traspasos: { ...(cfg.traspasos || DEFAULT_CONSECUTIVOS.traspasos), siguiente_numero: 1 },
     ordenes_trabajo: { ...(cfg.ordenes_trabajo || DEFAULT_CONSECUTIVOS.ordenes_trabajo), siguiente_numero: 1 },
     turnos: { ...(cfg.turnos || DEFAULT_CONSECUTIVOS.turnos), siguiente_numero: 1 },
-    cxc: { ...(cfg.cxc || DEFAULT_CONSECUTIVOS.cxc), siguiente_numero: 1 }
+    cxc: { ...(cfg.cxc || DEFAULT_CONSECUTIVOS.cxc), siguiente_numero: 1 },
+    entregas: { ...(cfg.entregas || DEFAULT_CONSECUTIVOS.entregas), siguiente_numero: 1 }
   };
 
   // Mantener los correlativos de productos y servicios acordes a los ya creados

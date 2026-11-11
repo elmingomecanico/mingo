@@ -17,6 +17,7 @@ export default function AsientoApertura({
   allInventory = {}, 
   cxpList = [], 
   cxcList = [], 
+  productos = {},
   user 
 }) {
   const [isEditing, setIsEditing] = useState(false);
@@ -71,12 +72,14 @@ export default function AsientoApertura({
     let totalCosto = 0;
     let totalProductos = 0;
 
-    Object.keys(allInventory).forEach(sucId => {
+    Object.keys(allInventory || {}).forEach(sucId => {
       const branchProds = allInventory[sucId] || {};
       Object.keys(branchProds).forEach(prodId => {
         const item = branchProds[prodId];
+        if (!item || typeof item !== 'object') return;
         const stock = Number(item.stock_actual) || 0;
-        const costo = Number(item.costo_compra || item.precio_compra || item.costo_unitario) || 0;
+        const prod = Array.isArray(productos) ? productos.find(p => p?.id === prodId || p?.key === prodId) : productos?.[prodId];
+        const costo = Number(prod?.cost || prod?.costo_compra || item.costo_compra || item.precio_compra || item.costo_unitario || 0);
         if (stock > 0 && costo > 0) {
           totalCosto += (stock * costo);
           totalProductos += stock;

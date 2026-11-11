@@ -55,6 +55,7 @@ export default function Contabilidad() {
   const [movimientosBancarios, setMovimientosBancarios] = useState([]);
   const [asientoApertura, setAsientoApertura] = useState(null);
   const [allInventory, setAllInventory] = useState({});
+  const [productos, setProductos] = useState({});
   const [proveedoresMap, setProveedoresMap] = useState({});
   const [proveedoresList, setProveedoresList] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -242,9 +243,19 @@ export default function Contabilidad() {
       }
     });
 
+    // 11. Catálogo de productos para valorizar costos de inventario
+    const prodRef = ref(rtdb, 'productos');
+    const unsubProd = onValue(prodRef, (snap) => {
+      if (snap.exists()) {
+        setProductos(snap.val() || {});
+      } else {
+        setProductos({});
+      }
+    });
+
     return () => {
       unsubProv(); unsubMov(); unsubVen(); unsubComp(); unsubCxp(); unsubCxc();
-      unsubBanc(); unsubMovBanc(); unsubApertura(); unsubInv();
+      unsubBanc(); unsubMovBanc(); unsubApertura(); unsubInv(); unsubProd();
     };
   }, []);
 
@@ -1272,6 +1283,7 @@ export default function Contabilidad() {
           allInventory={allInventory}
           cxpList={cxpList}
           cxcList={cxcList}
+          productos={productos}
           user={user}
         />
       )}

@@ -1,4 +1,4 @@
-import { ref, set, get, remove, onValue } from 'firebase/database';
+import { ref, set, remove, onValue } from 'firebase/database';
 import { rtdb } from '../firebase';
 
 /**
@@ -11,11 +11,11 @@ export const R2_CONFIG = {
   USE_CLOUDFLARE_R2: true,
   R2_UPLOAD_ENDPOINT: '/api/upload-r2',
   R2_PUBLIC_DOMAIN: 'https://pub-b021436fa28941d3851a35e721679ab8.r2.dev',
-  // Credenciales directas para entorno de desarrollo local (fallback S3)
+  // Endpoint y bucket para R2
   endpoint: '8bb730e7bd975472c1fa0274bb0bcffd.r2.cloudflarestorage.com',
   bucket: 'elmingo',
-  accessKey: '7954b78aac4ff9ac84197a617614b4ac',
-  secretKey: '07e3891caf00b5ca5070810d77d1d8ca450b58704b3215720a6856ed5e10be20'
+  accessKey: import.meta.env?.VITE_R2_ACCESS_KEY || '',
+  secretKey: import.meta.env?.VITE_R2_SECRET_KEY || ''
 };
 
 // ==========================================
@@ -40,6 +40,11 @@ async function sha256Hex(bufferOrString) {
  * Sube un objeto a R2 por S3 SigV4 directo (usado en localhost cuando no hay Pages Functions activas).
  */
 async function uploadDirectS3(key, bodyBuffer, contentType = 'image/webp') {
+  if (!R2_CONFIG.accessKey || !R2_CONFIG.secretKey) {
+    console.warn('R2 S3 Direct: Credenciales no configuradas en el cliente bundle. Las subidas deben realizarse a través del endpoint /api/upload-r2.');
+    return false;
+  }
+
   const now = new Date();
   const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
   const dateStamp = amzDate.substr(0, 8);
