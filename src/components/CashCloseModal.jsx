@@ -17,10 +17,23 @@ export default function CashCloseModal({
 }) {
   const [montoContadoNio, setMontoContadoNio] = useState('');
   const [montoContadoUsd, setMontoContadoUsd] = useState('');
-  const [tipoCambio, setTipoCambio] = useState(36.62);
+  const [tipoCambio, setTipoCambio] = useState(36.6240);
   const [desgloseCounts, setDesgloseCounts] = useState(null);
   const [observaciones, setObservaciones] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Sincronizar tasa de cambio oficial desde RTDB
+  useEffect(() => {
+    const tcRef = ref(rtdb, 'configuracion/tasa_cambio');
+    const unsub = onValue(tcRef, (snap) => {
+      if (snap.exists()) {
+        const val = snap.val();
+        const num = parseFloat(val?.valor || val);
+        if (num > 0) setTipoCambio(num);
+      }
+    });
+    return () => unsub();
+  }, []);
 
   const [movimientosList, setMovimientosList] = useState([]);
   const [isCounterOpen, setIsCounterOpen] = useState(false);

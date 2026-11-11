@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Settings, Building2, Printer, Hash, ShieldAlert, Store, Wrench } from 'lucide-react';
+import { Settings, Building2, Printer, Hash, ShieldAlert, Store, Wrench, DollarSign } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import BranchManager from '../components/catalogos/BranchManager';
 import PrintFormatEditor from '../components/catalogos/PrintFormatEditor';
 import ConsecutivosManager from '../components/catalogos/ConsecutivosManager';
 import CajasManager from '../components/catalogos/CajasManager';
 import MaintenanceManager from '../components/catalogos/MaintenanceManager';
+import ExchangeRateManager from '../components/catalogos/ExchangeRateManager';
 
 export default function Catalogos() {
   const { user } = useAuth();
@@ -23,6 +24,12 @@ export default function Catalogos() {
       name: 'Cajas Registradoras', 
       icon: <Store size={18} />,
       desc: 'Gestión de terminales de cobro, asignación de vendedores y control de turnos.'
+    },
+    { 
+      id: 'tasa_cambio', 
+      name: 'Moneda y Tasa de Cambio', 
+      icon: <DollarSign size={18} className="text-emerald-500" />,
+      desc: 'Tasa oficial USD/NIO, parámetros cambiarios y bimonetarios del ERP.'
     },
     { 
       id: 'impresion', 
@@ -91,6 +98,7 @@ export default function Catalogos() {
         <div className="flex-1 p-4 sm:p-6 min-w-0">
           {activeTab === 'sucursales' && <BranchManager user={user} />}
           {activeTab === 'cajas' && <CajasManager user={user} />}
+          {activeTab === 'tasa_cambio' && <ExchangeRateManager user={user} />}
           {activeTab === 'impresion' && <PrintFormatEditor />}
           {activeTab === 'consecutivos' && <ConsecutivosManager user={user} />}
           {activeTab === 'mantenimiento' && <MaintenanceManager user={user} />}

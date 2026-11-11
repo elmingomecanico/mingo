@@ -89,6 +89,10 @@ export default function RRHH() {
   // Estados para Generar Nómina
   const [fechaInicio, setFechaInicio] = useState('');
   const [fechaFin, setFechaFin] = useState('');
+  const [periodicidadPlanilla, setPeriodicidadPlanilla] = useState('Quincenal'); // 'Semanal' | 'Quincenal' | 'Mensual'
+  const [filtroPeriodicidad, setFiltroPeriodicidad] = useState('todos'); // 'todos' | 'coincidentes'
+  const [deducirInssGlobal, setDeducirInssGlobal] = useState(true);
+  const [deducirIrGlobal, setDeducirIrGlobal] = useState(true);
   const [nominaBorrador, setNominaBorrador] = useState(null);
 
   // Estados para Modal de Expediente
@@ -309,6 +313,10 @@ export default function RRHH() {
       tipo_salario: emp.tipo_salario || 'Comisión',
       salario_base: emp.salario_base || 0,
       porcentaje_comision: emp.porcentaje_comision || 50,
+      periodicidad_pago: emp.periodicidad_pago || 'Quincenal',
+      aplica_inss: emp.aplica_inss !== undefined ? Boolean(emp.aplica_inss) : false,
+      base_calculo_inss: emp.base_calculo_inss || (Number(emp.salario_base) > 0 ? 'salario_base' : 'comisiones'),
+      aplica_ir: emp.aplica_ir !== undefined ? Boolean(emp.aplica_ir) : false,
       dias_vacaciones_tomados: emp.dias_vacaciones_tomados || 0,
       contacto_emergencia: emp.contacto_emergencia || '',
       notas_expediente: emp.notas_expediente || '',
@@ -363,6 +371,10 @@ export default function RRHH() {
         tipo_salario: formExpediente.tipo_salario,
         salario_base: Number(formExpediente.salario_base) || 0,
         porcentaje_comision: Number(formExpediente.porcentaje_comision) || 0,
+        periodicidad_pago: formExpediente.periodicidad_pago || 'Quincenal',
+        aplica_inss: Boolean(formExpediente.aplica_inss),
+        base_calculo_inss: formExpediente.base_calculo_inss || 'salario_base',
+        aplica_ir: Boolean(formExpediente.aplica_ir),
         dias_vacaciones_tomados: totalTomados,
         contacto_emergencia: formExpediente.contacto_emergencia ? formExpediente.contacto_emergencia.trim() : '',
         notas_expediente: formExpediente.notas_expediente ? formExpediente.notas_expediente.trim() : '',
@@ -431,6 +443,10 @@ export default function RRHH() {
       tipo_salario: 'Comisión',
       salario_base: 0,
       porcentaje_comision: 50,
+      periodicidad_pago: 'Quincenal',
+      aplica_inss: false,
+      base_calculo_inss: 'salario_base',
+      aplica_ir: false,
       contacto_emergencia: '',
       notas_expediente: ''
     });
@@ -484,6 +500,10 @@ export default function RRHH() {
         tipo_salario: nuevoUsuarioForm.tipo_salario,
         salario_base: Number(nuevoUsuarioForm.salario_base) || 0,
         porcentaje_comision: Number(nuevoUsuarioForm.porcentaje_comision) || 0,
+        periodicidad_pago: nuevoUsuarioForm.periodicidad_pago || 'Quincenal',
+        aplica_inss: Boolean(nuevoUsuarioForm.aplica_inss),
+        base_calculo_inss: nuevoUsuarioForm.base_calculo_inss || 'salario_base',
+        aplica_ir: Boolean(nuevoUsuarioForm.aplica_ir),
         id_caja_asignada: nuevoUsuarioForm.id_caja_asignada || '',
         nombre_caja_asignada: resolvedCajaNombre,
         contacto_emergencia: nuevoUsuarioForm.contacto_emergencia ? nuevoUsuarioForm.contacto_emergencia.trim() : '',
@@ -775,7 +795,35 @@ export default function RRHH() {
     }
   };
 
-  // CÁLCULO DE NÓMINA FLEXIBLE
+  // CÁLCULO DE RETENCIÓN IR LABORAL NICARAGUA (Ley 822 - Ley de Concertación Tributaria Art. 23)
+  const calcularIrNicaragua = (ingresoBrutoPeriodo, inssLaboralPeriodo, periodicidad = 'Quincenal') => {
+    const netoGravable = Math.max(0, Number(ingresoBrutoPeriodo || 0) - Number(inssLaboralPeriodo || 0));
+    if (netoGravable <= 0) return 0;
+
+    let factor = 24; // Quincenal por defecto
+    if (periodicidad === 'Semanal') factor = 52;
+    if (periodicidad === 'Mensual') factor = 12;
+
+    const anual = netoGravable * factor;
+    let impuestoAnual = 0;
+
+    if (anual <= 100000) {
+      impuestoAnual = 0;
+    } else if (anual <= 200000) {
+      impuestoAnual = (anual - 100000) * 0.15;
+    } else if (anual <= 350000) {
+      impuestoAnual = 15000 + ((anual - 200000) * 0.20);
+    } else if (anual <= 500000) {
+      impuestoAnual = 45000 + ((anual - 350000) * 0.25);
+    } else {
+      impuestoAnual = 82500 + ((anual - 500000) * 0.30);
+    }
+
+    const impuestoPeriodo = Math.max(0, impuestoAnual / factor);
+    return Number(impuestoPeriodo.toFixed(2));
+  };
+
+  // CÁLCULO DE NÓMINA FLEXIBLE (SEMANAL, QUINCENAL O MENSUAL CON INSS E IR INDEPENDIENTES)
   const calcularNomina = () => {
     if (!fechaInicio || !fechaFin) return toast.error("Seleccione un rango de fechas");
     if (new Date(fechaInicio) > new Date(fechaFin)) return toast.error("Fecha de inicio no puede ser mayor a fecha fin");
@@ -783,8 +831,37 @@ export default function RRHH() {
     const start = new Date(fechaInicio + 'T00:00:00');
     const end = new Date(fechaFin + 'T23:59:59');
 
-    const borrador = usuarios.filter(u => u.estado === 'Activo').map(emp => {
-      // 1. Calcular Comisiones en el rango (Listo o Completado)
+    const empleadosFiltrados = usuarios
+      .filter(u => u.estado === 'Activo')
+      .filter(emp => {
+        if (filtroPeriodicidad === 'coincidentes') {
+          return (emp.periodicidad_pago || 'Quincenal') === periodicidadPlanilla;
+        }
+        return true;
+      });
+
+    if (empleadosFiltrados.length === 0) {
+      return toast.error(`No hay colaboradores activos con periodicidad "${periodicidadPlanilla}"`);
+    }
+
+    const borrador = empleadosFiltrados.map(emp => {
+      // Periodicidad del corte de nómina
+      const periodicidad = periodicidadPlanilla || emp.periodicidad_pago || 'Quincenal';
+
+      // 1. Salario Base mensual prorrateado según periodicidad del período a liquidar
+      const salarioBaseMensual = Number(emp.salario_base) || 0;
+      let sueldoBaseProrrateado = 0;
+      if (salarioBaseMensual > 0 && (emp.tipo_salario === 'Fijo' || emp.tipo_salario === 'Mixto' || emp.tipo_salario === 'Comisión + Base')) {
+        if (periodicidad === 'Semanal') {
+          sueldoBaseProrrateado = Number((salarioBaseMensual / 4.3333).toFixed(2));
+        } else if (periodicidad === 'Quincenal') {
+          sueldoBaseProrrateado = Number((salarioBaseMensual / 2).toFixed(2));
+        } else {
+          sueldoBaseProrrateado = salarioBaseMensual;
+        }
+      }
+
+      // 2. Calcular Comisiones en el rango de fechas (Servicios Listos o Completados)
       const susOrdenes = ordenes.filter(ot => {
         const otDate = new Date(ot.fecha_creacion);
         const estaFinalizada = ot.estado === 'Listo' || ot.estado === 'Completado';
@@ -796,9 +873,29 @@ export default function RRHH() {
         return sum + comisionMonto;
       }, 0);
 
-      // 2. Obtener deudas activas que tengan saldo pendiente
+      // 3. Cálculo de INSS Laboral (7%) configurable independiente por empleado
+      // Para mecánicos: sobre salario base si lo tiene (>0), de lo contrario sobre comisiones
+      const cotizaInss = Boolean(emp.aplica_inss && deducirInssGlobal);
+      let baseInss = 0;
+      const baseCalculoModo = emp.base_calculo_inss || (sueldoBaseProrrateado > 0 ? 'salario_base' : 'comisiones');
+      if (cotizaInss) {
+        if (baseCalculoModo === 'salario_base') {
+          baseInss = sueldoBaseProrrateado > 0 ? sueldoBaseProrrateado : totalComisiones;
+        } else if (baseCalculoModo === 'comisiones') {
+          baseInss = totalComisiones;
+        } else if (baseCalculoModo === 'ambos') {
+          baseInss = sueldoBaseProrrateado + totalComisiones;
+        }
+      }
+      const inssLaboral = cotizaInss ? Number((baseInss * 0.07).toFixed(2)) : 0;
+
+      // 4. Cálculo de Retención Salarial IR configurable independiente por empleado
+      const aplicaIr = Boolean(emp.aplica_ir && deducirIrGlobal);
+      const totalIngresoBruto = sueldoBaseProrrateado + totalComisiones;
+      const irLaboral = aplicaIr ? calcularIrNicaragua(totalIngresoBruto, inssLaboral, periodicidad) : 0;
+
+      // 5. Obtener deudas activas que tengan saldo pendiente
       const susDeudas = deudas.filter(d => d.id_empleado === emp.id && d.estado === 'Activo' && d.saldo_pendiente > 0);
-      
       const detallesDeducciones = susDeudas.map(d => {
         const aDeducir = Math.min(Number(d.cuota_por_pago), Number(d.saldo_pendiente));
         return {
@@ -808,19 +905,29 @@ export default function RRHH() {
           monto_deducido: aDeducir
         };
       });
+      const totalDeudas = detallesDeducciones.reduce((sum, d) => sum + d.monto_deducido, 0);
 
-      const totalDeducciones = detallesDeducciones.reduce((sum, d) => sum + d.monto_deducido, 0);
-      const sueldoBaseAplicar = emp.salario_base || 0;
+      // 6. Total Deducciones y Salario Neto Final
+      const totalDeducciones = totalDeudas + inssLaboral + irLaboral;
+      const netoPagar = Math.max(0, totalIngresoBruto - totalDeducciones);
 
       return {
         id_empleado: emp.id,
         nombre: emp.nombre_completo,
         tipo_salario: emp.tipo_salario || 'Comisión',
-        sueldo_base: sueldoBaseAplicar,
+        periodicidad,
+        salario_base_mensual: salarioBaseMensual,
+        sueldo_base: sueldoBaseProrrateado,
         comisiones: totalComisiones,
+        aplica_inss: cotizaInss,
+        base_calculo_inss: baseCalculoModo,
+        inss_laboral: inssLaboral,
+        aplica_ir: aplicaIr,
+        ir: irLaboral,
+        deducciones_deudas: totalDeudas,
         deducciones: totalDeducciones,
         detalles_deducciones: detallesDeducciones,
-        neto: (sueldoBaseAplicar + totalComisiones) - totalDeducciones
+        neto: Number(netoPagar.toFixed(2))
       };
     });
 
@@ -828,11 +935,114 @@ export default function RRHH() {
     toast.success("Cálculo preliminar generado");
   };
 
-  const handleSueldoBaseChange = (id_empleado, nuevoSueldo) => {
+  const handleBorradorFieldChange = (id_empleado, field, val) => {
     setNominaBorrador(prev => prev.map(line => {
       if (line.id_empleado === id_empleado) {
-        const val = Number(nuevoSueldo) || 0;
-        return { ...line, sueldo_base: val, neto: (val + line.comisiones) - line.deducciones };
+        const numVal = Math.max(0, Number(val) || 0);
+        const updated = { ...line, [field]: numVal };
+        const totalIngreso = Number(updated.sueldo_base || 0) + Number(updated.comisiones || 0);
+
+        // Si se modificó sueldo base o comisiones, recalcular INSS e IR si están activos
+        if (field === 'sueldo_base' || field === 'comisiones') {
+          if (updated.aplica_inss) {
+            const base = updated.base_calculo_inss === 'salario_base'
+              ? (updated.sueldo_base > 0 ? updated.sueldo_base : updated.comisiones)
+              : updated.base_calculo_inss === 'comisiones'
+              ? updated.comisiones
+              : (updated.sueldo_base + updated.comisiones);
+            updated.inss_laboral = Number((base * 0.07).toFixed(2));
+          }
+          if (updated.aplica_ir) {
+            updated.ir = calcularIrNicaragua(totalIngreso, updated.inss_laboral || 0, line.periodicidad);
+          }
+        }
+
+        const totalDed = Number(updated.deducciones_deudas || 0) + Number(updated.inss_laboral || 0) + Number(updated.ir || 0);
+        updated.deducciones = totalDed;
+        updated.neto = Math.max(0, Number((totalIngreso - totalDed).toFixed(2)));
+        return updated;
+      }
+      return line;
+    }));
+  };
+
+  const handleToggleBorradorInss = (id_empleado) => {
+    setNominaBorrador(prev => prev.map(line => {
+      if (line.id_empleado === id_empleado) {
+        const newAplica = !line.aplica_inss;
+        let newInss = 0;
+        if (newAplica) {
+          const base = line.base_calculo_inss === 'salario_base' 
+            ? (line.sueldo_base > 0 ? line.sueldo_base : line.comisiones)
+            : line.base_calculo_inss === 'comisiones' 
+            ? line.comisiones
+            : (line.sueldo_base + line.comisiones);
+          newInss = Number((base * 0.07).toFixed(2));
+        }
+        const totalIngreso = line.sueldo_base + line.comisiones;
+        const newIr = line.aplica_ir ? calcularIrNicaragua(totalIngreso, newInss, line.periodicidad) : line.ir;
+        const totalDed = (line.deducciones_deudas || 0) + newInss + newIr;
+        return {
+          ...line,
+          aplica_inss: newAplica,
+          inss_laboral: newInss,
+          ir: newIr,
+          deducciones: totalDed,
+          neto: Math.max(0, Number((totalIngreso - totalDed).toFixed(2)))
+        };
+      }
+      return line;
+    }));
+  };
+
+  const handleCycleBorradorBaseInss = (id_empleado) => {
+    setNominaBorrador(prev => prev.map(line => {
+      if (line.id_empleado === id_empleado) {
+        const nextBase = line.base_calculo_inss === 'salario_base' ? 'comisiones'
+          : line.base_calculo_inss === 'comisiones' ? 'ambos'
+          : 'salario_base';
+
+        let newInss = line.inss_laboral;
+        if (line.aplica_inss) {
+          const base = nextBase === 'salario_base'
+            ? (line.sueldo_base > 0 ? line.sueldo_base : line.comisiones)
+            : nextBase === 'comisiones'
+            ? line.comisiones
+            : (line.sueldo_base + line.comisiones);
+          newInss = Number((base * 0.07).toFixed(2));
+        }
+
+        const totalIngreso = line.sueldo_base + line.comisiones;
+        const newIr = line.aplica_ir ? calcularIrNicaragua(totalIngreso, newInss, line.periodicidad) : line.ir;
+        const totalDed = (line.deducciones_deudas || 0) + newInss + newIr;
+
+        return {
+          ...line,
+          base_calculo_inss: nextBase,
+          inss_laboral: newInss,
+          ir: newIr,
+          deducciones: totalDed,
+          neto: Math.max(0, Number((totalIngreso - totalDed).toFixed(2)))
+        };
+      }
+      return line;
+    }));
+  };
+
+  const handleToggleBorradorIr = (id_empleado) => {
+    setNominaBorrador(prev => prev.map(line => {
+      if (line.id_empleado === id_empleado) {
+        const newAplica = !line.aplica_ir;
+        const totalIngreso = line.sueldo_base + line.comisiones;
+        const newIr = newAplica ? calcularIrNicaragua(totalIngreso, line.inss_laboral || 0, line.periodicidad) : 0;
+        const totalDed = (line.deducciones_deudas || 0) + (line.inss_laboral || 0) + newIr;
+        return {
+          ...line,
+          aplica_ir: newAplica,
+          ir: newIr,
+          deducciones: totalDed,
+          neto: Math.max(0, Number((totalIngreso - totalDed).toFixed(2)))
+        };
       }
       return line;
     }));
@@ -844,12 +1054,17 @@ export default function RRHH() {
     try {
       const nominaRef = push(ref(rtdb, 'nominas'));
       const totalPlanilla = nominaBorrador.reduce((sum, l) => sum + l.neto, 0);
+      const totalInss = nominaBorrador.reduce((sum, l) => sum + (l.inss_laboral || 0), 0);
+      const totalIr = nominaBorrador.reduce((sum, l) => sum + (l.ir || 0), 0);
 
       await set(nominaRef, {
         fecha_generacion: new Date().toISOString(),
         fecha_inicio: fechaInicio,
         fecha_fin: fechaFin,
+        periodicidad: periodicidadPlanilla,
         total_pagado: totalPlanilla,
+        total_inss: totalInss,
+        total_ir: totalIr,
         detalles: nominaBorrador
       });
 
@@ -1307,76 +1522,273 @@ export default function RRHH() {
       {/* ========================================================================= */}
       {activeTab === 'generar' && (
         <div className="space-y-6">
-          <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col md:flex-row gap-4 items-end">
-            <div className="flex-1">
-              <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Fecha Inicio</label>
-              <input type="date" value={fechaInicio} onChange={e => setFechaInicio(e.target.value)} className="w-full border p-2.5 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-medium" />
+          {/* PANEL DE CONFIGURACIÓN DE PLANILLA Y PERIODICIDAD */}
+          <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 space-y-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-gray-100 pb-3">
+              <div>
+                <h3 className="font-black text-gray-800 text-sm flex items-center gap-2">
+                  <CalendarDays className="text-blue-600" size={18} />
+                  Parámetros de Corte de Nómina
+                </h3>
+                <p className="text-xs text-gray-500">
+                  Calcula planillas semanales, quincenales o mensuales con deducciones independientes de INSS e IR.
+                </p>
+              </div>
             </div>
-            <div className="flex-1">
-              <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Fecha Fin</label>
-              <input type="date" value={fechaFin} onChange={e => setFechaFin(e.target.value)} className="w-full border p-2.5 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-medium" />
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 items-end">
+              <div>
+                <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Fecha Inicio</label>
+                <input 
+                  type="date" 
+                  value={fechaInicio} 
+                  onChange={e => setFechaInicio(e.target.value)} 
+                  className="w-full border p-2.5 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-medium text-sm bg-white" 
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Fecha Fin</label>
+                <input 
+                  type="date" 
+                  value={fechaFin} 
+                  onChange={e => setFechaFin(e.target.value)} 
+                  className="w-full border p-2.5 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-medium text-sm bg-white" 
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">
+                  Frecuencia del Corte
+                </label>
+                <select
+                  value={periodicidadPlanilla}
+                  onChange={e => setPeriodicidadPlanilla(e.target.value)}
+                  className="w-full border p-2.5 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-sm bg-white text-blue-900"
+                >
+                  <option value="Semanal">Semanal (7 días • Salario / 4.33)</option>
+                  <option value="Quincenal">Quincenal (15 días • Salario / 2)</option>
+                  <option value="Mensual">Mensual (30 días • Salario Completo)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">
+                  Filtrar Colaboradores
+                </label>
+                <select
+                  value={filtroPeriodicidad}
+                  onChange={e => setFiltroPeriodicidad(e.target.value)}
+                  className="w-full border p-2.5 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-xs bg-white text-gray-800"
+                >
+                  <option value="todos">Todos los Colaboradores Activos</option>
+                  <option value="coincidentes">Solo con Frecuencia {periodicidadPlanilla}</option>
+                </select>
+              </div>
+
+              <button 
+                onClick={calcularNomina} 
+                className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 shadow-md shadow-blue-200 transition-all cursor-pointer text-sm"
+              >
+                <CalendarDays size={18} /> Calcular Planilla
+              </button>
             </div>
-            <button onClick={calcularNomina} className="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-blue-700 shadow-md shadow-blue-200 transition-all">
-              <CalendarDays size={18} /> Calcular Planilla
-            </button>
+
+            {/* Toggles globales de INSS e IR para este corte */}
+            <div className="flex flex-wrap items-center gap-5 pt-2 border-t border-gray-100 text-xs">
+              <span className="font-bold text-gray-500 uppercase text-[11px]">Deducciones de Ley en este corte:</span>
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={deducirInssGlobal}
+                  onChange={e => setDeducirInssGlobal(e.target.checked)}
+                  className="w-4 h-4 rounded text-blue-600 accent-blue-600"
+                />
+                <span className="font-semibold text-gray-700">
+                  Deducir INSS Laboral (7%) a empleados con cotización activa
+                </span>
+              </label>
+
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={deducirIrGlobal}
+                  onChange={e => setDeducirIrGlobal(e.target.checked)}
+                  className="w-4 h-4 rounded text-blue-600 accent-blue-600"
+                />
+                <span className="font-semibold text-gray-700">
+                  Deducir Retención Salarial IR a empleados sujetos a retención
+                </span>
+              </label>
+            </div>
           </div>
 
           {nominaBorrador && (
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-              <div className="p-4 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
-                <h3 className="font-bold text-gray-800 flex items-center gap-2"><DollarSign className="text-green-600" /> Borrador de Planilla</h3>
-                <span className="text-xs text-gray-500">Puedes ajustar el sueldo proporcional si es corte semanal o quincenal.</span>
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden space-y-0">
+              <div className="p-4 bg-gray-50 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                <div>
+                  <h3 className="font-bold text-gray-800 flex items-center gap-2 text-sm">
+                    <DollarSign className="text-green-600" size={18} /> 
+                    Borrador de Planilla ({periodicidadPlanilla})
+                  </h3>
+                  <p className="text-xs text-gray-500">
+                    Puedes ajustar directamente los montos de sueldo base, INSS o IR en las casillas correspondientes antes de aprobar.
+                  </p>
+                </div>
+                <span className="text-xs font-bold bg-blue-100 text-blue-800 px-3 py-1 rounded-full">
+                  Corte {periodicidadPlanilla}: {fechaInicio} al {fechaFin}
+                </span>
               </div>
+
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm whitespace-nowrap">
-                  <thead className="bg-white text-gray-500 font-bold border-b border-gray-100">
+                  <thead className="bg-white text-gray-500 font-bold border-b border-gray-100 text-xs">
                     <tr>
-                      <th className="p-4">Empleado</th>
-                      <th className="p-4">Esquema</th>
-                      <th className="p-4 w-40">Sueldo Fijo (C$)</th>
-                      <th className="p-4 text-green-600">Comisiones (+)</th>
-                      <th className="p-4 text-red-500">Deducciones (-)</th>
-                      <th className="p-4 text-blue-700 font-black">Total a Pagar</th>
+                      <th className="p-3.5">Colaborador</th>
+                      <th className="p-3.5">Esquema / Período</th>
+                      <th className="p-3.5 w-36">Sueldo Base (C$)</th>
+                      <th className="p-3.5 text-green-600">Comisiones (+)</th>
+                      <th className="p-3.5 text-purple-700">INSS 7% (-)</th>
+                      <th className="p-3.5 text-amber-700">IR (-)</th>
+                      <th className="p-3.5 text-red-500">Deudas (-)</th>
+                      <th className="p-3.5 text-blue-700 font-black">Neto a Pagar</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-50">
+                  <tbody className="divide-y divide-gray-50 text-xs">
                     {nominaBorrador.map(line => (
                       <tr key={line.id_empleado} className="hover:bg-gray-50">
-                        <td className="p-4 font-bold text-gray-800">{line.nombre}</td>
-                        <td className="p-4 text-xs font-bold text-gray-500 uppercase">{line.tipo_salario}</td>
-                        <td className="p-4">
+                        <td className="p-3.5 font-bold text-gray-800">
+                          {line.nombre}
+                          {line.salario_base_mensual > 0 && (
+                            <span className="block text-[10px] text-gray-400 font-normal">
+                              Mensual: C$ {line.salario_base_mensual.toFixed(2)}
+                            </span>
+                          )}
+                        </td>
+
+                        <td className="p-3.5">
+                          <span className="font-bold text-gray-700 block">{line.tipo_salario}</span>
+                          <span className="text-[10px] text-gray-400 block">{line.periodicidad}</span>
+                        </td>
+
+                        <td className="p-3.5">
                           <input 
                             type="number" 
-                            className="w-full border p-2 rounded-lg outline-none focus:border-blue-500 font-medium"
+                            step="0.01"
+                            className="w-28 border border-gray-200 p-1.5 rounded-lg outline-none focus:border-blue-500 font-mono font-bold text-xs"
                             value={line.sueldo_base}
-                            onChange={(e) => handleSueldoBaseChange(line.id_empleado, e.target.value)}
+                            onChange={(e) => handleBorradorFieldChange(line.id_empleado, 'sueldo_base', e.target.value)}
                             disabled={line.tipo_salario === 'Comisión'}
                           />
                         </td>
-                        <td className="p-4 font-bold text-green-600">C$ {line.comisiones.toFixed(2)}</td>
-                        <td className="p-4">
-                          <div className="font-bold text-red-500">C$ {line.deducciones.toFixed(2)}</div>
-                          {line.detalles_deducciones.length > 0 && (
-                            <div className="text-[10px] text-gray-400 mt-1">
+
+                        <td className="p-3.5 font-bold text-green-700 font-mono">
+                          C$ {line.comisiones.toFixed(2)}
+                        </td>
+
+                        {/* INSS Laboral (7%) */}
+                        <td className="p-3.5">
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="number"
+                              step="0.01"
+                              className="w-24 border border-purple-200 bg-purple-50/40 p-1.5 rounded-lg outline-none focus:border-purple-500 font-mono font-bold text-xs text-purple-900"
+                              value={line.inss_laboral}
+                              onChange={(e) => handleBorradorFieldChange(line.id_empleado, 'inss_laboral', e.target.value)}
+                              disabled={!line.aplica_inss}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleToggleBorradorInss(line.id_empleado)}
+                              className={`p-1 rounded text-[10px] font-bold ${
+                                line.aplica_inss ? 'bg-purple-100 text-purple-800' : 'bg-gray-100 text-gray-400'
+                              }`}
+                              title={line.aplica_inss ? 'INSS Activo (Clic para desactivar)' : 'INSS Desactivado (Clic para activar)'}
+                            >
+                              {line.aplica_inss ? '✓' : '✗'}
+                            </button>
+                          </div>
+                          {line.aplica_inss && (
+                            <button
+                              type="button"
+                              onClick={() => handleCycleBorradorBaseInss(line.id_empleado)}
+                              className="text-[9px] text-purple-700 hover:text-purple-900 underline block mt-0.5 font-medium cursor-pointer"
+                              title="Clic para cambiar base de cálculo (Salario Base ↔ Comisiones ↔ Ambos)"
+                            >
+                              Base: {line.base_calculo_inss === 'salario_base' ? (line.sueldo_base > 0 ? 'S. Base' : 'Comisiones (Sin base)') : line.base_calculo_inss === 'comisiones' ? 'Comisiones' : 'Total'} ↻
+                            </button>
+                          )}
+                        </td>
+
+                        {/* IR Retención Salarial */}
+                        <td className="p-3.5">
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="number"
+                              step="0.01"
+                              className="w-24 border border-amber-200 bg-amber-50/40 p-1.5 rounded-lg outline-none focus:border-amber-500 font-mono font-bold text-xs text-amber-900"
+                              value={line.ir}
+                              onChange={(e) => handleBorradorFieldChange(line.id_empleado, 'ir', e.target.value)}
+                              disabled={!line.aplica_ir}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleToggleBorradorIr(line.id_empleado)}
+                              className={`p-1 rounded text-[10px] font-bold ${
+                                line.aplica_ir ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-400'
+                              }`}
+                              title={line.aplica_ir ? 'IR Activo (Clic para desactivar)' : 'IR Desactivado (Clic para activar)'}
+                            >
+                              {line.aplica_ir ? '✓' : '✗'}
+                            </button>
+                          </div>
+                          {line.aplica_ir && (
+                            <span className="text-[9px] text-amber-700 block mt-0.5">
+                              LCT Art. 23
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Deudas y préstamos */}
+                        <td className="p-3.5">
+                          <div className="font-bold text-red-500 font-mono">
+                            C$ {Number(line.deducciones_deudas || 0).toFixed(2)}
+                          </div>
+                          {line.detalles_deducciones && line.detalles_deducciones.length > 0 && (
+                            <div className="text-[9px] text-gray-400 mt-0.5">
                               {line.detalles_deducciones.map(d => `${d.tipo} (C$${d.monto_deducido})`).join(', ')}
                             </div>
                           )}
                         </td>
-                        <td className="p-4 font-black text-blue-700 text-base">C$ {line.neto.toFixed(2)}</td>
+
+                        <td className="p-3.5 font-black text-blue-800 text-sm font-mono">
+                          C$ {line.neto.toFixed(2)}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
-                  <tfoot className="bg-blue-50 font-black text-blue-900 border-t border-blue-100">
+                  <tfoot className="bg-blue-50/70 font-black text-blue-950 border-t-2 border-blue-200 text-xs">
                     <tr>
-                      <td colSpan="5" className="p-4 text-right uppercase">Total Planilla a Desembolsar:</td>
-                      <td className="p-4 text-lg">C$ {nominaBorrador.reduce((sum, l) => sum + l.neto, 0).toFixed(2)}</td>
+                      <td colSpan="2" className="p-3 text-right uppercase">Totales del Período:</td>
+                      <td className="p-3 font-mono">C$ {nominaBorrador.reduce((s, l) => s + (l.sueldo_base || 0), 0).toFixed(2)}</td>
+                      <td className="p-3 text-green-700 font-mono">C$ {nominaBorrador.reduce((s, l) => s + (l.comisiones || 0), 0).toFixed(2)}</td>
+                      <td className="p-3 text-purple-800 font-mono">C$ {nominaBorrador.reduce((s, l) => s + (l.inss_laboral || 0), 0).toFixed(2)}</td>
+                      <td className="p-3 text-amber-800 font-mono">C$ {nominaBorrador.reduce((s, l) => s + (l.ir || 0), 0).toFixed(2)}</td>
+                      <td className="p-3 text-red-700 font-mono">C$ {nominaBorrador.reduce((s, l) => s + (l.deducciones_deudas || 0), 0).toFixed(2)}</td>
+                      <td className="p-3 text-base text-blue-900 font-black font-mono">
+                        C$ {nominaBorrador.reduce((sum, l) => sum + l.neto, 0).toFixed(2)}
+                      </td>
                     </tr>
                   </tfoot>
                 </table>
               </div>
+
               <div className="p-4 bg-gray-50 flex justify-end">
-                <button onClick={guardarNomina} className="bg-green-600 hover:bg-green-700 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-md shadow-green-200">
-                  <CheckCircle2 size={18} /> Aprobar y Guardar Nómina
+                <button 
+                  onClick={guardarNomina} 
+                  className="bg-green-600 hover:bg-green-700 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-md shadow-green-200 transition-all cursor-pointer"
+                >
+                  <CheckCircle2 size={18} /> Aprobar y Guardar Nómina ({periodicidadPlanilla})
                 </button>
               </div>
             </div>
@@ -1394,21 +1806,32 @@ export default function RRHH() {
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm whitespace-nowrap">
-                <thead className="bg-gray-50 text-gray-600 font-medium border-b border-gray-100">
+                <thead className="bg-gray-50 text-gray-600 font-medium border-b border-gray-100 text-xs">
                   <tr>
                     <th className="p-4">Fecha de Generación</th>
-                    <th className="p-4">Período Cobrado</th>
-                    <th className="p-4">Total Pagado</th>
+                    <th className="p-4">Período y Frecuencia</th>
+                    <th className="p-4 text-purple-700">Total INSS (7%)</th>
+                    <th className="p-4 text-amber-700">Total IR</th>
+                    <th className="p-4 text-blue-900 font-black">Total Pagado</th>
                     <th className="p-4">Detalles</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-gray-100 text-xs">
                   {nominas.map(nom => (
-                    <tr key={nom.id}>
+                    <tr key={nom.id} className="hover:bg-gray-50">
                       <td className="p-4 font-bold text-gray-800">{new Date(nom.fecha_generacion).toLocaleDateString()}</td>
-                      <td className="p-4 text-gray-600">{nom.fecha_inicio} al {nom.fecha_fin}</td>
-                      <td className="p-4 font-black text-green-600">C$ {nom.total_pagado?.toFixed(2)}</td>
-                      <td className="p-4 text-xs text-gray-500">{nom.detalles?.length} empleados pagados</td>
+                      <td className="p-4 text-gray-700">
+                        <span className="font-semibold">{nom.fecha_inicio} al {nom.fecha_fin}</span>
+                        <span className="block text-[10px] text-gray-400 font-bold uppercase">{nom.periodicidad || 'Quincenal'}</span>
+                      </td>
+                      <td className="p-4 font-mono font-bold text-purple-800">
+                        C$ {Number(nom.total_inss || nom.detalles?.reduce((s, l) => s + (l.inss_laboral || 0), 0) || 0).toFixed(2)}
+                      </td>
+                      <td className="p-4 font-mono font-bold text-amber-800">
+                        C$ {Number(nom.total_ir || nom.detalles?.reduce((s, l) => s + (l.ir || 0), 0) || 0).toFixed(2)}
+                      </td>
+                      <td className="p-4 font-black text-green-700 font-mono text-sm">C$ {nom.total_pagado?.toFixed(2)}</td>
+                      <td className="p-4 text-xs text-gray-500">{nom.detalles?.length || 0} colaboradores</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1713,6 +2136,75 @@ export default function RRHH() {
                       <p className="text-[10px] text-gray-400 mt-0.5">
                         Si no tiene caja asignada, no podrá realizar apertura ni facturar en el POS.
                       </p>
+                    </div>
+                  </div>
+
+                  {/* CONFIGURACIÓN DE PLANILLA (INSS / IR / PERIODICIDAD) */}
+                  <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-3">
+                    <div className="flex items-center justify-between border-b pb-1.5">
+                      <span className="text-xs font-bold text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                        <FileText size={15} className="text-blue-600" /> Parámetros de Planilla & Deducciones de Ley
+                      </span>
+                      <span className="text-[10px] text-gray-500 font-medium">Configuración individual</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Periodicidad de Pago</label>
+                        <select
+                          value={formExpediente.periodicidad_pago || 'Quincenal'}
+                          onChange={e => setFormExpediente({ ...formExpediente, periodicidad_pago: e.target.value })}
+                          className="w-full border p-2 rounded-xl text-xs bg-white font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="Quincenal">Quincenal (Cada 15 días)</option>
+                          <option value="Semanal">Semanal (Cada 7 días)</option>
+                          <option value="Mensual">Mensual (Mes Completo)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Base Deducción INSS (Mecánicos)</label>
+                        <select
+                          disabled={!formExpediente.aplica_inss}
+                          value={formExpediente.base_calculo_inss || 'salario_base'}
+                          onChange={e => setFormExpediente({ ...formExpediente, base_calculo_inss: e.target.value })}
+                          className={`w-full border p-2 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 font-bold ${
+                            formExpediente.aplica_inss ? 'bg-white text-gray-800' : 'bg-gray-100 text-gray-400'
+                          }`}
+                        >
+                          <option value="salario_base">Sobre Salario Base</option>
+                          <option value="comisiones">Sobre Comisiones Ganadas</option>
+                          <option value="ambos">Sobre Ambos (Base + Comisiones)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                      <label className="flex items-start gap-2.5 p-2 rounded-lg border bg-white cursor-pointer hover:border-blue-300 transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(formExpediente.aplica_inss)}
+                          onChange={e => setFormExpediente({ ...formExpediente, aplica_inss: e.target.checked })}
+                          className="w-4 h-4 mt-0.5 text-blue-600 rounded cursor-pointer"
+                        />
+                        <div>
+                          <span className="text-xs font-bold text-gray-800 block">Deducción INSS Laboral (7%)</span>
+                          <span className="text-[10px] text-gray-500 block">Activar si cotiza en el Seguro Social</span>
+                        </div>
+                      </label>
+
+                      <label className="flex items-start gap-2.5 p-2 rounded-lg border bg-white cursor-pointer hover:border-blue-300 transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(formExpediente.aplica_ir)}
+                          onChange={e => setFormExpediente({ ...formExpediente, aplica_ir: e.target.checked })}
+                          className="w-4 h-4 mt-0.5 text-blue-600 rounded cursor-pointer"
+                        />
+                        <div>
+                          <span className="text-xs font-bold text-gray-800 block">Retención IR Laboral</span>
+                          <span className="text-[10px] text-gray-500 block">Art. 23 Ley 822 (Exento &lt; C$100k/año)</span>
+                        </div>
+                      </label>
                     </div>
                   </div>
 
@@ -2646,6 +3138,75 @@ export default function RRHH() {
                     <p className="text-[11px] text-gray-500 mt-1">
                       Si el colaborador operará el POS (Cajero o Vendedor), es requisito vincular una caja para que pueda aperturar turno y emitir recibos.
                     </p>
+                  </div>
+
+                  {/* Parámetros de Planilla & Leyes */}
+                  <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-3">
+                    <div className="flex items-center justify-between border-b pb-1.5">
+                      <span className="text-xs font-bold text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                        <FileText size={15} className="text-blue-600" /> Parámetros de Planilla & Deducciones de Ley
+                      </span>
+                      <span className="text-[10px] text-gray-500 font-medium">Leyes Laborales Nicaragua</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Periodicidad de Pago</label>
+                        <select
+                          value={nuevoUsuarioForm.periodicidad_pago || 'Quincenal'}
+                          onChange={e => setNuevoUsuarioForm({ ...nuevoUsuarioForm, periodicidad_pago: e.target.value })}
+                          className="w-full border p-2 rounded-xl text-xs bg-white font-bold text-gray-800 outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="Quincenal">Quincenal (Cada 15 días)</option>
+                          <option value="Semanal">Semanal (Cada 7 días)</option>
+                          <option value="Mensual">Mensual (Mes Completo)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Base Deducción INSS (Mecánicos)</label>
+                        <select
+                          disabled={!nuevoUsuarioForm.aplica_inss}
+                          value={nuevoUsuarioForm.base_calculo_inss || 'salario_base'}
+                          onChange={e => setNuevoUsuarioForm({ ...nuevoUsuarioForm, base_calculo_inss: e.target.value })}
+                          className={`w-full border p-2 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 font-bold ${
+                            nuevoUsuarioForm.aplica_inss ? 'bg-white text-gray-800' : 'bg-gray-100 text-gray-400'
+                          }`}
+                        >
+                          <option value="salario_base">Sobre Salario Base</option>
+                          <option value="comisiones">Sobre Comisiones Ganadas</option>
+                          <option value="ambos">Sobre Ambos (Base + Comisiones)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                      <label className="flex items-start gap-2.5 p-2 rounded-lg border bg-white cursor-pointer hover:border-blue-300 transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(nuevoUsuarioForm.aplica_inss)}
+                          onChange={e => setNuevoUsuarioForm({ ...nuevoUsuarioForm, aplica_inss: e.target.checked })}
+                          className="w-4 h-4 mt-0.5 text-blue-600 rounded cursor-pointer"
+                        />
+                        <div>
+                          <span className="text-xs font-bold text-gray-800 block">Deducción INSS Laboral (7%)</span>
+                          <span className="text-[10px] text-gray-500 block">Cotizante en Seguridad Social</span>
+                        </div>
+                      </label>
+
+                      <label className="flex items-start gap-2.5 p-2 rounded-lg border bg-white cursor-pointer hover:border-blue-300 transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(nuevoUsuarioForm.aplica_ir)}
+                          onChange={e => setNuevoUsuarioForm({ ...nuevoUsuarioForm, aplica_ir: e.target.checked })}
+                          className="w-4 h-4 mt-0.5 text-blue-600 rounded cursor-pointer"
+                        />
+                        <div>
+                          <span className="text-xs font-bold text-gray-800 block">Retención IR Laboral</span>
+                          <span className="text-[10px] text-gray-500 block">Art. 23 Ley 822 (Exento &lt; C$100k/año)</span>
+                        </div>
+                      </label>
+                    </div>
                   </div>
                 </div>
 

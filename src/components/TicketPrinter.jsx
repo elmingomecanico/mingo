@@ -336,6 +336,37 @@ const TicketPrinter = forwardRef(({ sale, isPreview = false, customConfig = null
           <span>TOTAL A PAGAR:</span>
           <span className="font-mono">{formatMoney(sale.total, cfg)}</span>
         </div>
+
+        {/* Facturación en Dólares si aplica */}
+        {sale.moneda === 'USD' && (
+          <div className="flex justify-between text-[10px] text-gray-800 font-bold">
+            <span>TOTAL EN USD:</span>
+            <span className="font-mono">${Number(sale.total_usd || (sale.total / (sale.tipo_cambio || 36.624))).toFixed(2)} USD (T.C. {sale.tipo_cambio || '36.62'})</span>
+          </div>
+        )}
+
+        {/* DETALLE DE PAGO EN EFECTIVO Y VUELTO */}
+        {(sale.monto_recibido != null && Number(sale.monto_recibido) > 0) && (
+          <div className="pt-1 mt-1 border-t border-black border-dotted text-[9.5px] space-y-0.5">
+            <div className="flex justify-between">
+              <span>RECIBIDO:</span>
+              <span className="font-mono font-bold">
+                {sale.pago_en_dolares
+                  ? `$${Number(sale.monto_recibido_usd || 0).toFixed(2)} USD (${formatMoney(sale.monto_recibido, cfg)})`
+                  : formatMoney(sale.monto_recibido, cfg)}
+              </span>
+            </div>
+            <div className="flex justify-between font-black text-black">
+              <span>CAMBIO / VUELTO:</span>
+              <span className="font-mono">{formatMoney(sale.cambio || 0, cfg)}</span>
+            </div>
+          </div>
+        )}
+
+        {/* RÉGIMEN CUOTA FIJA (NICARAGUA) */}
+        <div className="text-[7.5px] text-center text-gray-600 pt-0.5">
+          Régimen Cuota Fija • No retiene ni traslada IVA a consumidor final
+        </div>
       </div>
 
       

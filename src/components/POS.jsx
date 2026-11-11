@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingCart, Trash2, Search, Save, Loader, Printer, Plus, X, UserPlus, Minus, Percent, FileDown, ShieldAlert, Sparkles, RefreshCw, Gift, Lock, Camera, Maximize2, Package, ScanBarcode, LockOpen, ArrowUpRight, Calculator, CheckCircle2, AlertTriangle, Coins, DollarSign, User, Wrench, Phone, CreditCard, MapPin, Building, Layers, Store, Clock } from 'lucide-react';
+import { ShoppingCart, Trash2, Search, Save, Loader, Printer, Plus, X, UserPlus, Minus, Percent, FileDown, ShieldAlert, Sparkles, RefreshCw, Gift, Lock, Camera, Maximize2, Package, ScanBarcode, LockOpen, ArrowUpRight, Calculator, CheckCircle2, AlertTriangle, Coins, DollarSign, User, Wrench, Phone, CreditCard, MapPin, Building, Layers, Store, Clock, Edit3 } from 'lucide-react';
 import { ref, onValue, push, set, update, runTransaction } from 'firebase/database';
 import { rtdb } from '../firebase';
 import { useAuth } from '../context/AuthContext';
@@ -9,6 +9,7 @@ import Select from 'react-select';
 import TicketPrinter from './TicketPrinter';
 import BarcodeScannerModal from './BarcodeScannerModal';
 import ImagePreviewModal from './ImagePreviewModal';
+import PaymentCashModal from './PaymentCashModal';
 import CashOpenModal from './CashOpenModal';
 import CashCloseModal from './CashCloseModal';
 import CashMovementModal from './CashMovementModal';
@@ -224,6 +225,27 @@ export default function POS() {
   const [isCashCloseModalOpen, setIsCashCloseModalOpen] = useState(false);
   const [isCashMovementModalOpen, setIsCashMovementModalOpen] = useState(false);
   const [isMoneyCounterOpen, setIsMoneyCounterOpen] = useState(false);
+  const [isPaymentCashModalOpen, setIsPaymentCashModalOpen] = useState(false);
+  const [tipoCambio, setTipoCambio] = useState(36.6240);
+  const [monedaFactura, setMonedaFactura] = useState('NIO'); // 'NIO' | 'USD'
+  const [isEditingExchangeRate, setIsEditingExchangeRate] = useState(false);
+  const [tempTcInput, setTempTcInput] = useState('36.6240');
+
+  // Sincronizar reactivamente Tasa de Cambio Oficial (USD/NIO) desde RTDB
+  useEffect(() => {
+    const tcRef = ref(rtdb, 'configuracion/tasa_cambio');
+    const unsub = onValue(tcRef, (snap) => {
+      if (snap.exists()) {
+        const val = snap.val();
+        const num = parseFloat(val?.valor || val);
+        if (num > 0) {
+          setTipoCambio(num);
+          setTempTcInput(num.toString());
+        }
+      }
+    });
+    return () => unsub();
+  }, []);
 
   // 1. Identificación del usuario y privilegios
   const currentUserId = currentUserRealtime?.id || user?.id;
@@ -1141,7 +1163,43 @@ export default function POS() {
     }
   };
 
-  const processSale = async () => {
+  const handleInitiateCheckout = () => {
+    if (loading) return;
+
+    // Validar asignación de caja por gerencia
+    if (!canOperatePOS) {
+      return toast.error('⛔ Acceso denegado: Tu usuario no tiene asignada una Caja Registradora por la administración. No puedes facturar en el POS.', { duration: 5500 });
+    }
+
+    // Validar que la caja esté abierta para poder facturar
+    if (!activeTurno) {
+      toast.error('⚠️ La caja está cerrada. Debe abrir turno de caja para registrar el fondo inicial antes de facturar.', { duration: 4500 });
+      setIsCashOpenModalOpen(true);
+      return;
+    }
+
+    if (cart.length === 0) return toast.error('El carrito está vacío');
+    if (!selectedCliente) return toast.error('Seleccione un cliente');
+    if (cart.some(item => item.type === 'servicio') && !selectedMecanico) {
+      return toast.error('Debe asignar un mecánico para la mano de obra');
+    }
+
+    // Si es crédito empleado
+    if (metodoPago === 'Crédito Empleado' && !selectedEmpleadoDeudor) {
+      return toast.error('Debe seleccionar al empleado al que se le otorga el crédito');
+    }
+
+    // Si el cobro es en efectivo, abrir modal interactivo para ingresar lo recibido y calcular el vuelto
+    if (metodoPago === 'Efectivo') {
+      setIsPaymentCashModalOpen(true);
+      return;
+    }
+
+    // Para tarjeta, transferencia o crédito procesar directamente
+    processSale();
+  };
+
+  const processSale = async (cashPaymentDetails = null) => {
     if (loading) return;
 
     // Validar asignación de caja por gerencia
@@ -1298,6 +1356,14 @@ export default function POS() {
           nombre_cliente: nombreFinalCliente,
           cajero: cajeroResponsable,
           metodo_pago: metodoPago,
+          moneda: monedaFactura || 'NIO',
+          tasa_cambio: tipoCambio,
+          total_usd: Number((branchTotal / tipoCambio).toFixed(2)),
+          monto_recibido: cashPaymentDetails ? cashPaymentDetails.montoRecibido : (metodoPago === 'Efectivo' ? branchTotal : null),
+          cambio: cashPaymentDetails ? cashPaymentDetails.cambio : 0,
+          pago_en_dolares: cashPaymentDetails ? Boolean(cashPaymentDetails.pagoEnDolares) : false,
+          monto_recibido_usd: cashPaymentDetails ? cashPaymentDetails.montoRecibidoUsd : null,
+          regimen_fiscal: 'Cuota Fija (Exento de IVA a consumidor final)',
           id_mecanico: selectedMecanico ? selectedMecanico.value : null,
           nombre_mecanico: selectedMecanico ? selectedMecanico.label : null,
           empleado_deudor: selectedEmpleadoDeudor ? selectedEmpleadoDeudor.value : null,
@@ -1494,6 +1560,22 @@ export default function POS() {
         if (serviciosEnEstaSuc.length > 0 && selectedMecanico) {
           const otKey = push(ref(rtdb, 'ordenes_trabajo')).key;
           const totalServicios = serviciosEnEstaSuc.reduce((sum, item) => sum + ((item.price * item.qty) - getItemDiscount(item)), 0);
+          const repuestosOT = isMulti
+            ? cart.filter(item => item.type !== 'servicio').map(r => ({
+                id_producto: r.id,
+                codigo_visible: r.codigo_visible || r.sku || null,
+                nombre: r.name + (r.sucursal && r.sucursal !== branchId ? ` [${getBranchShort(r.sucursal)}]` : ''),
+                cantidad: r.qty,
+                sucursal: r.sucursal || branchId
+              }))
+            : branchItems
+                .filter(item => item.type !== 'servicio')
+                .map(r => ({
+                  id_producto: r.id,
+                  codigo_visible: r.codigo_visible || r.sku || null,
+                  nombre: r.name,
+                  cantidad: r.qty
+                }));
 
           atomicBatch[`ordenes_trabajo/${otKey}`] = {
             id_factura: saleId,
@@ -1513,7 +1595,10 @@ export default function POS() {
             })),
             total_servicios: totalServicios,
             comision_mecanico_porcentaje: selectedMecanico.comision || 50,
-            comision_mecanico_monto: totalServicios * ((selectedMecanico.comision || 50) / 100)
+            comision_mecanico_monto: totalServicios * ((selectedMecanico.comision || 50) / 100),
+            repuestos: repuestosOT,
+            tiene_cambio_piezas: repuestosOT.length > 0,
+            tipo_trabajo: repuestosOT.length > 0 ? 'Servicio con Cambio de Piezas' : 'Solo Revisión / Mano de Obra (Sin cambio de piezas)'
           };
         }
 
@@ -1781,27 +1866,97 @@ export default function POS() {
             </div>
 
             {/* BARRA SUPERIOR CAJA & SUCURSAL */}
-            <div className="bg-white p-4 rounded-xl rounded-tl-none shadow-sm flex items-center justify-between -mt-4 relative z-10 border border-gray-100">
-              <h1 className="text-xl font-black text-gray-800 flex items-center gap-2">
-                <ShoppingCart className="text-blue-600" size={22} />
-                Caja POS
-              </h1>
-              {puedeFacturarMultisucursal ? (
-                <select 
-                  value={sucursal}
-                  onChange={(e) => setSucursal(e.target.value)}
-                  className="border border-gray-200 p-2 rounded-lg bg-gray-50 font-bold text-sm text-gray-700 outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-                >
-                  {sucursalesList.map(s => (
-                    <option key={s.id} value={s.id}>{s.nombre || s.name} ({s.codigo_visible || s.id})</option>
-                  ))}
-                </select>
-              ) : (
-                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 border border-gray-200 rounded-lg text-xs font-bold text-gray-700 shadow-inner">
-                  <span className="text-gray-400">🔒 Sede Asignada:</span>
-                  <span className="text-blue-700 font-extrabold">{getBranchName(sucursal, sucursalesList)}</span>
+            <div className="bg-white p-4 rounded-xl rounded-tl-none shadow-sm flex flex-wrap items-center justify-between -mt-4 relative z-10 border border-gray-100 gap-3">
+              <div className="flex items-center gap-3">
+                <h1 className="text-xl font-black text-gray-800 flex items-center gap-2">
+                  <ShoppingCart className="text-blue-600" size={22} />
+                  Caja POS
+                </h1>
+
+                {/* Régimen Cuota Fija Badge */}
+                <span className="hidden sm:inline-flex items-center text-[10px] font-black bg-blue-50 text-blue-800 px-2.5 py-1 rounded-full border border-blue-200" title="En Nicaragua Cuota Fija no traslada IVA al consumidor">
+                  Régimen Cuota Fija (0% IVA)
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Control Dinámico de Tasa de Cambio */}
+                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-gray-50 border border-gray-200 rounded-lg text-xs">
+                  <span className="text-[10px] font-bold text-gray-400 uppercase">T.C.:</span>
+                  {isEditingExchangeRate ? (
+                    <div className="flex items-center gap-1">
+                      <input 
+                        type="number" 
+                        step="0.0001"
+                        value={tempTcInput} 
+                        onChange={e => setTempTcInput(e.target.value)} 
+                        className="w-16 border rounded px-1 py-0.5 text-xs font-mono font-bold"
+                      />
+                      <button 
+                        type="button" 
+                        onClick={async () => {
+                          const val = parseFloat(tempTcInput);
+                          if (!val || val <= 0) return toast.error('Tasa inválida');
+                          await update(ref(rtdb, 'configuracion/tasa_cambio'), { valor: val, fecha_actualizacion: new Date().toISOString() });
+                          setIsEditingExchangeRate(false);
+                          toast.success(`Tasa guardada: C$ ${val.toFixed(4)}`);
+                        }}
+                        className="text-xs bg-blue-600 text-white px-1.5 py-0.5 rounded font-bold"
+                      >
+                        ✓
+                      </button>
+                    </div>
+                  ) : (
+                    <button 
+                      type="button" 
+                      onClick={() => setIsEditingExchangeRate(true)}
+                      className="font-mono font-bold text-gray-800 hover:text-blue-600 flex items-center gap-1"
+                      title="Haga clic para actualizar la tasa oficial USD/NIO"
+                    >
+                      C$ {tipoCambio.toFixed(2)}
+                      <Edit3 size={11} className="text-gray-400" />
+                    </button>
+                  )}
                 </div>
-              )}
+
+                {/* Selector de Moneda de Facturación */}
+                <div className="flex items-center bg-gray-100 p-0.5 rounded-lg border border-gray-200 text-xs font-bold">
+                  <button
+                    type="button"
+                    onClick={() => setMonedaFactura('NIO')}
+                    className={`px-2 py-1 rounded-md transition-all ${monedaFactura === 'NIO' ? 'bg-white text-blue-700 shadow-xs' : 'text-gray-500 hover:text-gray-800'}`}
+                    title="Facturación estándar en Córdobas"
+                  >
+                    C$ NIO
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMonedaFactura('USD')}
+                    className={`px-2 py-1 rounded-md transition-all ${monedaFactura === 'USD' ? 'bg-emerald-600 text-white shadow-xs' : 'text-gray-500 hover:text-gray-800'}`}
+                    title="Adaptable para facturación en Dólares"
+                  >
+                    $ USD
+                  </button>
+                </div>
+
+                {/* Selector Sucursal */}
+                {puedeFacturarMultisucursal ? (
+                  <select 
+                    value={sucursal}
+                    onChange={(e) => setSucursal(e.target.value)}
+                    className="border border-gray-200 p-1.5 rounded-lg bg-gray-50 font-bold text-xs text-gray-700 outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                  >
+                    {sucursalesList.map(s => (
+                      <option key={s.id} value={s.id}>{s.nombre || s.name} ({s.codigo_visible || s.id})</option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-gray-100 border border-gray-200 rounded-lg text-xs font-bold text-gray-700 shadow-inner">
+                    <span className="text-gray-400">🔒</span>
+                    <span className="text-blue-700 font-extrabold">{getBranchName(sucursal, sucursalesList)}</span>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* BANNER VERDE: TURNO ACTIVO */}
@@ -2557,13 +2712,33 @@ export default function POS() {
             </div>
 
             <div className="flex justify-between items-center text-2xl sm:text-3xl font-black pt-3 border-t border-gray-100 text-blue-900 flex-wrap gap-2">
-              <span>TOTAL:</span>
-              <span className="break-words">C$ {total.toFixed(2)}</span>
+              <div>
+                <span>TOTAL:</span>
+                <span className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                  Cuota Fija (0% IVA a consumidor)
+                </span>
+              </div>
+              <div className="text-right">
+                <span className="break-words">
+                  {monedaFactura === 'USD' 
+                    ? `$ ${(total / tipoCambio).toFixed(2)} USD` 
+                    : `C$ ${total.toFixed(2)}`}
+                </span>
+                {monedaFactura === 'USD' ? (
+                  <span className="block text-xs font-semibold text-gray-500 font-mono">
+                    (C$ {total.toFixed(2)} • T.C. {tipoCambio.toFixed(2)})
+                  </span>
+                ) : (
+                  <span className="block text-xs font-semibold text-emerald-700 font-mono">
+                    ≈ ${(total / tipoCambio).toFixed(2)} USD (T.C. {tipoCambio.toFixed(2)})
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
           <button 
-            onClick={processSale}
+            onClick={handleInitiateCheckout}
             disabled={loading || cart.length === 0}
             className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-black text-lg py-4 px-6 rounded-2xl flex items-center justify-center gap-2 shadow-xl shadow-green-100 transition-all active:scale-95"
           >
@@ -2882,6 +3057,19 @@ export default function POS() {
       <MoneyCounterModal
         isOpen={isMoneyCounterOpen}
         onClose={() => setIsMoneyCounterOpen(false)}
+      />
+
+      {/* MODAL COBRO EN EFECTIVO Y CÁLCULO DE VUELTO INTERACTIVO */}
+      <PaymentCashModal
+        isOpen={isPaymentCashModalOpen}
+        onClose={() => setIsPaymentCashModalOpen(false)}
+        total={total}
+        tipoCambio={tipoCambio}
+        monedaFactura={monedaFactura}
+        onConfirm={(cashDetails) => {
+          setIsPaymentCashModalOpen(false);
+          processSale(cashDetails);
+        }}
       />
 
     </div>

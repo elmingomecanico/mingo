@@ -23,6 +23,7 @@ export default function PendientesEntrega() {
   // Catálogos auxiliares para registro manual
   const [sucursales, setSucursales] = useState([]);
   const [productos, setProductos] = useState([]);
+  const [inventarioSucursales, setInventarioSucursales] = useState({});
 
   // Modal de Despacho / Entrega
   const [despachoModal, setDespachoModal] = useState({
@@ -61,6 +62,7 @@ export default function PendientesEntrega() {
     const entregasRef = ref(rtdb, 'pendientes_entrega');
     const sucRef = ref(rtdb, 'configuracion/sucursales');
     const prodsRef = ref(rtdb, 'productos');
+    const invRef = ref(rtdb, 'inventario');
 
     const unsubEntregas = onValue(entregasRef, (snap) => {
       if (snap.exists()) {
@@ -88,10 +90,19 @@ export default function PendientesEntrega() {
       }
     });
 
+    const unsubInv = onValue(invRef, (snap) => {
+      if (snap.exists()) {
+        setInventarioSucursales(snap.val());
+      } else {
+        setInventarioSucursales({});
+      }
+    });
+
     return () => {
       unsubEntregas();
       unsubSuc();
       unsubProds();
+      unsubInv();
     };
   }, []);
 
@@ -467,6 +478,25 @@ export default function PendientesEntrega() {
                         }`}>
                           {isCompleted ? 'Entrega Completada' : totalEntregadas > 0 ? 'Entrega Parcial' : 'Pendiente de Retiro'}
                         </span>
+                        {(() => {
+                          if (isCompleted) return null;
+                          const sucursalId = record.sucursal || 'SUC-01';
+                          const algunItemEnDeficit = (record.items || []).some(it => {
+                            if (it.cantidad_pendiente <= 0) return false;
+                            const st = Number(inventarioSucursales[sucursalId]?.[it.id_producto]?.stock_actual);
+                            return !isNaN(st) && st < 0;
+                          });
+
+                          return algunItemEnDeficit ? (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 border border-orange-200">
+                              ⏳ Espera de Compra
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              📦 En Bodega
+                            </span>
+                          );
+                        })()}
                       </div>
 
                       <h3 className="font-black text-base text-slate-900 mt-1 truncate">
@@ -544,25 +574,46 @@ export default function PendientesEntrega() {
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100">
-                            {items.map(it => (
-                              <tr key={it.id_producto} className="hover:bg-slate-50/60">
-                                <td className="py-2.5 px-3 font-mono font-bold text-blue-900">{it.codigo_visible}</td>
-                                <td className="py-2.5 px-3 font-bold text-slate-900">{it.nombre}</td>
-                                <td className="py-2.5 px-3 text-center font-bold text-slate-700">{it.cantidad_total} uds</td>
-                                <td className="py-2.5 px-3 text-center font-bold text-emerald-700">{it.cantidad_entregada || 0} uds</td>
-                                <td className="py-2.5 px-3 text-right font-black">
-                                  {it.cantidad_pendiente > 0 ? (
-                                    <span className="text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
-                                      {it.cantidad_pendiente} pendientes
-                                    </span>
-                                  ) : (
-                                    <span className="text-emerald-600 flex items-center gap-1 justify-end">
-                                      <Check size={13} /> Entregado
-                                    </span>
-                                  )}
-                                </td>
-                              </tr>
-                            ))}
+                            {items.map(it => {
+                              const sucursalId = record.sucursal || 'SUC-01';
+                              const stockActualSucursal = Number(inventarioSucursales[sucursalId]?.[it.id_producto]?.stock_actual);
+                              const tieneDeficit = !isNaN(stockActualSucursal) && stockActualSucursal < 0;
+
+                              return (
+                                <tr key={it.id_producto} className="hover:bg-slate-50/60">
+                                  <td className="py-2.5 px-3 font-mono font-bold text-blue-900">{it.codigo_visible}</td>
+                                  <td className="py-2.5 px-3">
+                                    <div className="font-bold text-slate-900">{it.nombre}</div>
+                                    {it.cantidad_pendiente > 0 && (
+                                      <div className="mt-1">
+                                        {tieneDeficit ? (
+                                          <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full border border-amber-200">
+                                            ⏳ En espera de compra (Déficit sucursal: {Math.abs(stockActualSucursal)})
+                                          </span>
+                                        ) : (
+                                          <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-200">
+                                            🟢 En bodega / stock (Listo para entrega)
+                                          </span>
+                                        )}
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td className="py-2.5 px-3 text-center font-bold text-slate-700">{it.cantidad_total} uds</td>
+                                  <td className="py-2.5 px-3 text-center font-bold text-emerald-700">{it.cantidad_entregada || 0} uds</td>
+                                  <td className="py-2.5 px-3 text-right font-black">
+                                    {it.cantidad_pendiente > 0 ? (
+                                      <span className="text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                                        {it.cantidad_pendiente} pendientes
+                                      </span>
+                                    ) : (
+                                      <span className="text-emerald-600 flex items-center gap-1 justify-end">
+                                        <Check size={13} /> Entregado
+                                      </span>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
                           </tbody>
                         </table>
                       </div>

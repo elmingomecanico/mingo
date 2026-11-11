@@ -87,6 +87,7 @@ export default function Compras() {
 
   // Modal Crear Nuevo Proveedor
   const [isNewProvModalOpen, setIsNewProvModalOpen] = useState(false);
+  const [pendientesEntrega, setPendientesEntrega] = useState([]);
   const [newProvForm, setNewProvForm] = useState({
     nombre: '',
     ruc: '',
@@ -102,6 +103,16 @@ export default function Compras() {
     const compRef = ref(rtdb, 'compras');
     const catRef = ref(rtdb, 'catalogos/categorias');
     const ubiRef = ref(rtdb, 'catalogos/ubicaciones');
+    const pendientesRef = ref(rtdb, 'pendientes_entrega');
+
+    const unsubPendientes = onValue(pendientesRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const val = snapshot.val();
+        setPendientesEntrega(Object.keys(val).map(key => ({ id: key, ...val[key] })));
+      } else {
+        setPendientesEntrega([]);
+      }
+    });
 
     const unsubProv = onValue(provRef, (snapshot) => {
       if (snapshot.exists()) {
@@ -151,32 +162,57 @@ export default function Compras() {
 
     return () => { 
       clearTimeout(safetyTimer);
-      unsubProv(); unsubProd(); unsubImages(); unsubInv(); unsubComp(); unsubCat(); unsubUbi(); 
+      unsubProv(); unsubProd(); unsubImages(); unsubInv(); unsubComp(); unsubCat(); unsubUbi(); unsubPendientes(); 
     };
   }, [sucursal]);
 
-  // Alertas de inventario mínimo sugerido
+  // Mapeo reactivo de mercancía en custodia pendiente por producto
+  const custodiaPorProducto = useMemo(() => {
+    const map = {};
+    (pendientesEntrega || []).forEach(record => {
+      if ((!record.sucursal || record.sucursal === sucursal) && record.estado !== 'Entregado') {
+        (record.items || []).forEach(it => {
+          const qtyPend = Number(it.cantidad_pendiente || 0);
+          if (qtyPend > 0) {
+            const pId = it.id_producto || it.id;
+            if (pId) {
+              map[pId] = (map[pId] || 0) + qtyPend;
+            }
+          }
+        });
+      }
+    });
+    return map;
+  }, [pendientesEntrega, sucursal]);
+
+  // Alertas de inventario mínimo sugerido y compensación de mercancía en custodia
   useEffect(() => {
     if (productos.length > 0 && Object.keys(inventario).length > 0) {
       const sugeridas = [];
       productos.forEach(prod => {
         const inv = inventario[prod.id];
         if (inv) {
-          const stockActual = inv.stock_actual || 0;
-          const stockMinimo = inv.stock_minimo || 0;
-          if (stockActual <= stockMinimo) {
+          const stockActual = Number(inv.stock_actual) || 0;
+          const stockMinimo = Number(inv.stock_minimo) || 0;
+          const enCustodia = Number(custodiaPorProducto[prod.id]) || 0;
+          const deficit = stockActual < 0 ? Math.abs(stockActual) : 0;
+
+          if (stockActual <= stockMinimo || deficit > 0 || enCustodia > 0) {
+            const faltanteBase = stockMinimo - stockActual > 0 ? (stockMinimo - stockActual) : 5;
             sugeridas.push({
               ...prod,
               stock_actual: stockActual,
               stock_minimo: stockMinimo,
-              faltante: stockMinimo - stockActual > 0 ? stockMinimo - stockActual : 10
+              en_custodia: enCustodia,
+              deficit,
+              faltante: faltanteBase
             });
           }
         }
       });
       setSugerencias(sugeridas);
     }
-  }, [productos, inventario]);
+  }, [productos, inventario, custodiaPorProducto]);
 
   // Búsqueda inteligente
   const searchTerms = searchProd.toLowerCase().split(' ').filter(t => t.trim() !== '');
@@ -507,10 +543,27 @@ export default function Compras() {
     if (!selectedProveedor) return toast.error("Seleccione un proveedor");
     if (!numeroFactura.trim()) return toast.error("Ingrese el número de factura física del proveedor");
 
+    // Calcular compensación de custodia
+    let compensadasTotal = 0;
+    cart.forEach(item => {
+      const currentStock = Number(inventario[item.id]?.stock_actual) || 0;
+      const enCustodia = Number(custodiaPorProducto[item.id]) || 0;
+      const deficit = currentStock < 0 ? Math.abs(currentStock) : 0;
+      const m = calculateItemMetrics(item);
+      const totalUnidades = m.totalUnidadesFisicas || 0;
+      if (enCustodia > 0 || deficit > 0) {
+        compensadasTotal += Math.min(totalUnidades, deficit > 0 ? deficit : enCustodia);
+      }
+    });
+
+    const msgCustodia = compensadasTotal > 0
+      ? `\n\n📦 Compensación de Custodia: Se compensarán automáticamente ${compensadasTotal} unidades pendientes de entrega a clientes, dejando el saldo excedente disponible para la venta.`
+      : '';
+
     setConfirmModal({
       isOpen: true,
       title: 'Confirmar Ingreso de Factura de Proveedor',
-      message: `¿Estás seguro de registrar la factura ${numeroFactura.trim()} de ${selectedProveedor.label} por un total de C$ ${totalFacturaAPagar.toLocaleString('es-NI', { minimumFractionDigits: 2 })}? Se ingresarán ${totalUnidadesFisicasBodega} unidades físicas al inventario y se actualizarán costos y precios maestros.`,
+      message: `¿Estás seguro de registrar la factura ${numeroFactura.trim()} de ${selectedProveedor.label} por un total de C$ ${totalFacturaAPagar.toLocaleString('es-NI', { minimumFractionDigits: 2 })}? Se ingresarán ${totalUnidadesFisicasBodega} unidades físicas al inventario y se actualizarán costos y precios maestros.${msgCustodia}`,
       onConfirm: executePurchase
     });
   };
@@ -629,7 +682,7 @@ export default function Compras() {
           id_sucursal: sucursal,
           id_producto: item.id,
           nombre_producto: item.name,
-          tipo_movimiento: 'Entrada por Compra',
+          tipo_movimiento: snap.stockBefore < 0 ? 'Entrada por Compra (Compensación Custodia/Déficit)' : 'Entrada por Compra',
           cantidad: m.totalUnidadesFisicas,
           stock_anterior: snap.stockBefore,
           stock_resultante: snap.stockAfter,
@@ -978,6 +1031,11 @@ export default function Compras() {
                                 <div className="flex items-center gap-2 mt-0.5 text-[11px] text-gray-500">
                                   {p.cat && <span className="text-gray-600 font-medium">{p.cat}</span>}
                                   <span>• Stock actual: <strong className={stock <= 0 ? 'text-red-600' : 'text-gray-700'}>{stock}</strong></span>
+                                  {custodiaPorProducto[p.id] > 0 && (
+                                    <span className="bg-purple-100 text-purple-800 font-bold px-1.5 py-0.5 rounded text-[10px]">
+                                      📦 Custodia: {custodiaPorProducto[p.id]}
+                                    </span>
+                                  )}
                                   <span>• Precio Venta actual: <strong className="text-emerald-700 font-bold">C$ {p.price || 0}</strong></span>
                                 </div>
                               </div>
@@ -1089,6 +1147,34 @@ export default function Compras() {
                               <p className="text-[11px] text-gray-400 mt-0.5">
                                 {item.cat || 'Repuestos'} • Ubicación: {item.ubicacion || 'Bodega'}
                               </p>
+
+                              {/* Indicador de Compensación de Mercancía en Custodia o Déficit */}
+                              {(() => {
+                                const currentStock = Number(inventario[item.id]?.stock_actual) || 0;
+                                const enCustodia = Number(custodiaPorProducto[item.id]) || 0;
+                                const deficit = currentStock < 0 ? Math.abs(currentStock) : 0;
+                                const totalUnidadesEntran = metrics.totalUnidadesFisicas || 0;
+
+                                if (enCustodia > 0 || deficit > 0) {
+                                  const unidadesCompensadas = Math.min(totalUnidadesEntran, deficit > 0 ? deficit : enCustodia);
+                                  const unidadesDisponibles = Math.max(0, currentStock + totalUnidadesEntran);
+
+                                  return (
+                                    <div className="mt-1.5 p-2 rounded-xl bg-purple-50 border border-purple-200 text-xs text-purple-900 flex items-center justify-between flex-wrap gap-1">
+                                      <div className="flex items-center gap-1.5 font-bold">
+                                        <Package size={14} className="text-purple-600 shrink-0" />
+                                        <span>
+                                          📦 Compensación: Cubre <strong>{unidadesCompensadas}</strong> unid. en custodia/espera
+                                        </span>
+                                      </div>
+                                      <span className="font-semibold text-purple-700 bg-white px-2 py-0.5 rounded-lg border border-purple-100">
+                                        Stock resultante disponible para venta: <strong>{unidadesDisponibles}</strong> unid.
+                                      </span>
+                                    </div>
+                                  );
+                                }
+                                return null;
+                              })()}
                             </div>
                           </div>
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ref, onValue, update, remove } from 'firebase/database';
 import { rtdb } from '../firebase';
-import { Wrench, Clock, CheckCircle2, AlertCircle, User, FileText, DollarSign, Award, Sparkles, Trash2 } from 'lucide-react';
+import { Wrench, Clock, CheckCircle2, AlertCircle, User, FileText, DollarSign, Award, Sparkles, Trash2, Package } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useConfirm } from '../context/ConfirmContext';
 import { useAuth } from '../context/AuthContext';
@@ -289,6 +289,51 @@ export default function OrdenesTrabajo() {
                         </li>
                       ))}
                     </ul>
+                  </div>
+
+                  {/* REPUESTOS / PIEZAS A INSTALAR (CAMBIO DE PIEZAS VS REVISIÓN) */}
+                  <div className="pt-2 border-t border-gray-100">
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
+                        <Package size={13} className="text-blue-600" />
+                        {ot.repuestos && ot.repuestos.length > 0 
+                          ? `Repuestos a Instalar (${ot.repuestos.length})` 
+                          : 'Piezas / Repuestos'}
+                      </p>
+                      {ot.repuestos && ot.repuestos.length > 0 ? (
+                        <span className="text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">
+                          Cambio de Piezas
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-medium text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+                          Solo Revisión (Sin cambio)
+                        </span>
+                      )}
+                    </div>
+
+                    {ot.repuestos && ot.repuestos.length > 0 ? (
+                      <ul className="space-y-1">
+                        {ot.repuestos.map((rep, rIdx) => (
+                          <li key={rIdx} className="text-xs text-gray-700 bg-blue-50/50 border border-blue-100 rounded-xl p-2 flex justify-between items-center">
+                            <div className="flex items-center gap-1.5 truncate">
+                              {rep.codigo_visible && (
+                                <span className="font-mono font-bold text-[10px] text-blue-800 bg-blue-100 px-1.5 py-0.5 rounded shrink-0">
+                                  {rep.codigo_visible}
+                                </span>
+                              )}
+                              <span className="font-medium text-gray-800 truncate">{rep.nombre}</span>
+                            </div>
+                            <span className="font-black text-gray-900 bg-white px-2 py-0.5 rounded border border-gray-200 text-xs shrink-0">
+                              x{rep.cantidad}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-[11px] text-gray-400 italic bg-gray-50/80 p-2 rounded-xl border border-gray-100">
+                        Esta orden no incluye repuestos nuevos facturados. Corresponde a revisión, diagnóstico o mano de obra de piezas ya instaladas.
+                      </p>
+                    )}
                   </div>
 
                   {/* CAJA DE COMISIÓN GENERADA */}

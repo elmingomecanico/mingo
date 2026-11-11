@@ -58,6 +58,7 @@ export default function Inventario() {
   const [inventory, setInventory] = useState({});
   const [allInventory, setAllInventory] = useState({});
   const [ajustes, setAjustes] = useState([]);
+  const [pendientesEntrega, setPendientesEntrega] = useState([]);
   const [search, setSearch] = useState('');
   const [sucursal, setSucursal] = useState('SUC-01');
   const [sucursalesList, setSucursalesList] = useState([
@@ -162,6 +163,16 @@ export default function Inventario() {
     const consRef = ref(rtdb, 'configuracion/consecutivos');
     const sucursalesRef = ref(rtdb, 'configuracion/sucursales');
     const servRef = ref(rtdb, 'servicios');
+    const pendientesRef = ref(rtdb, 'pendientes_entrega');
+
+    const unsubPendientes = onValue(pendientesRef, (snap) => {
+      if (snap.exists()) {
+        const val = snap.val();
+        setPendientesEntrega(Object.keys(val).map(k => ({ id: k, ...val[k] })));
+      } else {
+        setPendientesEntrega([]);
+      }
+    });
 
     const unsubServ = onValue(servRef, (snap) => {
       if (snap.exists()) {
@@ -239,7 +250,7 @@ export default function Inventario() {
 
     return () => {
       clearTimeout(safetyTimer);
-      unsubProds(); unsubImgs(); unsubInv(); unsubAllInv(); unsubPoliticas(); unsubCat(); unsubUbi(); unsubMod(); unsubAjustes(); unsubCons(); unsubSucursales(); unsubServ();
+      unsubProds(); unsubImgs(); unsubInv(); unsubAllInv(); unsubPoliticas(); unsubCat(); unsubUbi(); unsubMod(); unsubAjustes(); unsubCons(); unsubSucursales(); unsubServ(); unsubPendientes();
     };
   }, [sucursal]);
 
@@ -312,6 +323,67 @@ export default function Inventario() {
     const textToSearch = `${p.name} ${p.codigo_visible || ''} ${p.id} ${p.cat || ''}`.toLowerCase();
     return searchTerms.every(term => textToSearch.includes(term));
   });
+
+  // Mapeo reactivo de custodia por producto y métricas globales para la sucursal seleccionada
+  const { custodiaPorProducto, totalUnidadesCustodia, totalOrdenesCustodia } = React.useMemo(() => {
+    const map = {};
+    let totalUnidades = 0;
+    const ordenesSet = new Set();
+
+    (pendientesEntrega || []).forEach(record => {
+      if ((!record.sucursal || record.sucursal === sucursal) && record.estado !== 'Entregado') {
+        let tienePendiente = false;
+        (record.items || []).forEach(it => {
+          const qtyPend = Number(it.cantidad_pendiente || 0);
+          if (qtyPend > 0) {
+            const pId = it.id_producto || it.id;
+            if (pId) {
+              map[pId] = (map[pId] || 0) + qtyPend;
+              totalUnidades += qtyPend;
+              tienePendiente = true;
+            }
+          }
+        });
+        if (tienePendiente && record.id) {
+          ordenesSet.add(record.id);
+        }
+      }
+    });
+
+    return {
+      custodiaPorProducto: map,
+      totalUnidadesCustodia: totalUnidades,
+      totalOrdenesCustodia: ordenesSet.size
+    };
+  }, [pendientesEntrega, sucursal]);
+
+  // Métricas rápidas de existencias en sucursal activa
+  const stockMetrics = React.useMemo(() => {
+    let articulosConBajoStock = 0;
+    let articulosConDeficit = 0;
+    let totalFisicoEstimado = 0;
+
+    products.forEach(p => {
+      const inv = inventory[p.id] || { stock_actual: 0, stock_minimo: 0 };
+      const stockNeto = Number(inv.stock_actual) || 0;
+      const enCust = Number(custodiaPorProducto[p.id]) || 0;
+      
+      const stockFisico = stockNeto >= 0 ? (stockNeto + enCust) : Math.max(0, enCust + stockNeto);
+      totalFisicoEstimado += stockFisico;
+
+      if (stockNeto < 0) {
+        articulosConDeficit++;
+      } else if (stockNeto <= (inv.stock_minimo || 0)) {
+        articulosConBajoStock++;
+      }
+    });
+
+    return {
+      articulosConBajoStock,
+      articulosConDeficit,
+      totalFisicoEstimado
+    };
+  }, [products, inventory, custodiaPorProducto]);
 
   const handleBarcodeInput = (code) => {
     if (!code || !code.trim()) return;
@@ -788,7 +860,67 @@ export default function Inventario() {
       </div>
 
       {activeTab === 'catalogo' && (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="space-y-4">
+          {/* BANNER DE MÉTRICAS RÁPIDAS: EXISTENCIAS FÍSICAS Y MERCANCÍA EN CUSTODIA */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="bg-white p-3.5 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-3">
+              <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl">
+                <Package size={20} />
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-gray-400 block">Total en Catálogo</span>
+                <span className="text-base sm:text-lg font-black text-gray-800 block leading-tight">
+                  {products.length} productos
+                </span>
+                <span className="text-[10px] text-gray-500">En todas las categorías</span>
+              </div>
+            </div>
+
+            <div className="bg-white p-3.5 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-3">
+              <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl">
+                <Store size={20} />
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-gray-400 block">Stock Físico (Bodega)</span>
+                <span className="text-base sm:text-lg font-black text-emerald-700 block leading-tight">
+                  {stockMetrics.totalFisicoEstimado} unid.
+                </span>
+                <span className="text-[10px] text-emerald-600 font-medium">Contadas en sucursal</span>
+              </div>
+            </div>
+
+            <div className="bg-white p-3.5 rounded-2xl border border-purple-100 shadow-sm flex items-center gap-3 bg-gradient-to-br from-white to-purple-50/40">
+              <div className="p-2.5 bg-purple-100 text-purple-700 rounded-xl">
+                <Layers size={20} />
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-purple-700 block">Mercancía en Custodia</span>
+                <span className="text-base sm:text-lg font-black text-purple-900 block leading-tight">
+                  {totalUnidadesCustodia} unid.
+                </span>
+                <span className="text-[10px] text-purple-600 font-medium">
+                  {totalOrdenesCustodia} pedidos pendientes de retiro
+                </span>
+              </div>
+            </div>
+
+            <div className="bg-white p-3.5 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-3">
+              <div className="p-2.5 bg-amber-50 text-amber-600 rounded-xl">
+                <AlertTriangle size={20} />
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-gray-400 block">Alertas de Stock</span>
+                <span className="text-base sm:text-lg font-black text-amber-800 block leading-tight">
+                  {stockMetrics.articulosConBajoStock + stockMetrics.articulosConDeficit} arts.
+                </span>
+                <span className="text-[10px] text-amber-700 font-medium">
+                  {stockMetrics.articulosConDeficit > 0 ? `${stockMetrics.articulosConDeficit} en déficit de compra` : 'Bajo stock mínimo'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           
           <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex flex-col sm:flex-row justify-between gap-4">
             <div className="flex gap-2 flex-1 max-w-lg">
@@ -842,7 +974,7 @@ export default function Inventario() {
                   <th className="p-4">Producto y Compatibilidad</th>
                   <th className="p-4">Categoría</th>
                   <th className="p-4 text-right">Precio Venta</th>
-                  <th className="p-4 text-center">Stock</th>
+                  <th className="p-4 text-center">Disponibilidad & Custodia</th>
                   <th className="p-4">Ubicación</th>
                   <th className="p-4 text-center">Acciones</th>
                 </tr>
@@ -855,7 +987,14 @@ export default function Inventario() {
                 ) : (
                   filtered.map(prod => {
                     const inv = inventory[prod.id] || { stock_actual: 0 };
-                    const isLowStock = inv.stock_actual <= (inv.stock_minimo || 0);
+                    const stockNeto = Number(inv.stock_actual) || 0;
+                    const enCustodia = Number(custodiaPorProducto[prod.id]) || 0;
+                    // Stock físico estimado en bodega:
+                    // Si stockNeto >= 0: las unidades en custodia están en bodega + las unidades disponibles
+                    // Si stockNeto < 0: hay déficit por compras aún no recibidas
+                    const stockFisico = stockNeto >= 0 ? (stockNeto + enCustodia) : Math.max(0, enCustodia + stockNeto);
+                    const deficitPendiente = stockNeto < 0 ? Math.abs(stockNeto) : 0;
+                    const isLowStock = stockNeto <= (inv.stock_minimo || 0);
                     
                     return (
                       <tr key={prod.id} className="hover:bg-gray-50 transition-colors">
@@ -928,9 +1067,31 @@ export default function Inventario() {
                         </td>
                         <td className="p-4 text-right font-medium text-emerald-600">C$ {prod.price}</td>
                         <td className="p-4 text-center">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full font-bold ${isLowStock ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
-                            {inv.stock_actual}
-                          </span>
+                          <div className="flex flex-col items-center gap-1">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-black shadow-sm ${
+                              stockNeto > (inv.stock_minimo || 0)
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                : stockNeto > 0
+                                ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                : 'bg-red-100 text-red-800 border border-red-200'
+                            }`}>
+                              {stockNeto > 0 ? `${stockNeto} disp.` : stockNeto === 0 ? '0 disp.' : `${stockNeto} déficit`}
+                            </span>
+
+                            <div className="flex items-center gap-1.5 text-[10px]">
+                              <span className="text-gray-500 font-medium" title="Unidades contadas físicamente en bodega">
+                                Físico: <strong className="text-gray-800">{stockFisico}</strong>
+                              </span>
+                              {enCustodia > 0 && (
+                                <span 
+                                  className="bg-purple-100 text-purple-800 font-bold px-1.5 py-0.5 rounded border border-purple-200 flex items-center gap-0.5" 
+                                  title={`Mercancía en custodia para clientes. ${deficitPendiente > 0 ? `(${deficitPendiente} unid. esperando compra/proveedor)` : '(Listas para entrega)'}`}
+                                >
+                                  📦 Custodia: {enCustodia}
+                                </span>
+                              )}
+                            </div>
+                          </div>
                         </td>
                         <td className="p-4 text-gray-500">{inv.ubicacion || '-'}</td>
                         <td className="p-4 text-center">
@@ -959,6 +1120,7 @@ export default function Inventario() {
             </table>
           </div>
         </div>
+      </div>
       )}
 
       {activeTab === 'ajustes' && (

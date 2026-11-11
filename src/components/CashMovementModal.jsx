@@ -16,7 +16,19 @@ export default function CashMovementModal({
   const [tipo, setTipo] = useState('Entrega a Gerencia');
   const [moneda, setMoneda] = useState('NIO'); // 'NIO' | 'USD'
   const [monto, setMonto] = useState('');
-  const [tipoCambio, setTipoCambio] = useState(36.62);
+  const [tipoCambio, setTipoCambio] = useState(36.6240);
+
+  useEffect(() => {
+    const tcRef = ref(rtdb, 'configuracion/tasa_cambio');
+    const unsub = onValue(tcRef, (snap) => {
+      if (snap.exists()) {
+        const val = snap.val();
+        const num = parseFloat(val?.valor || val);
+        if (num > 0) setTipoCambio(num);
+      }
+    });
+    return () => unsub();
+  }, []);
   const [autorizadoPor, setAutorizadoPor] = useState('Gerencia');
   const [recibidoPor, setRecibidoPor] = useState('');
   const [motivo, setMotivo] = useState('');

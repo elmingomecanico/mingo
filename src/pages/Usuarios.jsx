@@ -129,6 +129,10 @@ export default function Usuarios() {
         tipo_salario: item.tipo_salario || 'Comisión',
         salario_base: item.salario_base || 0,
         porcentaje_comision: item.porcentaje_comision || 50,
+        periodicidad_pago: item.periodicidad_pago || 'Quincenal',
+        aplica_inss: item.aplica_inss !== undefined ? Boolean(item.aplica_inss) : false,
+        base_calculo_inss: item.base_calculo_inss || 'salario_base',
+        aplica_ir: item.aplica_ir !== undefined ? Boolean(item.aplica_ir) : false,
         permite_multisucursal: hasMulti,
         id_caja_asignada: item.id_caja_asignada || '',
         nombre_caja_asignada: item.nombre_caja_asignada || ''
@@ -147,6 +151,10 @@ export default function Usuarios() {
         tipo_salario: 'Comisión',
         salario_base: 0,
         porcentaje_comision: 50,
+        periodicidad_pago: 'Quincenal',
+        aplica_inss: false,
+        base_calculo_inss: 'salario_base',
+        aplica_ir: false,
         permite_multisucursal: false,
         id_caja_asignada: '',
         nombre_caja_asignada: ''
@@ -184,7 +192,10 @@ export default function Usuarios() {
         resolvedCajaNombre = foundCaja ? `${foundCaja.codigo} - ${foundCaja.nombre}` : formData.nombre_caja_asignada;
       }
 
+      const existingUser = editingId ? (usuarios.find(u => u.id === editingId) || {}) : {};
+
       const payload = {
+        ...existingUser,
         nombre_completo: formData.nombre_completo.trim(),
         usuario: formData.usuario.trim(),
         password: formData.password.trim(),
@@ -197,6 +208,10 @@ export default function Usuarios() {
         tipo_salario: formData.tipo_salario,
         salario_base: Number(formData.salario_base) || 0,
         porcentaje_comision: Number(formData.porcentaje_comision) || 0,
+        periodicidad_pago: formData.periodicidad_pago || 'Quincenal',
+        aplica_inss: Boolean(formData.aplica_inss),
+        base_calculo_inss: formData.base_calculo_inss || 'salario_base',
+        aplica_ir: Boolean(formData.aplica_ir),
         id_caja_asignada: formData.id_caja_asignada || '',
         nombre_caja_asignada: resolvedCajaNombre
       };
@@ -432,6 +447,68 @@ export default function Usuarios() {
                         className="w-full border border-green-200 disabled:bg-gray-100 disabled:text-gray-400 bg-white p-2.5 rounded-xl outline-none focus:border-green-500 text-xs sm:text-sm" 
                         placeholder="50" 
                       />
+                    </div>
+                  </div>
+
+                  {/* Parámetros de Planilla, INSS e IR */}
+                  <div className="pt-2 border-t border-green-200/60 space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-green-800 mb-1 uppercase">Periodicidad de Planilla</label>
+                        <select
+                          value={formData.periodicidad_pago || 'Quincenal'}
+                          onChange={e => setFormData({ ...formData, periodicidad_pago: e.target.value })}
+                          className="w-full border border-green-200 bg-white p-2 rounded-xl text-xs sm:text-sm outline-none focus:border-green-500 font-semibold"
+                        >
+                          <option value="Quincenal">Quincenal (Cada 15 días)</option>
+                          <option value="Semanal">Semanal (Cada 7 días)</option>
+                          <option value="Mensual">Mensual (Mes Completo)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-green-800 mb-1 uppercase">Base Cálculo INSS (Mecánicos)</label>
+                        <select
+                          disabled={!formData.aplica_inss}
+                          value={formData.base_calculo_inss || 'salario_base'}
+                          onChange={e => setFormData({ ...formData, base_calculo_inss: e.target.value })}
+                          className={`w-full border border-green-200 p-2 rounded-xl text-xs sm:text-sm outline-none focus:border-green-500 font-semibold ${
+                            formData.aplica_inss ? 'bg-white text-gray-800' : 'bg-gray-100 text-gray-400'
+                          }`}
+                        >
+                          <option value="salario_base">Sobre Salario Base</option>
+                          <option value="comisiones">Sobre Comisiones Ganadas</option>
+                          <option value="ambos">Sobre Ambos (Base + Comisiones)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <label className="flex items-start gap-2 p-2 rounded-xl border border-green-200/80 bg-white/80 cursor-pointer hover:bg-white transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(formData.aplica_inss)}
+                          onChange={e => setFormData({ ...formData, aplica_inss: e.target.checked })}
+                          className="rounded text-green-600 focus:ring-green-500 w-4 h-4 mt-0.5"
+                        />
+                        <div>
+                          <span className="text-xs font-bold text-green-950 block">Deducir INSS Laboral (7%)</span>
+                          <span className="text-[10px] text-green-700">Cotizante activo en Seguro Social</span>
+                        </div>
+                      </label>
+
+                      <label className="flex items-start gap-2 p-2 rounded-xl border border-green-200/80 bg-white/80 cursor-pointer hover:bg-white transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(formData.aplica_ir)}
+                          onChange={e => setFormData({ ...formData, aplica_ir: e.target.checked })}
+                          className="rounded text-green-600 focus:ring-green-500 w-4 h-4 mt-0.5"
+                        />
+                        <div>
+                          <span className="text-xs font-bold text-green-950 block">Deducir Retención IR</span>
+                          <span className="text-[10px] text-green-700">Art. 23 Ley 822 Concertación Trib.</span>
+                        </div>
+                      </label>
                     </div>
                   </div>
                 </div>
