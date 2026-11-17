@@ -38,7 +38,7 @@ export const getBranchShort = (sucId, list = null) => {
 };
 
 export default function POS() {
-  const { user } = useAuth();
+  const { user, sucursalActiva } = useAuth();
   const [currentUserRealtime, setCurrentUserRealtime] = useState(null);
   const [politicasInventario, setPoliticasInventario] = useState({});
   const [cuentasBancarias, setCuentasBancarias] = useState([]);
@@ -70,18 +70,14 @@ export default function POS() {
     return () => unsub();
   }, []);
 
-  const puedeFacturarMultisucursal = Boolean(
-    currentUserRealtime?.rol === 'SuperAdmin' ||
-    currentUserRealtime?.permite_multisucursal ||
-    currentUserRealtime?.permisos?.includes('FACTURAR_MULTISUCURSAL') ||
-    user?.rol === 'SuperAdmin' ||
-    user?.permite_multisucursal ||
-    user?.permisos?.includes('FACTURAR_MULTISUCURSAL')
-  );
-
   const [sucursal, setSucursal] = useState(() => {
-    return user?.id_sucursal || 'SUC-01';
+    return sucursalActiva || user?.id_sucursal || 'SUC-01';
   });
+
+  // La sede de trabajo elegida al ingresar (o al cambiar de sede) manda sobre cualquier otra selección
+  useEffect(() => {
+    if (sucursalActiva) setSucursal(sucursalActiva);
+  }, [sucursalActiva]);
   
   // ================= TAB SYSTEM =================
   const getDefaultTab = (num = 1) => ({
@@ -258,6 +254,23 @@ export default function POS() {
     (c.usuario_asignado_id && c.usuario_asignado_id === currentUserId)
   );
 
+  // Quien tenga asignada una caja tiene autorización para facturar desde cualquier sucursal
+  const tieneCajaAsignada = Boolean(
+    userAssignedCaja || 
+    userAssignedCajaId || 
+    user?.id_caja_asignada
+  );
+
+  const puedeFacturarMultisucursal = Boolean(
+    currentUserRealtime?.rol === 'SuperAdmin' ||
+    currentUserRealtime?.permite_multisucursal ||
+    currentUserRealtime?.permisos?.includes('FACTURAR_MULTISUCURSAL') ||
+    user?.rol === 'SuperAdmin' ||
+    user?.permite_multisucursal ||
+    user?.permisos?.includes('FACTURAR_MULTISUCURSAL') ||
+    tieneCajaAsignada
+  );
+
   // 3. Cajas que este usuario tiene derecho a operar en la sucursal actual:
   // - Si el usuario (cajero o SuperAdmin) tiene una caja asignada a su nombre, SOLO opera su caja asignada.
   // - Si el usuario es SuperAdmin y NO tiene caja asignada a su nombre, SOLO puede operar cajas LIBRES
@@ -265,11 +278,12 @@ export default function POS() {
   // - NUNCA jamás se permite operar o abrir una caja asignada a otro empleado, protegiendo la integridad del personal.
   const myOperableCajas = cajasList.filter(c => {
     if (c.estado === 'Inactiva') return false;
-    if (c.sucursal && c.sucursal !== sucursal) return false;
 
-    // Caja asignada directamente a este usuario
+    // Caja asignada directamente a este usuario: puede facturar con ella desde cualquier sucursal
     if (userAssignedCaja && c.id === userAssignedCaja.id) return true;
     if (c.usuario_asignado_id && c.usuario_asignado_id === currentUserId) return true;
+
+    if (c.sucursal && c.sucursal !== sucursal) return false;
 
     // Si es SuperAdmin y NO tiene caja asignada a su nombre: solo cajas LIBRES (sin asignar a otro colaborador)
     if (isSuperAdmin && !userAssignedCaja) {
@@ -460,7 +474,7 @@ export default function POS() {
             uData.permite_multisucursal ||
             uData.permisos?.includes('FACTURAR_MULTISUCURSAL')
           );
-          if (!isMulti && uData.id_sucursal && uData.id_sucursal !== sucursal) {
+          if (!sucursalActiva && !isMulti && uData.id_sucursal && uData.id_sucursal !== sucursal) {
             setSucursal(uData.id_sucursal);
           }
         }
@@ -1352,6 +1366,8 @@ export default function POS() {
           fecha: fechaVentaIso,
           sucursal: branchId,
           sucursal_nombre: getBranchName(branchId, sucursalesList),
+          id_sucursal_operativa: sucursal,
+          sucursal_operativa_nombre: getBranchName(sucursal, sucursalesList),
           id_cliente: targetClienteId,
           nombre_cliente: nombreFinalCliente,
           cajero: cajeroResponsable,
@@ -1672,22 +1688,10 @@ export default function POS() {
               <ShoppingCart className="text-blue-600" size={24} />
               Caja POS
             </h1>
-            {puedeFacturarMultisucursal ? (
-              <select 
-                value={sucursal}
-                onChange={(e) => setSucursal(e.target.value)}
-                className="border border-gray-200 p-2 sm:p-2.5 rounded-xl bg-gray-50 font-bold text-xs sm:text-sm text-gray-700 outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-              >
-                {sucursalesList.map(s => (
-                  <option key={s.id} value={s.id}>{s.nombre || s.name} ({s.codigo_visible || s.id})</option>
-                ))}
-              </select>
-            ) : (
-              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 border border-gray-200 rounded-lg text-xs font-bold text-gray-700 shadow-inner">
-                <span className="text-gray-400">🔒 Sede Asignada:</span>
-                <span className="text-blue-700 font-extrabold">{getBranchName(sucursal, sucursalesList)}</span>
-              </div>
-            )}
+            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 border border-gray-200 rounded-lg text-xs font-bold text-gray-700 shadow-inner" title="Para cambiar de sede use el botón 'Cambiar' del menú lateral">
+              <span className="text-gray-400">📍 Sede de trabajo:</span>
+              <span className="text-blue-700 font-extrabold">{getBranchName(sucursal, sucursalesList)}</span>
+            </div>
           </div>
 
           {/* SUB-VISTA A: ACCESO BLOQUEADO (SIN CAJA ASIGNADA O DISPONIBLE) */}
@@ -3006,7 +3010,7 @@ export default function POS() {
         metodoPago={metodoPago}
         politicasInventario={politicasInventario}
         puedeFacturarMultisucursal={puedeFacturarMultisucursal}
-        usuarioSucursal={currentUserRealtime?.id_sucursal || user?.id_sucursal || 'SUC-01'}
+        usuarioSucursal={sucursalActiva || currentUserRealtime?.id_sucursal || user?.id_sucursal || 'SUC-01'}
       />
 
       {/* MODAL ESCÁNER DE CÓDIGO DE BARRAS POR CÁMARA */}

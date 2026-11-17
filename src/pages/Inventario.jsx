@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ref, onValue, set, push, update, remove, runTransaction } from 'firebase/database';
 import { rtdb } from '../firebase';
+import { useAuth } from '../context/AuthContext';
 import { 
   Search, Plus, Edit2, Trash2, Package, History, Maximize2, ScanBarcode, 
   Sliders, ShieldCheck, AlertTriangle, CheckCircle2, Percent, 
@@ -60,7 +61,8 @@ export default function Inventario() {
   const [ajustes, setAjustes] = useState([]);
   const [pendientesEntrega, setPendientesEntrega] = useState([]);
   const [search, setSearch] = useState('');
-  const [sucursal, setSucursal] = useState('SUC-01');
+  const { sucursalActiva } = useAuth();
+  const [sucursal, setSucursal] = useState(sucursalActiva || 'SUC-01');
   const [sucursalesList, setSucursalesList] = useState([
     { id: 'SUC-01', nombre: 'Sucursal Principal', codigo_visible: 'SUC-1' },
     { id: 'SUC-02', nombre: 'Sucursal Norte', codigo_visible: 'SUC-2' }

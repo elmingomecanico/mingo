@@ -7,13 +7,25 @@ import { Toaster } from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import logoIcon from '../assets/logo-icon.jpg';
 import FirebaseHealthBanner from './FirebaseHealthBanner';
+import SucursalGate from './SucursalGate';
 
 export default function Layout({ children }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user, logout, sucursalActiva } = useAuth();
+  const [cambiandoSucursal, setCambiandoSucursal] = useState(false);
+  const [sucursalesNombres, setSucursalesNombres] = useState({});
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
   const [pendingDeliveriesCount, setPendingDeliveriesCount] = useState(0);
+
+  useEffect(() => {
+    const unsub = onValue(ref(rtdb, 'configuracion/sucursales'), (snap) => {
+      const map = {};
+      if (snap.exists()) Object.entries(snap.val()).forEach(([k, v]) => { map[k] = v?.nombre || v?.name || k; });
+      setSucursalesNombres(map);
+    });
+    return () => unsub();
+  }, []);
 
   useEffect(() => {
     const entregasRef = ref(rtdb, 'pendientes_entrega');
@@ -96,6 +108,8 @@ export default function Layout({ children }) {
   return (
     <div className="flex h-screen bg-gray-100 font-sans text-gray-800 overflow-hidden">
       <Toaster position="top-right" />
+      <SucursalGate />
+      {cambiandoSucursal && <SucursalGate forceOpen onClose={() => setCambiandoSucursal(false)} />}
       
       {/* Mobile Menu Overlay */}
       {isMobileMenuOpen && (
@@ -126,9 +140,19 @@ export default function Layout({ children }) {
             </div>
             <div className="overflow-hidden">
               <p className="font-bold text-sm truncate">{user?.nombre_completo}</p>
-              <p className="text-xs text-blue-300 truncate">{user?.rol} • {user?.id_sucursal}</p>
+              <p className="text-xs text-blue-300 truncate">{user?.rol} • {sucursalActiva || user?.id_sucursal}</p>
             </div>
           </div>
+          {sucursalActiva && (
+            <button
+              type="button"
+              onClick={() => setCambiandoSucursal(true)}
+              className="mt-2 w-full text-left text-[11px] bg-blue-800/60 hover:bg-blue-700 border border-blue-700 rounded-lg px-2.5 py-1.5 text-blue-100 font-semibold cursor-pointer"
+              title="Cambiar sucursal de trabajo"
+            >
+              📍 Sede: <strong>{sucursalesNombres[sucursalActiva] || sucursalActiva}</strong> · Cambiar
+            </button>
+          )}
         </div>
 
         {/* Enlace rápido a la Tienda Pública */}

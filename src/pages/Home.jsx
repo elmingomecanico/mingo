@@ -6,7 +6,7 @@ import { rtdb } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 
 export default function Home() {
-  const { user } = useAuth();
+  const { user, sucursalActiva } = useAuth();
   const [ventasHoy, setVentasHoy] = useState(0);
   const [montoVentasHoy, setMontoVentasHoy] = useState(0);
   const [alertasStock, setAlertasStock] = useState([]);
@@ -50,7 +50,7 @@ export default function Home() {
 
     // 2. Obtener Alertas de Stock
     const prodRef = ref(rtdb, 'productos');
-    const invRef = ref(rtdb, `inventario/${user?.id_sucursal || 'SUC-01'}`);
+    const invRef = ref(rtdb, `inventario/${sucursalActiva || user?.id_sucursal || 'SUC-01'}`);
     
     let productos = [];
     let inventario = {};

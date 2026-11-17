@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import TokenizedSearchSelect from '../components/TokenizedSearchSelect';
+import BitacoraAccesosSucursales from '../components/rrhh/BitacoraAccesosSucursales';
 
 const PERMISOS_CATEGORIAS = {
   'Ventas y Facturación': [
@@ -42,7 +43,7 @@ const PERMISOS_CATEGORIAS = {
 };
 
 export default function RRHH() {
-  const { user } = useAuth();
+  const { user, sucursalActiva } = useAuth();
   const [activeTab, setActiveTab] = useState('expedientes'); // expedientes, asistencia, solicitudes, generar, historial, deudas
   
   // Datos principales
@@ -82,7 +83,7 @@ export default function RRHH() {
   });
 
   // Filtros y búsquedas
-  const [sucursal, setSucursal] = useState('SUC-01');
+  const [sucursal, setSucursal] = useState(sucursalActiva || 'SUC-01');
   const [fechaAsistencia, setFechaAsistencia] = useState(new Date().toISOString().split('T')[0]);
   const [searchEmpleado, setSearchEmpleado] = useState('');
 
@@ -1171,6 +1172,7 @@ export default function RRHH() {
         {[
           { id: 'expedientes', label: 'Expedientes de Personal', icon: <Briefcase size={16} /> },
           { id: 'asistencia', label: 'Control de Asistencia', icon: <Clock size={16} /> },
+          { id: 'accesos_sucursales', label: 'Control de Sedes / Accesos', icon: <Store size={16} /> },
           { id: 'solicitudes', label: `Solicitudes (${solicitudesPendientes.length})`, icon: <Palmtree size={16} /> },
           { id: 'generar', label: 'Generar Planilla', icon: <CalendarDays size={16} /> },
           { id: 'historial', label: 'Historial de Nóminas', icon: <History size={16} /> },
@@ -1408,6 +1410,13 @@ export default function RRHH() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 2.B PESTAÑA: BITÁCORA Y CONTROL DE ACCESOS POR SUCURSAL                    */}
+      {/* ========================================================================= */}
+      {activeTab === 'accesos_sucursales' && (
+        <BitacoraAccesosSucursales />
       )}
 
       {/* ========================================================================= */}

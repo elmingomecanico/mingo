@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { ref, onValue, push, set, update, remove, runTransaction } from 'firebase/database';
 import { rtdb } from '../firebase';
+import { useAuth } from '../context/AuthContext';
 import { 
   ShoppingBag, Search, Plus, Trash2, AlertCircle, TrendingDown, CheckCircle2,
   ScanBarcode, Package, PackagePlus, Maximize2, X, Minus, Truck, Building, FileText,
@@ -28,7 +29,8 @@ export default function Compras() {
   const [inventario, setInventario] = useState({});
   const [categorias, setCategorias] = useState([]);
   const [ubicaciones, setUbicaciones] = useState([]);
-  const [sucursal, setSucursal] = useState('SUC-01');
+  const { sucursalActiva } = useAuth();
+  const [sucursal, setSucursal] = useState(sucursalActiva || 'SUC-01');
   
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);

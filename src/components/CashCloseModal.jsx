@@ -71,6 +71,9 @@ export default function CashCloseModal({
   // Filtrar ventas correspondientes a este turno
   const turnoSales = salesList.filter(s => {
     if (s.id_turno && s.id_turno === activeTurno.id) return true;
+    if (s.id_caja && s.id_caja === activeTurno.id_caja && activeTurno.fecha_apertura) {
+      return new Date(s.fecha) >= new Date(activeTurno.fecha_apertura);
+    }
     if (s.sucursal === activeTurno.sucursal && activeTurno.fecha_apertura) {
       return new Date(s.fecha) >= new Date(activeTurno.fecha_apertura);
     }
