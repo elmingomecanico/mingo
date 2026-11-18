@@ -21,6 +21,7 @@ import { DEFAULT_SUCURSALES } from './catalogos/BranchManager';
 import { DEFAULT_CONSECUTIVOS } from './catalogos/ConsecutivosManager';
 import { subscribeProductImages, resolveProductImage } from '../utils/storageService';
 import { consumeNextConsecutiveAtomic } from '../utils/consecutivosService';
+import { notifyMovementByEmail } from '../utils/emailNotificationService';
 
 // Catálogo maestro de sucursales con nombres amigables (sincronizado reactivamente con RTDB)
 export let SUCURSALES = DEFAULT_SUCURSALES;
@@ -1656,6 +1657,23 @@ export default function POS() {
         }
 
         createdSales.push(newSale);
+
+        // Notificación por correo de venta/salida (no bloqueante)
+        notifyMovementByEmail({
+          evento: 'salidas',
+          titulo: `Venta / Salida POS (${metodoPago})`,
+          folio: humanId,
+          sucursal: getBranchName(branchId, sucursalesList),
+          usuario: cajeroResponsable,
+          clienteOProveedor: nombreFinalCliente,
+          monto: branchTotal,
+          resumen: `Factura ${humanId} emitida desde ${getBranchName(sucursal, sucursalesList)} (${activeTurno?.codigo_caja || 'Caja'}). Método: ${metodoPago}.`,
+          items: branchItems.map((it) => ({
+            nombre: it.name,
+            cantidad: it.qty,
+            subtotal: (it.price * it.qty) - getItemDiscount(it)
+          }))
+        });
       }
 
       if (isMulti) {

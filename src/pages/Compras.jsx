@@ -13,6 +13,7 @@ import ConfirmModal from '../components/ConfirmModal';
 import BarcodeScannerModal from '../components/BarcodeScannerModal';
 import ImagePreviewModal from '../components/ImagePreviewModal';
 import TokenizedSearchSelect from '../components/TokenizedSearchSelect';
+import { notifyMovementByEmail } from '../utils/emailNotificationService';
 import { subscribeProductImages, resolveProductImage } from '../utils/storageService';
 import { consumeNextConsecutiveAtomic, checkDuplicateCodigoVisible } from '../utils/consecutivosService';
 import { reverseAndDeletePurchase } from '../utils/integrityService';
@@ -699,6 +700,23 @@ export default function Compras() {
 
       // 5. Commit atómico multi-ruta
       await update(ref(rtdb), atomicBatch);
+
+      // Notificación por correo (no bloqueante)
+      notifyMovementByEmail({
+        evento: 'entradas',
+        titulo: `Compra / Entrada de Mercancía (${metodoPago})`,
+        folio: numeroFactura.trim(),
+        sucursal,
+        usuario: 'Compras',
+        clienteOProveedor: selectedProveedor?.label || '',
+        monto: totalFacturaAPagar,
+        resumen: `Ingreso de ${cart.length} línea(s) (${totalUnidadesFisicasBodega} u. físicas) a bodega ${sucursal}. Método de pago: ${metodoPago}.`,
+        items: newCompra.items.map((it) => ({
+          nombre: it.nombre,
+          cantidad: it.total_unidades,
+          subtotal: it.subtotal_linea
+        }))
+      });
 
       toast.success("Factura de compra registrada y catálogo actualizado con éxito", { id: toastId });
       

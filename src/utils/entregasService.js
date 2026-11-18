@@ -1,6 +1,7 @@
 import { ref, push, set, update, get } from 'firebase/database';
 import { rtdb } from '../firebase';
 import { consumeNextConsecutiveAtomic } from './consecutivosService';
+import { notifyMovementByEmail } from './emailNotificationService';
 
 /**
  * Servicio para Repositorio de Productos Pendientes de Entrega y Órdenes de Despacho
@@ -69,6 +70,22 @@ export async function registrarPendienteEntrega({
   };
 
   await set(ref(rtdb, `pendientes_entrega/${id}`), record);
+
+  // Notificación por correo (no bloqueante)
+  notifyMovementByEmail({
+    evento: 'ordenes_entrega',
+    titulo: `Mercancía en Custodia / Pendiente de Retiro`,
+    folio: codigoVisible,
+    sucursal: record.sucursal || '',
+    usuario: usuario_registro,
+    clienteOProveedor: cliente_nombre,
+    resumen: `Factura ${record.numero_factura || 'S/N'} registrada con ${itemsNormalizados.length} artículo(s) pendiente(s) de retiro.`,
+    items: itemsNormalizados.map((it) => ({
+      nombre: `${it.codigo_visible || ''} ${it.nombre || ''}`.trim(),
+      cantidad: it.cantidad_total
+    }))
+  });
+
   return record;
 }
 
@@ -143,6 +160,22 @@ export async function procesarDespachoEntrega({
     estado: nuevoEstado,
     fecha_ultima_entrega: fechaDespacho,
     historial_despachos: historialActualizado
+  });
+
+  // Notificación por correo del despacho realizado (no bloqueante)
+  notifyMovementByEmail({
+    evento: 'ordenes_entrega',
+    titulo: `Orden de Entrega Despachada (${nuevoEstado})`,
+    folio: idDespacho,
+    sucursal: record.sucursal || '',
+    usuario: detalleDespacho.despachado_por,
+    clienteOProveedor: `${record.cliente_nombre} (Recibe: ${detalleDespacho.recibido_por})`,
+    resumen: `Despacho sobre factura ${record.numero_factura || record.codigo_visible}. Estado actual: ${nuevoEstado} (Restantes por entregar: ${itemsRestantesTotal} u.).`,
+    items: itemsDespachadosFinal.map((it) => ({
+      nombre: `${it.codigo_visible || ''} ${it.nombre || ''}`.trim(),
+      cantidad: it.cantidad_despachada
+    })),
+    notas: detalleDespacho.observaciones
   });
 
   return {

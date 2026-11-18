@@ -16,6 +16,7 @@ import ImagePreviewModal from '../components/ImagePreviewModal';
 import { DEFAULT_CONSECUTIVOS, formatConsecutive } from '../components/catalogos/ConsecutivosManager';
 import ProductCatalogsManager from '../components/inventario/ProductCatalogsManager';
 import TraspasosManager from '../components/inventario/TraspasosManager';
+import { notifyMovementByEmail } from '../utils/emailNotificationService';
 import { 
   compressImageToWebP, 
   saveProductBundle, 
@@ -809,6 +810,19 @@ export default function Inventario() {
       });
 
       toast.success("Ajuste de inventario aplicado atómicamente");
+
+      // Notificación por correo (no bloqueante)
+      notifyMovementByEmail({
+        evento: 'ajustes',
+        titulo: `${diff > 0 ? 'Entrada por Ajuste' : 'Salida por Ajuste'}: ${pname}`,
+        folio: ajusteKey.slice(-6).toUpperCase(),
+        sucursal,
+        usuario: currentUser.nombre_completo || 'Sistema',
+        resumen: `Stock anterior: ${stockAnteriorReal} → Stock nuevo: ${nuevo} (Diferencia: ${diff > 0 ? `+${diff}` : diff}).`,
+        items: [{ nombre: pname, cantidad: Math.abs(diff) }],
+        notas: ajusteForm.motivo
+      });
+
       setIsAjusteModalOpen(false);
       setAjusteForm({ id_producto: null, nuevo_stock: '', motivo: '' });
     } catch (error) {

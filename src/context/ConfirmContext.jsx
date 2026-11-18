@@ -104,13 +104,15 @@ export function ConfirmProvider({ children }) {
 
             {/* Actions */}
             <div className="p-3 sm:p-4 bg-gray-50/90 border-t border-gray-100 flex justify-end gap-2.5 shrink-0">
-              <button 
-                type="button"
-                onClick={handleCancel} 
-                className="px-4 py-2 rounded-xl text-gray-700 font-bold hover:bg-gray-200 text-xs sm:text-sm transition-colors cursor-pointer"
-              >
-                {modalState.cancelText}
-              </button>
+              {modalState.cancelText && (
+                <button 
+                  type="button"
+                  onClick={handleCancel} 
+                  className="px-4 py-2 rounded-xl text-gray-700 font-bold hover:bg-gray-200 text-xs sm:text-sm transition-colors cursor-pointer"
+                >
+                  {modalState.cancelText}
+                </button>
+              )}
               <button 
                 type="button"
                 onClick={handleConfirm} 

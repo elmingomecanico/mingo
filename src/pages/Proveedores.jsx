@@ -92,8 +92,15 @@ export default function Proveedores() {
   const handleDelete = async (id, nombre) => {
     try {
       const check = await validateProveedorDeletion(id);
-      if (!check.canDelete) {
-        toast.error(check.reason, { duration: 6000 });
+      if (!check.allowed) {
+        await confirm({
+          title: `No se puede eliminar a "${nombre}"`,
+          message: check.message,
+          confirmText: 'Entendido',
+          cancelText: '',
+          isDanger: false,
+          type: 'warning'
+        });
         return;
       }
       const ok = await confirm({

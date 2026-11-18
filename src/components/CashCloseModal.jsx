@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import { useReactToPrint } from 'react-to-print';
 import MoneyCounterModal from './MoneyCounterModal';
 import CashTicketPrinter from './CashTicketPrinter';
+import { notifyMovementByEmail } from '../utils/emailNotificationService';
 
 export default function CashCloseModal({
   isOpen,
@@ -179,6 +180,18 @@ export default function CashCloseModal({
         ...updateData,
         movimientos: movimientosList
       };
+
+      // Notificación por correo de cierre de caja (no bloqueante)
+      notifyMovementByEmail({
+        evento: 'cierres_caja',
+        titulo: `Cierre de Turno ${activeTurno.numero_turno || ''} (${activeTurno.codigo_caja || 'Caja'})`,
+        folio: activeTurno.numero_turno || activeTurno.id,
+        sucursal: activeTurno.sucursal || '',
+        usuario: currentUser?.nombre_completo || activeTurno.cajero_nombre || 'Cajero',
+        monto: totalFisicoContado,
+        resumen: `Esperado en gaveta: C$ ${efectivoTeoricoEsperado.toFixed(2)} | Contado físico: C$ ${totalFisicoContado.toFixed(2)} | Diferencia: C$ ${diferencia.toFixed(2)}. Ventas efectivo: C$ ${totalVentasEfectivo.toFixed(2)}, Tarjeta: C$ ${totalVentasTarjeta.toFixed(2)}.`,
+        notas: observaciones.trim()
+      });
 
       toast.success(`Turno ${activeTurno.numero_turno} cerrado exitosamente`);
       setClosedTurnoData(fullClosedTurno);

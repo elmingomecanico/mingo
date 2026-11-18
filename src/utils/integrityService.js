@@ -236,51 +236,126 @@ export const reverseAndDeletePurchase = async (compra, usuarioNombre = 'SuperAdm
 };
 
 /**
- * Verifica si un Cliente puede ser eliminado sin dejar cuentas por cobrar (CxC) huérfanas.
+ * Verifica si un Cliente puede ser eliminado sin dejar cuentas por cobrar (CxC),
+ * facturas de venta o entregas en custodia huérfanas.
  */
 export const validateClienteDeletion = async (clienteId) => {
-  const cxcSnap = await get(ref(rtdb, 'cxc'));
-  if (!cxcSnap.exists()) return { allowed: true };
+  const [cxcSnap, ventasSnap, entregasSnap] = await Promise.all([
+    get(ref(rtdb, 'cxc')),
+    get(ref(rtdb, 'ventas')),
+    get(ref(rtdb, 'pendientes_entrega'))
+  ]);
 
-  const cxcData = cxcSnap.val();
-  const pendientes = Object.values(cxcData).filter(
-    (c) => c.id_cliente === clienteId && c.estado === 'Pendiente' && Number(c.saldo_pendiente) > 0
-  );
+  const razones = [];
+  const pasos = [];
 
-  if (pendientes.length > 0) {
-    const totalDeuda = pendientes.reduce((acc, c) => acc + Number(c.saldo_pendiente || 0), 0);
-    const facturas = pendientes.map((c) => c.numero_factura || 'S/N').join(', ');
+  // 1. Cuentas por cobrar pendientes
+  if (cxcSnap.exists()) {
+    const pendientes = Object.values(cxcSnap.val()).filter(
+      (c) => c && c.id_cliente === clienteId && c.estado === 'Pendiente' && Number(c.saldo_pendiente) > 0
+    );
+    if (pendientes.length > 0) {
+      const totalDeuda = pendientes.reduce((acc, c) => acc + Number(c.saldo_pendiente || 0), 0);
+      const facturas = pendientes.map((c) => c.numero_factura || 'S/N').slice(0, 5).join(', ');
+      razones.push(`• ${pendientes.length} cuenta(s) por cobrar pendiente(s) (${facturas}) por C$ ${totalDeuda.toLocaleString('es-NI', { minimumFractionDigits: 2 })}.`);
+      pasos.push('1. Liquide el saldo pendiente en el módulo "Cuentas por Cobrar (CxC)" o anule/elimine la(s) factura(s) desde "Reportes y Ventas".');
+    }
+  }
+
+  // 2. Pendientes de entrega / custodia activos
+  if (entregasSnap.exists()) {
+    const custodias = Object.values(entregasSnap.val()).filter(
+      (e) => e && e.id_cliente === clienteId && e.estado !== 'Entregado' && e.estado !== 'Cancelado'
+    );
+    if (custodias.length > 0) {
+      const codigos = custodias.map((e) => e.codigo_visible || e.numero_factura || 'S/N').slice(0, 5).join(', ');
+      razones.push(`• ${custodias.length} orden(es) pendiente(s) de entrega en custodia (${codigos}).`);
+      pasos.push(`${pasos.length + 1}. Despache o cierre los productos pendientes en el módulo "Pendientes de Entrega".`);
+    }
+  }
+
+  // 3. Historial de facturas de venta asociadas
+  if (ventasSnap.exists()) {
+    const ventasCliente = Object.values(ventasSnap.val()).filter(
+      (v) => v && v.id_cliente === clienteId && v.estado !== 'Anulado'
+    );
+    if (ventasCliente.length > 0) {
+      const folios = ventasCliente.map((v) => v.numero_factura || v.id).slice(0, 5).join(', ');
+      razones.push(`• ${ventasCliente.length} factura(s) de venta registrada(s) en historial (${folios}${ventasCliente.length > 5 ? '...' : ''}).`);
+      pasos.push(`${pasos.length + 1}. Si son facturas de prueba y realmente desea eliminar el cliente, anule/elimine primero dichas facturas en "Reportes y Ventas".`);
+    }
+  }
+
+  if (razones.length > 0) {
+    const msg =
+      `Este cliente no se puede eliminar porque tiene movimientos vinculados:\n\n` +
+      `${razones.join('\n')}\n\n` +
+      `¿Qué puede hacer si realmente desea eliminarlo?\n` +
+      `${pasos.join('\n')}\n\n` +
+      `💡 Alternativa recomendada: Si el cliente tiene historial real que debe conservar para auditoría, edite su perfil, desactive su línea de crédito y marque "(Inactivo)" en su nombre.`;
+
     return {
       allowed: false,
-      message: `No se puede eliminar este cliente porque tiene ${pendientes.length} cuenta(s) por cobrar pendiente(s) (${facturas}) por un saldo total de C$ ${totalDeuda.toLocaleString('es-NI', { minimumFractionDigits: 2 })}. Primero liquide la deuda o elimine la factura de prueba en Reportes.`
+      canDelete: false,
+      message: msg,
+      reason: msg
     };
   }
 
-  return { allowed: true };
+  return { allowed: true, canDelete: true };
 };
 
 /**
- * Verifica si un Proveedor puede ser eliminado sin dejar cuentas por pagar (CxP) huérfanas.
+ * Verifica si un Proveedor puede ser eliminado sin dejar cuentas por pagar (CxP)
+ * o historial de compras huérfanas.
  */
 export const validateProveedorDeletion = async (proveedorId) => {
-  const cxpSnap = await get(ref(rtdb, 'cxp'));
-  if (!cxpSnap.exists()) return { allowed: true };
+  const [cxpSnap, comprasSnap] = await Promise.all([
+    get(ref(rtdb, 'cxp')),
+    get(ref(rtdb, 'compras'))
+  ]);
 
-  const cxpData = cxpSnap.val();
-  const pendientes = Object.values(cxpData).filter(
-    (c) => c.id_proveedor === proveedorId && c.estado === 'Pendiente' && Number(c.saldo_pendiente) > 0
-  );
+  const razones = [];
+  const pasos = [];
 
-  if (pendientes.length > 0) {
-    const totalDeuda = pendientes.reduce((acc, c) => acc + Number(c.saldo_pendiente || 0), 0);
-    const facturas = pendientes.map((c) => c.numero_factura || 'S/N').join(', ');
+  if (cxpSnap.exists()) {
+    const pendientes = Object.values(cxpSnap.val()).filter(
+      (c) => c && c.id_proveedor === proveedorId && c.estado === 'Pendiente' && Number(c.saldo_pendiente) > 0
+    );
+    if (pendientes.length > 0) {
+      const totalDeuda = pendientes.reduce((acc, c) => acc + Number(c.saldo_pendiente || 0), 0);
+      const facturas = pendientes.map((c) => c.numero_factura || 'S/N').slice(0, 5).join(', ');
+      razones.push(`• ${pendientes.length} factura(s) por pagar pendiente(s) (${facturas}) por C$ ${totalDeuda.toLocaleString('es-NI', { minimumFractionDigits: 2 })}.`);
+      pasos.push('1. Liquide la deuda en "Contabilidad & CxP" o elimine la compra de prueba en "Compras".');
+    }
+  }
+
+  if (comprasSnap.exists()) {
+    const comprasProv = Object.values(comprasSnap.val()).filter(
+      (c) => c && c.id_proveedor === proveedorId
+    );
+    if (comprasProv.length > 0) {
+      razones.push(`• ${comprasProv.length} compra(s) registrada(s) en el historial de entradas.`);
+      pasos.push(`${pasos.length + 1}. Si son compras de prueba, elimínelas primero desde el historial del módulo "Compras".`);
+    }
+  }
+
+  if (razones.length > 0) {
+    const msg =
+      `Este proveedor no se puede eliminar porque tiene registros vinculados:\n\n` +
+      `${razones.join('\n')}\n\n` +
+      `¿Qué puede hacer si realmente desea eliminarlo?\n` +
+      `${pasos.join('\n')}`;
+
     return {
       allowed: false,
-      message: `No se puede eliminar este proveedor porque tiene ${pendientes.length} factura(s) por pagar pendiente(s) (${facturas}) por un saldo total de C$ ${totalDeuda.toLocaleString('es-NI', { minimumFractionDigits: 2 })}. Primero liquide la cuenta o elimine la compra de prueba en el historial de Compras.`
+      canDelete: false,
+      message: msg,
+      reason: msg
     };
   }
 
-  return { allowed: true };
+  return { allowed: true, canDelete: true };
 };
 
 /**

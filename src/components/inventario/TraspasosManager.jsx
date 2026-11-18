@@ -12,6 +12,7 @@ import Select from 'react-select';
 import { useReactToPrint } from 'react-to-print';
 import { consumeNextConsecutiveAtomic, checkDuplicateCodigoVisible } from '../../utils/consecutivosService';
 import { DEFAULT_CONSECUTIVOS, formatConsecutive } from '../catalogos/ConsecutivosManager';
+import { notifyMovementByEmail } from '../../utils/emailNotificationService';
 
 export default function TraspasosManager({ user, sucursalesProp = null, productsProp = null, inventoryProp = null }) {
   // Datos principales
@@ -388,6 +389,21 @@ export default function TraspasosManager({ user, sucursalesProp = null, products
       };
 
       await set(traspasoRef, payload);
+
+      // Notificación por correo (no bloqueante)
+      notifyMovementByEmail({
+        evento: 'traspasos',
+        titulo: `Traspaso ${sucOrigen.nombre} → ${sucDestino.nombre}`,
+        folio: codigoFinal,
+        sucursal: `${sucOrigen.nombre} → ${sucDestino.nombre}`,
+        usuario: currentUser,
+        resumen: `Traslado de ${totalPiezas} pieza(s) en ${itemsSnapshot.length} producto(s). Transporte: ${payload.chofer_transporte}.`,
+        items: itemsSnapshot.map((it) => ({
+          nombre: `${it.codigo_visible || ''} ${it.nombre || it.name || ''}`.trim(),
+          cantidad: it.cantidad
+        })),
+        notas: payload.motivo
+      });
 
       toast.success(`Traspaso ${codigoFinal} procesado exitosamente (${totalPiezas} piezas trasladadas)`, {
         icon: '📦',
