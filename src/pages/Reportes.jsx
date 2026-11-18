@@ -77,7 +77,7 @@ export default function Reportes() {
           id: key,
           ...data[key]
         }));
-        parsed.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+        parsed.sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0));
         setVentas(parsed);
       } else {
         setVentas([]);
@@ -92,7 +92,7 @@ export default function Reportes() {
           id: key,
           ...data[key]
         }));
-        parsed.sort((a, b) => new Date(b.fecha_apertura) - new Date(a.fecha_apertura));
+        parsed.sort((a, b) => new Date(b.fecha_apertura || 0) - new Date(a.fecha_apertura || 0));
         setTurnos(parsed);
       } else {
         setTurnos([]);

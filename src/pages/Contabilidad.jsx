@@ -371,7 +371,7 @@ export default function Contabilidad() {
       }
     });
 
-    return list.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+    return list.sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0));
   };
 
   const allTransactions = getConsolidatedTransactions();
@@ -1084,8 +1084,8 @@ export default function Contabilidad() {
                     cxpList.map(item => {
                       const nombreProv = proveedoresMap[item.id_proveedor] || 'Proveedor Desconocido';
                       const isPendiente = item.estado === 'Pendiente';
-                      const fechaVenc = new Date(item.fecha_vencimiento);
-                      const isVencida = isPendiente && fechaVenc < new Date();
+                      const fechaVenc = item.fecha_vencimiento ? new Date(item.fecha_vencimiento) : null;
+                      const isVencida = isPendiente && fechaVenc && fechaVenc < new Date();
 
                       return (
                         <tr key={item.id} className="hover:bg-gray-50 transition-colors">
@@ -1096,12 +1096,12 @@ export default function Contabilidad() {
                             {item.numero_factura}
                           </td>
                           <td className="p-3.5 text-xs text-gray-500">
-                            {new Date(item.fecha_emision).toLocaleDateString('es-NI')}
+                            {item.fecha_emision ? new Date(item.fecha_emision).toLocaleDateString('es-NI') : '-'}
                           </td>
                           <td className="p-3.5 text-xs">
                             <span className={isVencida ? 'text-rose-600 font-bold flex items-center gap-1' : 'text-gray-500'}>
                               {isVencida && <AlertCircle size={12} />}
-                              {fechaVenc.toLocaleDateString('es-NI')}
+                              {fechaVenc ? fechaVenc.toLocaleDateString('es-NI') : '-'}
                             </span>
                           </td>
                           <td className="p-3.5 text-right font-medium text-gray-600">

@@ -212,16 +212,16 @@ export default function CxP() {
                 <tr><td colSpan="7" className="p-8 text-center text-gray-400">No hay deudas registradas.</td></tr>
               ) : (
                 filtered.map(cxp => {
-                  const isVencida = new Date(cxp.fecha_vencimiento) < new Date() && cxp.estado === 'Pendiente';
+                  const isVencida = cxp.fecha_vencimiento && new Date(cxp.fecha_vencimiento) < new Date() && cxp.estado === 'Pendiente';
                   
                   return (
                     <tr key={cxp.id} className="hover:bg-gray-50 transition-colors">
                       <td className="p-4 font-mono font-bold text-gray-700">{cxp.numero_factura}</td>
                       <td className="p-4 font-bold text-gray-800">{proveedoresMap[cxp.id_proveedor] || 'Desconocido'}</td>
                       <td className="p-4">
-                        <div className="text-gray-700 text-xs">Emi: {new Date(cxp.fecha_emision).toLocaleDateString()}</div>
+                        <div className="text-gray-700 text-xs">Emi: {cxp.fecha_emision ? new Date(cxp.fecha_emision).toLocaleDateString() : '-'}</div>
                         <div className={`text-xs mt-0.5 font-bold ${isVencida ? 'text-red-500' : 'text-gray-500'}`}>
-                          Ven: {new Date(cxp.fecha_vencimiento).toLocaleDateString()}
+                          Ven: {cxp.fecha_vencimiento ? new Date(cxp.fecha_vencimiento).toLocaleDateString() : '-'}
                         </div>
                       </td>
                       <td className="p-4 text-right text-gray-600 font-medium">C$ {cxp.monto_total.toFixed(2)}</td>

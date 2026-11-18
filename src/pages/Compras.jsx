@@ -144,7 +144,7 @@ export default function Compras() {
       if (snapshot.exists()) {
         const val = snapshot.val();
         const parsed = Object.keys(val).map(key => ({ id: key, ...val[key] }));
-        parsed.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+        parsed.sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0));
         setCompras(parsed);
       } else setCompras([]);
       setLoading(false);
@@ -1562,7 +1562,7 @@ export default function Compras() {
                   compras.map(comp => (
                     <tr key={comp.id} className="hover:bg-gray-50 transition-colors">
                       <td className="p-4 text-gray-600 text-xs font-mono">
-                        {new Date(comp.fecha).toLocaleDateString('es-NI')}
+                        {comp.fecha ? new Date(comp.fecha).toLocaleDateString('es-NI') : '-'}
                       </td>
                       <td className="p-4 font-bold text-gray-800">
                         {comp.nombre_proveedor}

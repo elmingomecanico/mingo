@@ -238,7 +238,7 @@ export default function Inventario() {
     const unsubAjustes = onValue(ajustesRef, (snapshot) => {
       if (snapshot.exists()) {
         const list = Object.keys(snapshot.val()).map(k => ({ id: k, ...snapshot.val()[k] }));
-        setAjustes(list.sort((a,b) => new Date(b.fecha) - new Date(a.fecha)));
+        setAjustes(list.sort((a,b) => new Date(b.fecha || 0) - new Date(a.fecha || 0)));
       } else {
         setAjustes([]);
       }
@@ -1155,7 +1155,7 @@ export default function Inventario() {
                   <tbody className="divide-y divide-gray-100">
                     {ajustes.map(aj => (
                       <tr key={aj.id} className="hover:bg-gray-50">
-                        <td className="p-4 text-gray-600">{new Date(aj.fecha).toLocaleString()}</td>
+                        <td className="p-4 text-gray-600">{aj.fecha ? new Date(aj.fecha).toLocaleString() : '-'}</td>
                         <td className="p-4 font-bold text-gray-800">
                           {aj.nombre_producto} <span className="text-xs text-gray-400 font-mono ml-2">({aj.id_producto})</span>
                         </td>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Printer, X, CheckCircle2, Package, ShieldCheck, MapPin, Phone, Building2 } from 'lucide-react';
+import { Printer, X, CheckCircle2, MapPin, Phone } from 'lucide-react';
 import logoIcon from '../../assets/logo-icon.jpg';
 
 export default function DeliveryOrderPrinter({ isOpen, onClose, record, despacho }) {

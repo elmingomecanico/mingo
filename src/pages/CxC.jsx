@@ -172,9 +172,9 @@ export default function CxC() {
                       <td className="p-4 font-mono font-bold text-gray-700">{cxc.numero_factura}</td>
                       <td className="p-4 font-bold text-gray-800">{clientesMap[cxc.id_cliente] || 'Cliente Desconocido'}</td>
                       <td className="p-4">
-                        <div className="text-gray-700">{new Date(cxc.fecha_emision).toLocaleDateString()}</div>
+                        <div className="text-gray-700">{cxc.fecha_emision ? new Date(cxc.fecha_emision).toLocaleDateString() : '-'}</div>
                         <div className={`text-xs mt-0.5 font-bold ${isVencida ? 'text-red-500' : 'text-gray-500'}`}>
-                          Vence: {new Date(cxc.fecha_vencimiento).toLocaleDateString()}
+                          Vence: {cxc.fecha_vencimiento ? new Date(cxc.fecha_vencimiento).toLocaleDateString() : '-'}
                         </div>
                       </td>
                       <td className="p-4 text-right text-gray-600 font-medium">C$ {cxc.monto_total.toFixed(2)}</td>

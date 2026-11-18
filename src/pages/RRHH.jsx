@@ -7,7 +7,8 @@ import {
   Palmtree, Clock, FileText, Check, X, AlertCircle, Plus, Eye, Edit3, 
   Search, ShieldAlert, Award, Briefcase, Phone, Mail, MapPin, 
   Calendar, CreditCard, ChevronRight, Sparkles, Filter, CheckCheck,
-  Trash2, CalendarPlus, XCircle, User, Store, KeyRound, ShieldCheck, UserPlus, Lock
+  Trash2, CalendarPlus, XCircle, User, Store, KeyRound, ShieldCheck, UserPlus, Lock,
+  Package
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import TokenizedSearchSelect from '../components/TokenizedSearchSelect';
@@ -149,7 +150,7 @@ export default function RRHH() {
     const unsubAd = onValue(ref(rtdb, 'deudas_empleados'), snap => {
       if (snap.exists()) {
         const list = Object.keys(snap.val()).map(k => ({ id: k, ...snap.val()[k] }));
-        setDeudas(list.sort((a,b) => new Date(b.fecha_creacion) - new Date(a.fecha_creacion)));
+        setDeudas(list.sort((a,b) => new Date(b.fecha_creacion || 0) - new Date(a.fecha_creacion || 0)));
       } else {
         setDeudas([]);
       }
@@ -159,7 +160,7 @@ export default function RRHH() {
     const unsubNom = onValue(ref(rtdb, 'nominas'), snap => {
       if (snap.exists()) {
         const parsed = Object.keys(snap.val()).map(k => ({ id: k, ...snap.val()[k] }));
-        setNominas(parsed.sort((a,b) => new Date(b.fecha_generacion) - new Date(a.fecha_generacion)));
+        setNominas(parsed.sort((a,b) => new Date(b.fecha_generacion || 0) - new Date(a.fecha_generacion || 0)));
       } else {
         setNominas([]);
       }
@@ -169,7 +170,7 @@ export default function RRHH() {
     const unsubSol = onValue(ref(rtdb, 'solicitudes_empleados'), snap => {
       if (snap.exists()) {
         const list = Object.keys(snap.val()).map(k => ({ id: k, ...snap.val()[k] }));
-        setSolicitudes(list.sort((a,b) => new Date(b.fecha_solicitud) - new Date(a.fecha_solicitud)));
+        setSolicitudes(list.sort((a,b) => new Date(b.fecha_solicitud || 0) - new Date(a.fecha_solicitud || 0)));
       } else {
         setSolicitudes([]);
       }
@@ -220,11 +221,13 @@ export default function RRHH() {
   // Helper para normalizar y ordenar períodos de vacaciones de un empleado
   const getPeriodosVacaciones = (emp) => {
     if (!emp || !emp.periodos_vacaciones) return [];
-    if (Array.isArray(emp.periodos_vacaciones)) return emp.periodos_vacaciones;
-    return Object.keys(emp.periodos_vacaciones).map(k => ({
-      id: k,
-      ...emp.periodos_vacaciones[k]
-    })).sort((a, b) => new Date(b.fecha_inicio) - new Date(a.fecha_inicio));
+    const list = Array.isArray(emp.periodos_vacaciones)
+      ? [...emp.periodos_vacaciones]
+      : Object.keys(emp.periodos_vacaciones).map(k => ({
+          id: k,
+          ...emp.periodos_vacaciones[k]
+        }));
+    return list.sort((a, b) => new Date(b.fecha_inicio || 0) - new Date(a.fecha_inicio || 0));
   };
 
   // Helpers de cálculos laborales de Nicaragua
@@ -608,7 +611,10 @@ export default function RRHH() {
 
       // Recalcular total de días tomados
       const periodosActuales = getPeriodosVacaciones(activeEmp);
-      const totalTomados = periodosActuales.reduce((acc, p) => acc + Number(p.dias || 0), 0) + diasNum;
+      const baseTomados = periodosActuales.length > 0
+        ? periodosActuales.reduce((acc, p) => acc + Number(p.dias || 0), 0)
+        : Number(activeEmp?.dias_vacaciones_tomados || 0);
+      const totalTomados = baseTomados + diasNum;
 
       await update(ref(rtdb, `usuarios/${activeEmp.id}`), {
         dias_vacaciones_tomados: Number(totalTomados.toFixed(1))
@@ -710,8 +716,10 @@ export default function RRHH() {
       });
 
       // 2. Ejecutar efectos según tipo
+      const emp = usuarios.find(u => u.id === sol.id_empleado);
+      const montoSol = Number(sol.monto || 0);
+
       if (sol.tipo === 'Vacaciones') {
-        const emp = usuarios.find(u => u.id === sol.id_empleado);
         const periodosExistentes = getPeriodosVacaciones(emp);
         const diasSol = Number(sol.dias_solicitados || 0);
 
@@ -727,51 +735,62 @@ export default function RRHH() {
           fecha_registro: new Date().toISOString()
         });
 
-        const nuevoTotalTomados = periodosExistentes.reduce((sum, p) => sum + Number(p.dias || 0), 0) + diasSol;
+        const baseTomados = periodosExistentes.length > 0
+          ? periodosExistentes.reduce((sum, p) => sum + Number(p.dias || 0), 0)
+          : Number(emp?.dias_vacaciones_tomados || 0);
+        const nuevoTotalTomados = baseTomados + diasSol;
+
         await update(ref(rtdb, `usuarios/${sol.id_empleado}`), {
           dias_vacaciones_tomados: Number(nuevoTotalTomados.toFixed(1))
         });
         toast.success(`Vacaciones aprobadas. Se registraron ${diasSol} días en la bitácora del colaborador.`);
       } else if (sol.tipo === 'Adelanto') {
         await push(ref(rtdb, 'deudas_empleados'), {
+          id_solicitud: sol.id,
           id_empleado: sol.id_empleado,
           tipo: 'Adelanto',
-          monto_total: Number(sol.monto),
-          saldo_pendiente: Number(sol.monto),
-          cuota_por_pago: Number(sol.monto), // Deducción íntegra en el próximo corte
+          monto_total: montoSol,
+          saldo_pendiente: montoSol,
+          cuota_por_pago: montoSol, // Deducción íntegra en el próximo corte
           motivo: `Adelanto de salario: ${sol.motivo}`,
           fecha_creacion: new Date().toISOString(),
+          sucursal: sol.sucursal || emp?.id_sucursal || 'SUC-01',
           estado: 'Activo'
         });
-        toast.success(`Adelanto de C$ ${sol.monto} aprobado y programado para deducción.`);
+        toast.success(`Adelanto de C$ ${montoSol} aprobado y programado para deducción.`);
       } else if (sol.tipo === 'Préstamo') {
         const cuotas = Number(sol.cuotas_sugeridas) || 1;
-        const cuotaMonto = Number((Number(sol.monto) / cuotas).toFixed(2));
+        const cuotaMonto = Number((montoSol / cuotas).toFixed(2));
         await push(ref(rtdb, 'deudas_empleados'), {
+          id_solicitud: sol.id,
           id_empleado: sol.id_empleado,
           tipo: 'Préstamo',
-          monto_total: Number(sol.monto),
-          saldo_pendiente: Number(sol.monto),
+          monto_total: montoSol,
+          saldo_pendiente: montoSol,
           cuota_por_pago: cuotaMonto,
           motivo: `Préstamo de dinero (${cuotas} cuotas): ${sol.motivo}`,
           fecha_creacion: new Date().toISOString(),
+          sucursal: sol.sucursal || emp?.id_sucursal || 'SUC-01',
           estado: 'Activo'
         });
-        toast.success(`Préstamo de C$ ${sol.monto} aprobado en ${cuotas} cuotas.`);
+        toast.success(`Préstamo de C$ ${montoSol} aprobado en ${cuotas} cuotas.`);
       } else if (sol.tipo === 'Crédito') {
         const cuotas = Number(sol.cuotas_sugeridas) || 1;
-        const cuotaMonto = Number((Number(sol.monto) / cuotas).toFixed(2));
+        const cuotaMonto = Number((montoSol / cuotas).toFixed(2));
         await push(ref(rtdb, 'deudas_empleados'), {
+          id_solicitud: sol.id,
+          id_producto: sol.id_producto || null,
           id_empleado: sol.id_empleado,
           tipo: 'Crédito',
-          monto_total: Number(sol.monto),
-          saldo_pendiente: Number(sol.monto),
+          monto_total: montoSol,
+          saldo_pendiente: montoSol,
           cuota_por_pago: cuotaMonto,
           motivo: `Crédito de producto (${sol.producto_detalle || 'Producto'}): ${sol.motivo}`,
           fecha_creacion: new Date().toISOString(),
+          sucursal: sol.sucursal || emp?.id_sucursal || 'SUC-01',
           estado: 'Activo'
         });
-        toast.success(`Crédito de producto por C$ ${sol.monto} aprobado.`);
+        toast.success(`Crédito de producto por C$ ${montoSol} aprobado.`);
       }
     } catch (err) {
       toast.error('Error al aprobar solicitud: ' + err.message);
@@ -864,7 +883,7 @@ export default function RRHH() {
 
       // 2. Calcular Comisiones en el rango de fechas (Servicios Listos o Completados)
       const susOrdenes = ordenes.filter(ot => {
-        const otDate = new Date(ot.fecha_creacion);
+        const otDate = new Date(ot.fecha_finalizacion || ot.fecha_creacion || 0);
         const estaFinalizada = ot.estado === 'Listo' || ot.estado === 'Completado';
         return ot.id_mecanico === emp.id && otDate >= start && otDate <= end && estaFinalizada;
       });
@@ -1069,13 +1088,31 @@ export default function RRHH() {
         detalles: nominaBorrador
       });
 
+      // Registrar egreso en Libro Diario contable
+      if (totalPlanilla > 0) {
+        const movRef = push(ref(rtdb, 'movimientos_contables'));
+        await set(movRef, {
+          fecha: new Date().toISOString(),
+          tipo: 'Egreso',
+          categoria: 'Nómina y Adelantos de Salario',
+          concepto: `Pago de Nómina (${periodicidadPlanilla}) del ${fechaInicio} al ${fechaFin}`,
+          monto: Number(totalPlanilla.toFixed(2)),
+          metodo_pago: 'Efectivo',
+          numero_comprobante: `NOM-${nominaRef.key.slice(-6).toUpperCase()}`,
+          beneficiario: `Planilla (${nominaBorrador.length} colaboradores)`,
+          sucursal: 'General',
+          usuario: user?.nombre_completo || 'Gerencia RRHH',
+          id_referencia: nominaRef.key
+        });
+      }
+
       // Procesar cada deducción y actualizar saldos
       for (const line of nominaBorrador) {
         if (line.detalles_deducciones && line.detalles_deducciones.length > 0) {
           for (const ded of line.detalles_deducciones) {
             const deudaOriginal = deudas.find(d => d.id === ded.id_deuda);
             if (deudaOriginal) {
-              const nuevoSaldo = Number(deudaOriginal.saldo_pendiente) - ded.monto_deducido;
+              const nuevoSaldo = Math.max(0, Math.round((Number(deudaOriginal.saldo_pendiente) - ded.monto_deducido) * 100) / 100);
               const nuevoEstado = nuevoSaldo <= 0 ? 'Pagado' : 'Activo';
               
               await update(ref(rtdb, `deudas_empleados/${ded.id_deuda}`), { 
@@ -1463,7 +1500,7 @@ export default function RRHH() {
                           {sol.tipo}
                         </span>
                         <span className="text-[11px] text-gray-400">
-                          {new Date(sol.fecha_solicitud).toLocaleString()}
+                          {sol.fecha_solicitud ? new Date(sol.fecha_solicitud).toLocaleString() : 'Reciente'}
                         </span>
                       </div>
 
@@ -1472,13 +1509,13 @@ export default function RRHH() {
                           <span>Período solicitado: <strong>{sol.fecha_inicio}</strong> al <strong>{sol.fecha_fin}</strong> (<strong>{sol.dias_solicitados} días</strong>)</span>
                         )}
                         {sol.tipo === 'Adelanto' && (
-                          <span>Monto: <strong className="text-orange-700">C$ {Number(sol.monto).toFixed(2)}</strong> (Deducción íntegra en el próximo corte)</span>
+                          <span>Monto: <strong className="text-orange-700">C$ {Number(sol.monto || 0).toFixed(2)}</strong> (Deducción íntegra en el próximo corte)</span>
                         )}
                         {sol.tipo === 'Préstamo' && (
-                          <span>Monto: <strong className="text-purple-700">C$ {Number(sol.monto).toFixed(2)}</strong> en <strong>{sol.cuotas_sugeridas || 1} cuotas</strong></span>
+                          <span>Monto: <strong className="text-purple-700">C$ {Number(sol.monto || 0).toFixed(2)}</strong> en <strong>{sol.cuotas_sugeridas || 1} cuotas</strong></span>
                         )}
                         {sol.tipo === 'Crédito' && (
-                          <span>Producto: <strong>{sol.producto_detalle}</strong> • Valor: <strong className="text-blue-700">C$ {Number(sol.monto).toFixed(2)}</strong></span>
+                          <span>Producto: <strong>{sol.producto_detalle}</strong> • Valor: <strong className="text-blue-700">C$ {Number(sol.monto || 0).toFixed(2)}</strong></span>
                         )}
                       </div>
 
@@ -1828,7 +1865,7 @@ export default function RRHH() {
                 <tbody className="divide-y divide-gray-100 text-xs">
                   {nominas.map(nom => (
                     <tr key={nom.id} className="hover:bg-gray-50">
-                      <td className="p-4 font-bold text-gray-800">{new Date(nom.fecha_generacion).toLocaleDateString()}</td>
+                      <td className="p-4 font-bold text-gray-800">{nom.fecha_generacion ? new Date(nom.fecha_generacion).toLocaleDateString() : '-'}</td>
                       <td className="p-4 text-gray-700">
                         <span className="font-semibold">{nom.fecha_inicio} al {nom.fecha_fin}</span>
                         <span className="block text-[10px] text-gray-400 font-bold uppercase">{nom.periodicidad || 'Quincenal'}</span>
@@ -1890,7 +1927,7 @@ export default function RRHH() {
                       const empName = usuarios.find(u => u.id === ad.id_empleado)?.nombre_completo || 'Desconocido';
                       return (
                         <tr key={ad.id} className="hover:bg-gray-50">
-                          <td className="p-4 text-gray-600">{new Date(ad.fecha_creacion).toLocaleDateString()}</td>
+                          <td className="p-4 text-gray-600">{ad.fecha_creacion ? new Date(ad.fecha_creacion).toLocaleDateString() : '-'}</td>
                           <td className="p-4 font-bold text-gray-800">{empName}</td>
                           <td className="p-4">
                             <span className={`px-2 py-1 rounded-full text-xs font-bold border ${ad.tipo === 'Adelanto' ? 'border-orange-200 text-orange-600 bg-orange-50' : ad.tipo === 'Préstamo' ? 'border-purple-200 text-purple-600 bg-purple-50' : 'border-blue-200 text-blue-600 bg-blue-50'}`}>

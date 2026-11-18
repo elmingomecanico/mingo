@@ -173,7 +173,7 @@ export default function Kardex() {
       }
 
       // Ordenar cronológicamente descendente (lo más reciente primero)
-      allMovs.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+      allMovs.sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0));
       setMovimientos(allMovs);
       setLoading(false);
     };

@@ -34,7 +34,7 @@ export default function OrdenesTrabajo() {
         const parsed = Object.keys(val).map(key => ({ id: key, ...val[key] }));
         
         // Ordenar por fecha descendente
-        parsed.sort((a, b) => new Date(b.fecha_creacion) - new Date(a.fecha_creacion));
+        parsed.sort((a, b) => new Date(b.fecha_creacion || 0) - new Date(a.fecha_creacion || 0));
         setOrdenes(parsed);
       } else {
         setOrdenes([]);

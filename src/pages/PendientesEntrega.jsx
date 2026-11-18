@@ -513,7 +513,7 @@ export default function PendientesEntrega() {
                           <Building2 size={12} className="text-blue-600" /> Sucursal: {record.sucursal}
                         </span>
                         <span className="flex items-center gap-1">
-                          <Calendar size={12} className="text-slate-400" /> {new Date(record.fecha_creacion).toLocaleDateString('es-NI')}
+                          <Calendar size={12} className="text-slate-400" /> {record.fecha_creacion ? new Date(record.fecha_creacion).toLocaleDateString('es-NI') : '-'}
                         </span>
                       </div>
                     </div>
@@ -636,7 +636,7 @@ export default function PendientesEntrega() {
                                   Entregado a: <strong>{desp.recibido_por}</strong> {desp.cedula_recibe ? `(Cédula: ${desp.cedula_recibe})` : ''} • Despachó: {desp.despachado_por}
                                 </p>
                                 <p className="text-[10px] text-slate-400">
-                                  {new Date(desp.fecha).toLocaleString('es-NI')}
+                                  {desp.fecha ? new Date(desp.fecha).toLocaleString('es-NI') : '-'}
                                 </p>
                               </div>
 

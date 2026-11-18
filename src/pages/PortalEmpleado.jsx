@@ -56,7 +56,7 @@ export default function PortalEmpleado() {
         const list = Object.keys(snap.val())
           .map(k => ({ id: k, ...snap.val()[k] }))
           .filter(s => s.id_empleado === user.id)
-          .sort((a, b) => new Date(b.fecha_solicitud) - new Date(a.fecha_solicitud));
+          .sort((a, b) => new Date(b.fecha_solicitud || 0) - new Date(a.fecha_solicitud || 0));
         setSolicitudes(list);
       } else {
         setSolicitudes([]);
@@ -70,7 +70,7 @@ export default function PortalEmpleado() {
         const list = Object.keys(snap.val())
           .map(k => ({ id: k, ...snap.val()[k] }))
           .filter(d => d.id_empleado === user.id)
-          .sort((a, b) => new Date(b.fecha_creacion) - new Date(a.fecha_creacion));
+          .sort((a, b) => new Date(b.fecha_creacion || 0) - new Date(a.fecha_creacion || 0));
         setDeudas(list);
       } else {
         setDeudas([]);
@@ -124,11 +124,13 @@ export default function PortalEmpleado() {
   // Helper para normalizar períodos de vacaciones del empleado
   const getPeriodosVacaciones = (emp) => {
     if (!emp || !emp.periodos_vacaciones) return [];
-    if (Array.isArray(emp.periodos_vacaciones)) return emp.periodos_vacaciones;
-    return Object.keys(emp.periodos_vacaciones).map(k => ({
-      id: k,
-      ...emp.periodos_vacaciones[k]
-    })).sort((a, b) => new Date(b.fecha_inicio) - new Date(a.fecha_inicio));
+    const list = Array.isArray(emp.periodos_vacaciones)
+      ? [...emp.periodos_vacaciones]
+      : Object.keys(emp.periodos_vacaciones).map(k => ({
+          id: k,
+          ...emp.periodos_vacaciones[k]
+        }));
+    return list.sort((a, b) => new Date(b.fecha_inicio || 0) - new Date(a.fecha_inicio || 0));
   };
 
   const hoy = new Date();
@@ -178,7 +180,7 @@ export default function PortalEmpleado() {
   // Comisiones acumuladas de órdenes completadas (Listo o Completado) en el mes
   const primerDiaMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
   const comisionesMes = ordenes
-    .filter(ot => (ot.estado === 'Listo' || ot.estado === 'Completado') && new Date(ot.fecha_creacion) >= primerDiaMes)
+    .filter(ot => (ot.estado === 'Listo' || ot.estado === 'Completado') && new Date(ot.fecha_finalizacion || ot.fecha_creacion || 0) >= primerDiaMes)
     .reduce((sum, ot) => {
       const comisionMonto = Number(ot.comision_mecanico_monto) || 
         (Number(ot.total_servicios || 0) * (Number(ot.comision_mecanico_porcentaje || empleadoData?.porcentaje_comision || 50) / 100));
@@ -188,8 +190,8 @@ export default function PortalEmpleado() {
   // Auto-cálculo de días en vacaciones
   const handleFechasVacacionesChange = (inicio, fin) => {
     if (inicio && fin) {
-      const d1 = new Date(inicio);
-      const d2 = new Date(fin);
+      const d1 = new Date(inicio + 'T00:00:00');
+      const d2 = new Date(fin + 'T00:00:00');
       const diffTime = d2.getTime() - d1.getTime();
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
       setFormSol(prev => ({
@@ -536,15 +538,15 @@ export default function PortalEmpleado() {
                       <div className="flex items-center gap-2">
                         <span className="font-black text-gray-800 text-sm">{sol.tipo}</span>
                         <span className="text-[11px] text-gray-400">
-                          {new Date(sol.fecha_solicitud).toLocaleDateString()}
+                          {sol.fecha_solicitud ? new Date(sol.fecha_solicitud).toLocaleDateString() : 'Reciente'}
                         </span>
                       </div>
                       
                       <p className="text-xs text-gray-600 mt-0.5">
                         {sol.tipo === 'Vacaciones' && `Período: ${sol.fecha_inicio} al ${sol.fecha_fin} (${sol.dias_solicitados} días)`}
-                        {sol.tipo === 'Adelanto' && `Monto: C$ ${Number(sol.monto).toFixed(2)} (A deducir en próximo corte)`}
-                        {sol.tipo === 'Préstamo' && `Monto: C$ ${Number(sol.monto).toFixed(2)} en ${sol.cuotas_sugeridas || 1} cuotas`}
-                        {sol.tipo === 'Crédito' && `Producto: ${sol.producto_detalle} • C$ ${Number(sol.monto).toFixed(2)}`}
+                        {sol.tipo === 'Adelanto' && `Monto: C$ ${Number(sol.monto || 0).toFixed(2)} (A deducir en próximo corte)`}
+                        {sol.tipo === 'Préstamo' && `Monto: C$ ${Number(sol.monto || 0).toFixed(2)} en ${sol.cuotas_sugeridas || 1} cuotas`}
+                        {sol.tipo === 'Crédito' && `Producto: ${sol.producto_detalle} • C$ ${Number(sol.monto || 0).toFixed(2)}`}
                       </p>
                       
                       {sol.motivo && (
